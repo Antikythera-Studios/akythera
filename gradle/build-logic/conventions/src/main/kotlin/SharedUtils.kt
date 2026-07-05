@@ -113,6 +113,8 @@ fun Project.configureBaseArchive(variant: String) {
 
 private fun Project.getFullModVersion(variant: String): String = "$variant-mc${mcVersion}-${modVersion}"
 
+private fun Project.getCompactModVersion(variant: String): String = "$variant-${modVersion}"
+
 enum class ModLoader(val conventionalName: String) {
     NeoForge("NeoForge"),
     Fabric("Fabric"),
@@ -195,8 +197,10 @@ fun Project.configureModPublish(
         changelog.set(releaseChangelog)
 
         modLoaders.add(modLoader.conventionalName)
+        val fullVersion = project.getFullModVersion(modLoader.conventionalName);
+        displayName.set("$modDisplayName+$fullVersion")
+        version.set(project.getCompactModVersion(modLoader.conventionalName))
         type.set(STABLE)
-        displayName.set(project.getFullModVersion(modLoader.conventionalName))
         file.set(jarFile())
         additionalFiles.from(sourcesJar)
 
@@ -209,6 +213,9 @@ fun Project.configureModPublish(
 
         val optionalDependencies =
             buildList {
+                add("player-animation-library")
+                add("bendable-cuboids")
+
                 if (modLoader.isFabricLike) {
                     add("modmenu")
                 }
@@ -216,9 +223,9 @@ fun Project.configureModPublish(
 
         curseforge {
             accessToken.set(providers.environmentVariable("CURSEFORGE_TOKEN"))
-            projectId.set("405076")
+            projectId.set("1594145")
             minecraftVersions.add(mcVersion)
-            projectSlug.set("epic-fight-mod")
+            projectSlug.set("akythera")
 
             requiredDependencies.forEach { requires(it) }
             optionalDependencies.forEach { optional(it) }
@@ -226,13 +233,14 @@ fun Project.configureModPublish(
 
         modrinth {
             accessToken.set(providers.environmentVariable("MODRINTH_TOKEN"))
-            projectId.set("vu3NZ5Ma")
+            projectId.set("jHm8Ac9W")
             minecraftVersions.add(mcVersion)
 
             requiredDependencies.forEach { requires(it) }
             optionalDependencies.forEach { optional(it) }
         }
-
+        /*
+         * Disable discord alarm until we officially release the mod
         discord {
             webhookUrl.set(providers.environmentVariable("DISCORD_WEBHOOK"))
             dryRunWebhookUrl.set(providers.environmentVariable("DRY_RUN_DISCORD_WEBHOOK"))
@@ -254,6 +262,7 @@ fun Project.configureModPublish(
                 thumbnailUrl.set("https://i.imgur.com/nI8xOCy.png")
             }
         }
+        */
     }
 }
 

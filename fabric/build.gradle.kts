@@ -3,7 +3,7 @@ plugins {
     alias(libs.plugins.fabric.loom)
 }
 
-configureBaseArchive("Fabric")
+configureBaseArchive(ModLoader.Fabric.name)
 
 repositories {
     parchmentMcRepository()
