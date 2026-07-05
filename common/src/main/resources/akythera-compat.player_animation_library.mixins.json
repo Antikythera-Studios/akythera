@@ -1,0 +1,18 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "compatibilityLevel": "JAVA_21",
+  "package": "com.yesman.akythera.client.compat.playeranimlibrary.mixin",
+  "plugin": "com.yesman.akythera.client.compat.playeranimlibrary.PALMixinPlugin",
+  "client": [
+    "MixinAvatarAnimManager",
+    "MixinModel",
+    "MixinModelPart",
+    "MixinPlayerAnimBone"
+  ],
+  "mixins": [
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

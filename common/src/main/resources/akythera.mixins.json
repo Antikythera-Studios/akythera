@@ -1,0 +1,23 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "compatibilityLevel": "JAVA_21",
+  "package": "com.yesman.akythera.mixin",
+  "client": [
+    "client.MixinClientCommonPacketListenerImpl",
+    "client.MixinClientConfigurationPacketListenerImpl",
+    "client.MixinClientLevel",
+    "client.MixinGuiGraphicsExtractor",
+    "client.MixinKeyMapping",
+    "client.MixinLevelRenderer",
+    "client.MixinLivingEntityRenderer",
+    "client.MixinLivingEntityRenderState"
+  ],
+  "mixins": [
+    "common.MixinEntity",
+    "common.MixinPersistentEntitySectionManager"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

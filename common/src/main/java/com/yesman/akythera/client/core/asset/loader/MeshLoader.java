@@ -1,0 +1,70 @@
+package com.yesman.akythera.client.core.asset.loader;
+
+import com.yesman.akythera.client.core.asset.loader.binary.BinaryMeshLoader;
+import com.yesman.akythera.client.core.asset.loader.json.JsonMeshLoader;
+import com.yesman.akythera.client.core.asset.mesh.Mesh;
+import com.yesman.akythera.client.core.asset.mesh.SkeletalMesh;
+import com.yesman.akythera.client.core.asset.mesh.StaticMesh;
+import com.yesman.akythera.core.Akythera;
+import com.yesman.akythera.core.asset.loader.AssetLoader;
+import com.yesman.akythera.core.asset.loader.ResourceLoadingFailureException;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.packs.resources.Resource;
+import net.minecraft.server.packs.resources.ResourceManager;
+import org.joml.Matrix3f;
+
+import java.util.Optional;
+
+/// Loads client-side only assets, the [Mesh]
+public interface MeshLoader extends AssetLoader {
+    /// Coord system converter as Blender has Z-Up system, and Minecraft has Y-Up basis.
+    Matrix3f BLENDER_TO_MINECRAFT_COORD_SYSTEM_3F = new Matrix3f().rotate((float)Math.toRadians(-90.0F), 1.0F, 0.0F, 0.0F);
+
+    /// For old .json mesh files, where vertices are not partitioned.
+    String UNGROUPED_PART_NAME = "ungrouped";
+
+    /// Loads a static mesh. Even tho the asset file was exported
+    /// as skeletal, this will extract only information to draw the mesh.
+    ///
+    /// @exception ResourceLoadingFailureException when asset file doesn't exist, invalid formats, or others
+    <T extends StaticMesh> T loadStaticMesh(MeshConstructor<T, Mesh.CommonMeshBuilder<StaticMesh.StaticMeshPart>> meshConstructor) throws ResourceLoadingFailureException;
+
+    /// Loads a skeletal mesh. If the asset file was exported as
+    /// static, the program will throw an exception
+    ///
+    /// @exception ResourceLoadingFailureException when asset file doesn't exist, invalid formats, or others
+    <T extends SkeletalMesh> T loadSkeletalMesh(MeshConstructor<T, SkeletalMesh.SkeletalMeshBuilder> meshConstructor) throws ResourceLoadingFailureException;
+
+    /// Returns a matching asset loader depending on the file extension (`.efasset` or `.json`)
+    ///
+    /// If both binary and json files exist, binary file has higher priority to load
+    static MeshLoader getLoader(Identifier resourcePath, ResourceManager resourceManager)
+        throws ResourceLoadingFailureException
+    {
+        Identifier asBinary = Identifier.fromNamespaceAndPath(resourcePath.getNamespace(), resourcePath.getPath() + ".efasset");
+        Optional<Resource> binaryResource = resourceManager.getResource(asBinary);
+
+        if (binaryResource.isPresent()) {
+            try {
+                return new BinaryMeshLoader(asBinary, binaryResource.get());
+            } catch (ResourceLoadingFailureException e) {
+                Akythera.LOGGER.warn("Failed at loading a binary file. Now trying to read a json file...", e);
+            }
+        }
+
+        Identifier asJson = Identifier.fromNamespaceAndPath(resourcePath.getNamespace(), resourcePath.getPath() + ".json");
+        Optional<Resource> jsonResource = resourceManager.getResource(asJson);
+
+        if (jsonResource.isPresent()) {
+            return new JsonMeshLoader(asJson, jsonResource.get());
+        }
+
+        throw new ResourceLoadingFailureException(resourcePath, "Found neither binary(.efasset) nor json(.json) asset file");
+    }
+
+    /// Typed mesh constructors to return typed objects
+    @FunctionalInterface
+    interface MeshConstructor<T extends Mesh<?>, B extends Mesh.CommonMeshBuilder<?>> {
+        T construct(B meshBuilder);
+    }
+}

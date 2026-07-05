@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "id": "${modId}",
+  "version": "${modVersion}",
+  "name": "${displayName}",
+  "description": "${description}",
+  "authors": [ ${authorEntries} ],
+  "contact": {
+    "homepage": "${displayUrl}",
+    "sources": "${sourceCode}",
+    "issues": "${issueTracker}"
+  },
+  "license": "${license}",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      {
+        "value": "com.yesman.akythera.fabric.core.AkytheraFabric"
+      }
+    ],
+    "client": [
+      {
+        "value": "com.yesman.akythera.fabric.client.core.AkytheraFabricClient"
+      }
+    ],
+    "server": [
+      {
+        "value": "com.yesman.akythera.fabric.core.AkytheraFabricServer"
+      }
+    ]
+  },
+  "accessWidener": "akythera.accesswidener",
+  "mixins": [
+    "akythera.mixins.json",
+    "akythera-compat.player_animation_library.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=${fabricLoader}",
+    "minecraft": ">=${minecraft}",
+    "java": ">=${javaVersion}",
+    "fabric-api": "*"
+  },
+  "suggests": {
+    "player_animation_library": ">=1.1.6"
+  }
+}

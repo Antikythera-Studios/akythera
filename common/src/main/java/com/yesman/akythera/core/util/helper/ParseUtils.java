@@ -1,0 +1,212 @@
+package com.yesman.akythera.core.util.helper;
+
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonSyntaxException;
+import com.mojang.datafixers.util.Pair;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
+import com.yesman.akythera.core.Akythera;
+import it.unimi.dsi.fastutil.floats.FloatArrayList;
+import it.unimi.dsi.fastutil.floats.FloatList;
+import it.unimi.dsi.fastutil.ints.IntArrayList;
+import it.unimi.dsi.fastutil.ints.IntList;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
+
+import java.util.*;
+import java.util.function.Function;
+
+public class ParseUtils {
+    /// Convert a [JsonArray] into primitive float array
+    ///
+    /// @throws JsonSyntaxException when given array is not a float array
+    public static float[] jsonArrayToPrimitiveFloat(JsonArray array) throws JsonSyntaxException {
+        try {
+            FloatList result = new FloatArrayList();
+
+            for (JsonElement je : array) {
+                result.add(je.getAsFloat());
+            }
+
+            return result.toFloatArray();
+        } catch (NumberFormatException e) {
+            throw new JsonSyntaxException("Can't convert to a float array", e);
+        }
+    }
+
+    /// Convert a [JsonArray] into primitive int array
+    ///
+    /// @throws JsonSyntaxException when given array is not a int array
+    public static int[] jsonArrayToPrimitiveInt(JsonArray array) throws JsonSyntaxException {
+        try {
+            IntList result = new IntArrayList();
+
+            for (JsonElement je : array) {
+                result.add(je.getAsInt());
+            }
+
+            return result.toIntArray();
+        } catch (NumberFormatException e) {
+            throw new JsonSyntaxException("Can't convert to a int array", e);
+        }
+    }
+
+    /// Returns an enum object by enum name that is non-case sensitive
+    public static <T extends Enum<T>> @Nullable T enumValueOfOrNull(Class<T> enumCls, String enumName) {
+        try {
+            return Enum.valueOf(enumCls, enumName.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException | NullPointerException e) {
+            return null;
+        }
+    }
+
+    /// Pack the map entry into list with key-value pair
+    public static <F, S> List<Pair<F, S>> mapEntriesToPair(Map<F, S> map) {
+        List<Pair<F, S>> list = new ArrayList<>();
+
+        for (Map.Entry<F, S> entry : map.entrySet()) {
+            list.add(Pair.of(entry.getKey(), entry.getValue()));
+        }
+
+        return list;
+    }
+
+    /// Returns a string with lower cases
+    public static String toLowerCase(String s) {
+        return s.toLowerCase(Locale.ROOT);
+    }
+
+    /// Returns a string with lower cases. Accepts any type of object and translate by `toString`
+    public static String toLowerCase(Object s) {
+        return s.toString().toLowerCase(Locale.ROOT);
+    }
+
+    /// Returns a string with upper cases
+    public static String toUpperCase(String s) {
+        return s.toUpperCase(Locale.ROOT);
+    }
+
+    /// Returns a string with upper cases. Accepts any type of object and translate by `toString`
+    public static String toUpperCase(Object s) {
+        return s.toString().toUpperCase(Locale.ROOT);
+    }
+
+    /// Transform a snake case string into camel
+    public static String snakeToCamel(String snake) {
+        if (snake == null) {
+            return "";
+        }
+
+        StringBuilder out = new StringBuilder(snake.length());
+        boolean upper = false;
+
+        for (char c : snake.toCharArray()) {
+            if (c == '_') {
+                upper = true;
+            } else {
+                out.append(upper ? Character.toUpperCase(c) : c);
+                upper = false;
+            }
+        }
+
+        return out.toString();
+    }
+
+    /// Transform a camel case string into snake
+    public static String camelToSnake(String name) {
+        return name.replaceAll("([a-z0-9])([A-Z])", "$1_$2")
+            .replaceAll("([A-Z]+)([A-Z][a-z])", "$1_$2")
+            .toLowerCase(Locale.ROOT);
+    }
+
+    /// Transform a camel case string into spaced pascal case, for display labels.
+    /// e.g. `getRootComponent` -> "Get Root Component"; `lastPosition` -> "Last Position".
+    public static String camelToSpacedPascal(String name) {
+        if (name == null || name.isEmpty()) {
+            return "";
+        }
+
+        String spaced = name.replaceAll("([a-z0-9])([A-Z])", "$1 $2")
+            .replaceAll("([A-Z]+)([A-Z][a-z])", "$1 $2");
+
+        return Character.toUpperCase(spaced.charAt(0)) + spaced.substring(1);
+    }
+
+    /// `"player_script"` / `"humanoid/walk_run"` → `"PlayerScript"` / `"HumanoidWalkRun"` — the
+    /// PascalCase entry-name half of the generated `<EntryName>AnimatorScript` class name.
+    public static String pascalCase(String idPath) {
+        StringBuilder out = new StringBuilder(idPath.length());
+        boolean upper = true;
+
+        for (char c : idPath.toCharArray()) {
+            if (!Character.isLetterOrDigit(c)) {
+                upper = true;
+            } else {
+                out.append(upper ? Character.toUpperCase(c) : Character.toLowerCase(c));
+                upper = false;
+            }
+        }
+
+        return out.toString();
+    }
+
+    /// Returns whether param 's' can be converted to 'T'.
+    public static <T extends Number> boolean isParsable(String s, Function<String, T> parser) {
+        try {
+            parser.apply(s);
+            return true;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    /// Parse to string given float
+    ///
+    /// Live due to [Float#toString] is ambiguous when using as lambda
+    public static String floatingPointToString(float f) {
+        return Float.toString(f);
+    }
+
+    /// Returns 'a' if it's not null. Otherwise, returns 'b'.
+    public static <T> T nvl(@Nullable T a, @NonNull T b) {
+        return a == null ? b : a;
+    }
+
+    /// Optional wrapper for providers, used for [RecordCodecBuilder]
+    public static <O, T> Function<O, Optional<T>> provideOptional(Function<O, @Nullable T> valueProvider) {
+        return obj -> Optional.ofNullable(valueProvider.apply(obj));
+    }
+
+    /// Trim extension from path
+    public static String trimExtensions(String path, String... expectedExtensions) {
+        int idx = path.lastIndexOf(".");
+
+        if (idx < 0) {
+            return path;
+        }
+
+        String extension = path.substring(idx + 1);
+
+        if (!Set.of(expectedExtensions).contains(extension)) {
+            Akythera.LOGGER.warn("May trimmed wrong file extension from {}: {} are the only expected file extensions!", path, List.of(expectedExtensions));
+        }
+
+        return path.substring(0, idx);
+    }
+
+    /// Return a primitive type of wrapper class if parameter is a wrapper class.
+    public static Class<?> unwrapPrimitive(Class<?> c) {
+        if (c == Float.class) return float.class;
+        if (c == Double.class) return double.class;
+        if (c == Integer.class) return int.class;
+        if (c == Long.class) return long.class;
+        if (c == Short.class) return short.class;
+        if (c == Byte.class) return byte.class;
+        if (c == Boolean.class) return boolean.class;
+        if (c == Character.class) return char.class;
+        return c;
+    }
+
+    private ParseUtils() {}
+}
