@@ -13,7 +13,7 @@ import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.animation.driver.AnimationLayerSignature;
 import com.yesman.akythera.core.animation.driver.AnimationMontagePlayer;
 import com.yesman.akythera.core.animation.driver.SectionInfo;
-import com.yesman.akythera.core.animation.impl.AkytheraAnimationLayerSignature;
+import com.yesman.akythera.api.animation.impl.AkytheraAnimationLayerSignature;
 import com.yesman.akythera.core.animation.keyframe.AnimationClip;
 import com.yesman.akythera.core.animation.keyframe.BoneAnimationTrack;
 import com.yesman.akythera.core.animation.keyframe.Keyframe;
@@ -50,7 +50,7 @@ public final class AnimationMontage implements PlayableAnimation {
             instance.group(
                 AnimationNotifyTrack.CODEC.optionalFieldOf("notify_track", AnimationNotifyTrack.EMPTY).forGetter(AnimationMontage::notifyTrack),
                 SectionInfo.CODEC.fieldOf("sections").forGetter(AnimationMontage::sectionInfo),
-                AnimationManager.CODEC.listOf().fieldOf("animations").forGetter(AnimationMontage::getAnimSegments),
+                AnimationManager.CODEC.listOf().fieldOf("animationsToReplace").forGetter(AnimationMontage::getAnimSegments),
                 AnimationLayerSignature.ENUM_MANAGER.getNameCodec().fieldOf("layer_signature").forGetter(AnimationMontage::layerSignature),
                 Codec.FLOAT.fieldOf("fade_in_time").forGetter(AnimationMontage::fadeInTime),
                 Codec.FLOAT.fieldOf("fade_out_time").forGetter(AnimationMontage::fadeOutTime),
@@ -340,7 +340,7 @@ public final class AnimationMontage implements PlayableAnimation {
         /// always lead to the same next section. Defining both `A`->`B` and `A`->`C` is ambiguous and throws
         /// at build. A section with no defined next pauses (holds its end pose) until terminated or jumped.
         ///
-        /// In the example above, if you want to play fire animations, you should call
+        /// In the example above, if you want to play fire animationsToReplace, you should call
         /// [Animator#playAnimMontage(ResourceKey, String)] once again with `Fire` section name.
         ///
         /// WARNING: if given section names are not included in section timestamps specified by `createMontageSectionAt`,
@@ -369,8 +369,8 @@ public final class AnimationMontage implements PlayableAnimation {
 
         /// Fade out time extends animation frame time behind the transform track unlike Unreal Engine works
         ///
-        /// Commonly set to 0.0 and let next animation handle the blending time. This is for animations that
-        /// great pose transition is expected. (like heavy weapon animations)
+        /// Commonly set to 0.0 and let next animation handle the blending time. This is for animationsToReplace that
+        /// great pose transition is expected. (like heavy weapon animationsToReplace)
         public Builder fadeOutTime(final float fadeOutTime) {
             this.fadeOutTime = fadeOutTime;
             return this;

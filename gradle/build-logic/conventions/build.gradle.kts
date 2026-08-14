@@ -4,4 +4,5 @@ plugins {
 
 dependencies {
     implementation(libs.modPublish.gradle.plugin)
+    implementation(libs.mavenPublish.gradle.plugin)
 }

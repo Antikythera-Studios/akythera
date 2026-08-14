@@ -6,12 +6,12 @@ import com.yesman.akythera.api.animation.notify.AnimationNotify;
 import com.yesman.akythera.api.animation.notify.AnimationNotifyState;
 import com.yesman.akythera.api.data.modularize.ScriptFunction;
 import com.yesman.akythera.api.data.modularize.ScriptType;
-import com.yesman.akythera.api.world.patch.item.ItemPatch;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.animation.playable.AnimationMontage;
 import com.yesman.akythera.core.animation.playable.AnimationSequence;
 import com.yesman.akythera.core.animation.playable.BlendSpace2D;
 import com.yesman.akythera.core.blueprint.EntityPatchBlueprint;
+import com.yesman.akythera.core.blueprint.ItemPatchBlueprint;
 import com.yesman.akythera.core.blueprint.ComponentBlueprint;
 import com.yesman.akythera.platform.ModPlatformProvider;
 import net.minecraft.core.Registry;
@@ -36,7 +36,7 @@ public final class AkytheraRegistries {
         public static final ResourceKey<Registry<DataDrivenAnimatorScript.AnimatorScriptBlueprint>> ANIMATOR_SCRIPT_KEY = createRegistryKey("script/animator");
         public static final ResourceKey<Registry<BlendSpace2D>> BLEND_SPACE_2D_KEY = createRegistryKey("blend_space_2d");
         public static final ResourceKey<Registry<EntityPatchBlueprint>> ENTITY_PATCH_KEY = createRegistryKey("script/entity_patch");
-        public static final ResourceKey<Registry<ItemPatch.Builder>> ITEM_PATCH_KEY = createRegistryKey("item_patch");
+        public static final ResourceKey<Registry<ItemPatchBlueprint>> ITEM_PATCH_KEY = createRegistryKey("item_patch");
 
         static {
             ModPlatformProvider.get().createDataPackRegistry(ANIM_MONTAGE_KEY, AnimationMontage.CODEC);
@@ -44,7 +44,7 @@ public final class AkytheraRegistries {
             ModPlatformProvider.get().createDataPackRegistry(BLEND_SPACE_2D_KEY, BlendSpace2D.CODEC);
             ModPlatformProvider.get().createDataPackRegistry(ANIMATOR_SCRIPT_KEY, DataDrivenAnimatorScript.AnimatorScriptBlueprint.CODEC);
             ModPlatformProvider.get().createDataPackRegistry(ENTITY_PATCH_KEY, EntityPatchBlueprint.CODEC);
-            ModPlatformProvider.get().createDataPackRegistry(ITEM_PATCH_KEY, ItemPatch.Builder.CODEC);
+            ModPlatformProvider.get().createDataPackRegistry(ITEM_PATCH_KEY, ItemPatchBlueprint.CODEC);
         }
     }
 

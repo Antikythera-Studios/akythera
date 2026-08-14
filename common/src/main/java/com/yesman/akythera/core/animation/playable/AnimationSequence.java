@@ -20,7 +20,7 @@ import org.jspecify.annotations.NonNull;
 /// A simple playable animation with fundamental metadata defined in [PlayableAnimation]
 ///
 /// Objects synchronized by DFU, but not meant to support animation networking. This is
-/// for animations that supposed to be played only in client side by client properties.
+/// for animationsToReplace that supposed to be played only in client side by client properties.
 /// (e.g. Entity locomotion, jump)
 ///
 /// Notify track entries are restricted to [LogicalSide#CLIENT] notifies — sequences are

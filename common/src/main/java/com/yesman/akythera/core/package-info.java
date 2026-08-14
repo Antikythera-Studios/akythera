@@ -1,15 +1,15 @@
-/// Contains core drivers, algorithms, mechanisms that are not meant
-/// to be exposed as an API. Developers should rather depend on modules
-/// in `api` package, which are the implementations of the core package.
+/// Backend source code of API—drivers, algorithms, mechanisms that are
+/// not meant to be exposed to addons that depend on Akythera. Developers
+/// rather use source code in `api` package—the implementations of `core`
+/// package.
 ///
-/// The modules are still stable and less changed but Akythera studio
-/// doesn't ensure stability and follow-up supports for future changes.
+/// The modules are still expected to be stable and unchanged, but not
+/// granted—Use it at your own risk.
 ///
 /// Any custom inheritances or implementations of modules in 'core' package
-/// might not work with data serialization system. (A Representative example
-/// is `PlayableAnimation`. Any custom classes that implements the interface
-/// won't be supported by Minecraft's DFU system.
-///
-/// @see com.yesman.akythera.core.animation.playable.PlayableAnimation#tagOf
+/// are not subject of data serialization that Akythera grants.
+/// [com.yesman.akythera.core.animation.playable.PlayableAnimation] for example,
+/// any custom class that implements the interface should implement custom
+/// [com.mojang.serialization.Codec].
 
 package com.yesman.akythera.core;

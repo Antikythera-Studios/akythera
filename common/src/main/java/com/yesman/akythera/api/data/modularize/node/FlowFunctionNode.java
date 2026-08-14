@@ -5,6 +5,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.data.modularize.ScriptFunction;
 import com.yesman.akythera.api.data.modularize.node.animgraph.AnimationStateMachineNode;
 import com.yesman.akythera.api.data.modularize.node.animgraph.CachedPoseReferenceNode;
+import com.yesman.akythera.core.reflection.DataDrivenScript;
 import com.yesman.akythera.core.reflection.FunctionSignature;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.helper.ParseUtils;
@@ -22,9 +23,16 @@ import java.util.List;
 ///
 /// @param nextNode null if this node is the last flow.
 public record FlowFunctionNode(
-    ScriptFunction function, List<PureNode> params, @Nullable FlowNode nextNode
+    ScriptFunction function, List<PureNode> params, @Nullable FlowNode nextNode, int nodeId
 ) implements FlowNode, FunctionNode
 {
+    /// A node with no canvas row behind it — the builders, and any hand-assembled tree.
+    public FlowFunctionNode(
+        final ScriptFunction function, final List<PureNode> params, final @Nullable FlowNode nextNode
+    ) {
+        this(function, params, nextNode, NO_NODE_ID);
+    }
+
     /// Recursive node codec for the execution tree: `{ "function": <id>, "params": [ <node>... ] }`.
     public static final Codec<FlowFunctionNode> CODEC =
         RecordCodecBuilder.create(
@@ -38,10 +46,28 @@ public record FlowFunctionNode(
                         .forGetter(FlowFunctionNode::params),
                     FlowNode.CODEC
                         .optionalFieldOf("next")
-                        .forGetter(ParseUtils.provideOptional(FlowFunctionNode::nextNode))
+                        .forGetter(ParseUtils.provideOptional(FlowFunctionNode::nextNode)),
+                    Codec.INT
+                        .optionalFieldOf("node_id", NO_NODE_ID)
+                        .forGetter(FlowFunctionNode::nodeId)
                 )
-                .apply(instance, (arg1, arg2, arg3) -> new FlowFunctionNode(arg1, arg2, arg3.orElse(null)))
+                .apply(instance, (arg1, arg2, arg3, arg4) -> new FlowFunctionNode(arg1, arg2, arg3.orElse(null), arg4))
         );
+
+    /// Runs the call, then the statement chained after it.
+    ///
+    /// [FunctionNode] runs the call itself and closes this node's frame before [#nextNode] starts, so
+    /// the chain records as a run of siblings.
+    @Override
+    public <T> T execute(final DataDrivenScript<?, ?> script, final ExecutionContext context) {
+        T result = FunctionNode.super.execute(script, context);
+
+        if (nextNode != null) {
+            nextNode.execute(script, context);
+        }
+
+        return result;
+    }
 
     public static FlowFunctionNode.Builder builder(final ScriptFunction function) {
         return new FlowFunctionNode.Builder(function);

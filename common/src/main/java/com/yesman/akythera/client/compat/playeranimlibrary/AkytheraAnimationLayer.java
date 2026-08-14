@@ -1,6 +1,6 @@
 package com.yesman.akythera.client.compat.playeranimlibrary;
 
-import com.yesman.akythera.api.animation.ArmatureComponent;
+import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.asset.AnimatableObject;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.client.compat.playeranimlibrary.mixinaccessor.IMappedBone;
@@ -49,7 +49,7 @@ public final class AkytheraAnimationLayer implements IAnimation {
             Bone bendBone = armature.getBoneByName(namedModelPart.akythera$getName() + "_bend");
 
             if (bone != null) {
-                PlayerAnimationLibraryCompatibility.mapAnimation(bone, bendBone, cachedPose, cachedBoundPose[bone.getId()], playerAnimBone, modelPart);
+                PlayerAnimationLibraryPlugin.mapAnimation(bone, bendBone, cachedPose, cachedBoundPose[bone.getId()], playerAnimBone, modelPart);
             }
         }
     }
@@ -64,7 +64,7 @@ public final class AkytheraAnimationLayer implements IAnimation {
         );
 
         if (armatureComponent.getOwner() instanceof EntityPatch<?> entityPatch) {
-            entityPatch.getOwner().setYBodyRot(entityPatch.getOwner().getYRot());
+            entityPatch.getOriginal().setYBodyRot(entityPatch.getOriginal().getYRot());
         }
     }
 }

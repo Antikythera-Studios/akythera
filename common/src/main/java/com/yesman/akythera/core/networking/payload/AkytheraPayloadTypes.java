@@ -1,6 +1,9 @@
 package com.yesman.akythera.core.networking.payload;
 
+import com.yesman.akythera.client.core.networking.AkytheraBiDirectionalPayloadHandler;
 import com.yesman.akythera.client.core.networking.AkytheraClientBoundPayloadHandler;
+import com.yesman.akythera.core.networking.AkytheraServerBoundPayloadHandler;
+import com.yesman.akythera.core.networking.payload.bidirectional.BiDirectionalReplaceAnimation;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundDataBlockSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayAnimMontage;
 
@@ -13,13 +16,14 @@ import java.util.List;
 public final class AkytheraPayloadTypes {
 	public static final List<PayloadChannel<?>> CLIENT_BOUND = new ArrayList<>();
 	public static final List<PayloadChannel<?>> SERVER_BOUND = new ArrayList<>();
+	public static final List<PayloadChannel<?>> BI_DIRECTIONAL = new ArrayList<>();
 
 	static {
 		// client bound packets
 		CLIENT_BOUND.add(new PayloadChannel<>(ClientBoundPlayAnimMontage.TYPE, ClientBoundPlayAnimMontage.STREAM_CODEC, AkytheraClientBoundPayloadHandler::handlePlayMontage));
 		CLIENT_BOUND.add(new PayloadChannel<>(ClientBoundDataBlockSync.TYPE, ClientBoundDataBlockSync.STREAM_CODEC, AkytheraClientBoundPayloadHandler::handleBlockSync));
 
-		// server bound packets
-
+		// bi-directional packets
+		BI_DIRECTIONAL.add(new PayloadChannel<>(BiDirectionalReplaceAnimation.TYPE, BiDirectionalReplaceAnimation.STREAM_CODEC, AkytheraBiDirectionalPayloadHandler::handleReplaceAnimation));
 	}
 }

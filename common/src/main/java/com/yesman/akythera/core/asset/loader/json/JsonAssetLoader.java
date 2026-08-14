@@ -19,7 +19,7 @@ import java.nio.charset.StandardCharsets;
 /// Since the Epic Fight 16 version (akythera), we support binary files (.efasset) to optimize file
 /// size and loading process.
 ///
-/// The .json loader exists for old assets' support, especially retargeting animations in AkytheraLabs.
+/// The .json loader exists for old assets' support, especially retargeting animationsToReplace in AkytheraLabs.
 public interface JsonAssetLoader {
     Identifier resourcePath();
 

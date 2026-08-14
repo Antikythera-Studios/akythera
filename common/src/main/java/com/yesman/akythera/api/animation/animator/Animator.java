@@ -1,6 +1,6 @@
 package com.yesman.akythera.api.animation.animator;
 
-import com.yesman.akythera.api.animation.RootMotionComponent;
+import com.yesman.akythera.api.component.impl.RootMotionComponent;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.animation.driver.AnimationMontagePlayer;
@@ -40,7 +40,7 @@ public interface Animator {
             // Montage authority is on server side, so if it's played in client side manual networking is required.
             if (!getOwner().isLogicalClient()) {
                 NetworkingHelper.getInstance().sendToPlayersTrackingEntityWithSelfIfPlayer(
-                    getOwner().getOwner(),
+                    getOwner().getOriginal(),
                     new ClientBoundPlayAnimMontage(animMontageKey.identifier(), section, getOwner().getId())
                 );
             }

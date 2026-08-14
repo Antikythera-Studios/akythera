@@ -16,6 +16,8 @@ import java.util.zip.Inflater;
 ///
 /// Track the official blender exporter updates [here](https://github.com/Epic-Fight/blender-json-addon)
 public interface BinaryAssetLoader {
+    String EXTENSION = "efasset";
+
     byte[] PADDING = "EFAS".getBytes(StandardCharsets.US_ASCII);
 
     Identifier resourcePath();

@@ -5,7 +5,6 @@ import com.mojang.datafixers.util.Function8;
 import com.mojang.datafixers.util.Function9;
 import com.yesman.akythera.api.asset.AssetAccessor;
 import io.netty.buffer.ByteBuf;
-import net.minecraft.core.Registry;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -119,21 +118,25 @@ public interface ByteBufCodecsExtends {
     }
 
     /// Stream codec for any type of [ResourceKey]
-    static <T> StreamCodec<RegistryFriendlyByteBuf, ResourceKey<T>> getResourceKey(ResourceKey<? extends Registry<T>> registryKey) {
+    ///
+    /// When `registry key` is apparent, use [ResourceKey#codec].
+    static <T> StreamCodec<RegistryFriendlyByteBuf, ResourceKey<T>> fullResourceKey() {
         return new StreamCodec<> () {
             @Override
             public void encode(RegistryFriendlyByteBuf buffer, ResourceKey<T> obj) {
-                buffer.writeResourceKey(obj);
+                buffer.writeIdentifier(obj.registry());
+                buffer.writeIdentifier(obj.identifier());
             }
 
             @Override
             public ResourceKey<T> decode(RegistryFriendlyByteBuf buffer) {
-                return buffer.readResourceKey(registryKey);
+                return ResourceKey.create(ResourceKey.createRegistryKey(buffer.readIdentifier()), buffer.readIdentifier());
             }
         };
     }
 
-    /// Stream codec for [Vec3]
+    /// Stream codec for [Vec3] TODO: Remove, the stream codec has implemented in vanilla [Vec3#STREAM_CODEC]
+    /*
     StreamCodec<ByteBuf, Vec3> VEC3 = new StreamCodec<> () {
         @Override
         public void encode(ByteBuf buffer, Vec3 obj) {
@@ -147,6 +150,7 @@ public interface ByteBufCodecsExtends {
             return new Vec3(buffer.readDouble(), buffer.readDouble(), buffer.readDouble());
         }
     };
+    */
 
     /// Stream codec for [GameRule]
     /*
@@ -208,29 +212,6 @@ public interface ByteBufCodecsExtends {
     @SuppressWarnings("unchecked")
     static <B extends ByteBuf, T extends Enum<T>> StreamCodec<B, T> enums(Class<T> enumCls) {
         return (StreamCodec<B, T>)ENUM.apply(enumCls);
-    }
-
-    /// Stream codecs for any [EnumerableDataBlock]. Distinguished by [EnumerableDataBlockManager] that are declared by each enum interface
-    ///
-    /// Use [#enumerableDataBlock] for typed stream codec.
-    Function<EnumerableDataBlockManager<? extends EnumerableDataBlock>, StreamCodec<? extends ByteBuf, ? extends EnumerableDataBlock>> ENUMERABLE_DATA_BLOCK =
-        Util.memoize(enumManager ->
-            new StreamCodec<> () {
-                @Override
-                public void encode(ByteBuf buffer, EnumerableDataBlock obj) {
-                    buffer.writeInt(obj.universalOrdinal());
-                }
-
-                @Override
-                public EnumerableDataBlock decode(ByteBuf buffer) {
-                    return enumManager.getOrThrow(buffer.readInt());
-                }
-            }
-        );
-
-    @SuppressWarnings("unchecked")
-    static <B extends ByteBuf, T extends EnumerableDataBlock> StreamCodec<B, T> enumerableDataBlock(EnumerableDataBlockManager<T> dataBlockManager) {
-        return (StreamCodec<B, T>) ENUMERABLE_DATA_BLOCK.apply(dataBlockManager);
     }
 
     static <B, C, T1, T2, T3, T4, T5, T6, T7> StreamCodec<B, C> composite7(

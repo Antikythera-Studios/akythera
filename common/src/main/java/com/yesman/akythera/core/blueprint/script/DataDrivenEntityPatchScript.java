@@ -9,7 +9,7 @@ import net.minecraft.core.Holder;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
 
-import java.util.List;
+import java.util.Map;
 
 public final class DataDrivenEntityPatchScript
     implements EntityPatchScript, DataDrivenScript<EntityPatch<Entity>, EntityPatchBlueprint>
@@ -31,7 +31,7 @@ public final class DataDrivenEntityPatchScript
     @Override
     public void onConstruct() {
         variables.reset();
-        getBlueprint().value().onConstruct().execute(this, new ScriptNode.ExecutionContext(variables, false));
+        getBlueprint().value().onConstruct().execute(this, new ScriptNode.ExecutionContext(variables));
     }
 
     @Override
@@ -39,18 +39,18 @@ public final class DataDrivenEntityPatchScript
         variables.reset();
         variables.setValue("level", level);
 
-        getBlueprint().value().onJoinWorld().execute(this, new ScriptNode.ExecutionContext(variables, false));
+        getBlueprint().value().onJoinWorld().execute(this, new ScriptNode.ExecutionContext(variables));
     }
 
     @Override
     public void update() {
         variables.reset();
 
-        getBlueprint().value().update().execute(this, new ScriptNode.ExecutionContext(variables, false));
+        getBlueprint().value().update().execute(this, new ScriptNode.ExecutionContext(variables));
     }
 
     @Override
-    public List<ComponentBlueprint<?, ?>> componentsToAttach() {
+    public Map<String, ComponentBlueprint<?, ?>> componentsToAttach() {
         return blueprint.value().components();
     }
 

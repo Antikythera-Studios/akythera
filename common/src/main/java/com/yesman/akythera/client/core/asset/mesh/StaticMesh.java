@@ -35,7 +35,11 @@ public class StaticMesh implements Mesh<StaticMesh.StaticMeshPart> {
     /// uv buffer
     protected final ByteBuf uvs;
 
+    protected final MeshLoader.Metadata metadata;
+
     public StaticMesh(CommonMeshBuilder<StaticMeshPart> meshBuilder) {
+        metadata = meshBuilder.metadata;
+
         // Declare as direct buffers since memory alloc/dealloc is not frequent,
         // and the length of array is big which overloads GC scanning process if it's a heap buffer.
         positions = ByteBufAllocator.DEFAULT.directBuffer(meshBuilder.positions.length * 4);
@@ -57,7 +61,7 @@ public class StaticMesh implements Mesh<StaticMesh.StaticMeshPart> {
         ImmutableMap.Builder<@NotNull String, @NotNull StaticMeshPart> meshPartBuilder = ImmutableMap.builder();
 
         for (Map.Entry<String, List<VertexBuilder>> entry : meshBuilder.partBuilders.entrySet()) {
-            meshPartBuilder.put(entry.getKey(), new StaticMeshPart(entry.getValue()));
+            meshPartBuilder.put(entry.getKey(), new StaticMeshPart(entry.getValue(), entry.getKey()));
         }
 
         meshParts = meshPartBuilder.build();
@@ -69,11 +73,17 @@ public class StaticMesh implements Mesh<StaticMesh.StaticMeshPart> {
     }
 
     @Override
-    public void destroy() {
+    public MeshLoader.Metadata getMetadata() {
+        return metadata;
+    }
+
+    @Override
+    public void close() {
         // Decrease ref count (expected 0) to let GC deallocate these buffers
         positions.release();
         normals.release();
         uvs.release();
+
         for (StaticMeshPart meshPart : this.meshParts.values()) {
             meshPart.drawIndices.release();
         }
@@ -83,10 +93,12 @@ public class StaticMesh implements Mesh<StaticMesh.StaticMeshPart> {
     public class StaticMeshPart implements MeshPart {
         /// A buffer that (position, normal, uv) are in 1D array
         private final ByteBuf drawIndices;
+        private final String name;
         private final int vertexCount;
-        private boolean visible;
+        private boolean visible = true;
 
-        private StaticMeshPart(List<VertexBuilder> vertexBuilders) {
+        private StaticMeshPart(final List<VertexBuilder> vertexBuilders, final String name) {
+            this.name = name;
             // A builder = 3 integers = 12 bytes
             drawIndices = ByteBufAllocator.DEFAULT.directBuffer(vertexBuilders.size() * 12);
             vertexCount = vertexBuilders.size();
@@ -100,7 +112,7 @@ public class StaticMesh implements Mesh<StaticMesh.StaticMeshPart> {
 
         @Override
         public void draw(
-            PoseStack poseStack,
+            PoseStack.Pose pose,
             VertexConsumer bufferBuilder,
             DrawingFunction drawingFunction,
             int packedLight,
@@ -110,24 +122,24 @@ public class StaticMesh implements Mesh<StaticMesh.StaticMeshPart> {
             float a,
             int overlay
         ) {
-            Matrix4f poseMatrix = poseStack.last().pose();
-            Matrix3f normalMatrix = poseStack.last().normal();
+            Matrix4f poseMatrix = pose.pose();
+            Matrix3f normalMatrix = pose.normal();
 
             for (int i = 0; i < vertexCount; i++) {
-                int positionIdx = drawIndices.getInt(i*3);
-                int normalIdx = drawIndices.getInt(i*3+1);
-                int uvIdx = drawIndices.getInt(i*3+2);
+                int positionIdx = drawIndices.getInt(Mesh.byteIndex(i * 3));
+                int normalIdx = drawIndices.getInt(Mesh.byteIndex(i * 3 + 1));
+                int uvIdx = drawIndices.getInt(Mesh.byteIndex(i * 3 + 2));
 
                 Vector4f position = new Vector4f(
-                    positions.getFloat(positionIdx*3),
-                    positions.getFloat(positionIdx*3+1),
-                    positions.getFloat(positionIdx*3+2),
+                    positions.getFloat(Mesh.byteIndex(positionIdx * 3)),
+                    positions.getFloat(Mesh.byteIndex(positionIdx * 3 + 1)),
+                    positions.getFloat(Mesh.byteIndex(positionIdx * 3 + 2)),
                     1.0F
                 );
                 Vector3f normal = new Vector3f(
-                    normals.getFloat(normalIdx*3),
-                    normals.getFloat(normalIdx*3+1),
-                    normals.getFloat(normalIdx*3+2)
+                    normals.getFloat(Mesh.byteIndex(normalIdx * 3)),
+                    normals.getFloat(Mesh.byteIndex(normalIdx * 3 + 1)),
+                    normals.getFloat(Mesh.byteIndex(normalIdx * 3 + 2))
                 );
 
                 position.mul(poseMatrix);
@@ -143,8 +155,8 @@ public class StaticMesh implements Mesh<StaticMesh.StaticMeshPart> {
                     normal.z(),
                     packedLight,
                     r,g,b,a,
-                    uvs.getFloat(uvIdx*2),
-                    uvs.getFloat(uvIdx*2+1),
+                    uvs.getFloat(Mesh.byteIndex(uvIdx * 2)),
+                    uvs.getFloat(Mesh.byteIndex(uvIdx * 2 + 1)),
                     overlay
                 );
             }
@@ -158,6 +170,11 @@ public class StaticMesh implements Mesh<StaticMesh.StaticMeshPart> {
         @Override
         public boolean visible() {
             return visible;
+        }
+
+        @Override
+        public String partName() {
+            return name;
         }
     }
 

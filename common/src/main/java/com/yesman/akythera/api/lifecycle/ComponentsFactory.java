@@ -2,8 +2,10 @@ package com.yesman.akythera.api.lifecycle;
 
 import com.yesman.akythera.api.animation.animator.Animator;
 import com.yesman.akythera.api.asset.AssetAccessor;
+import com.yesman.akythera.api.data.modularize.ScriptFunction;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.client.api.lifecycle.ClientComponentsFactory;
+import com.yesman.akythera.client.gui.widget.viewer.Model3DViewer;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.animation.animator.BlendingAnimator;
 import com.yesman.akythera.core.animation.animator.MontageOnlyAnimator;
@@ -13,12 +15,15 @@ import com.yesman.akythera.core.blueprint.EntityPatchBlueprint;
 import com.yesman.akythera.core.blueprint.script.AnimatorScript;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
+import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.player.PlayerSkin;
 import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
@@ -26,7 +31,6 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.function.BiFunction;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 /// Provides components used by Epic Fight. Some components are generated
 /// depending on the physical side. It effectively decouples client side
@@ -100,13 +104,24 @@ public abstract class ComponentsFactory {
         Identifier entityId = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
         Holder.Reference<EntityPatchBlueprint> entityPatchBlueprint = registryOptional.get().get(entityId).orElse(null);
 
-        return entityPatchBlueprint == null ? null : new EntityPatch<>(entityPatchBlueprint, entity);
+        if (entityPatchBlueprint == null) return null;
+
+        ScriptFunction patchCtor = entityPatchBlueprint.value().ctor();
+
+        try {
+            return (EntityPatch<T>)patchCtor.castToBiFunction().biFunction().apply(entityPatchBlueprint, entity);
+        } catch (ClassCastException | IllegalStateException e) {
+            // The constructor's entity parameter is checked at the erased invocation boundary, so a
+            // patch parented on a narrower one (a player patch on a zombie) only fails here.
+            Akythera.LOGGER.error("Entity patch '{}' cannot be built for {}", entityId, entity.getType(), e);
+            return null;
+        }
     }
 
     /// Maps the entity type with armature asset
     private final Map<EntityType<?>, AssetAccessor<? extends Armature>> entityArmatures = new HashMap<> ();
 
-    /// Register an armature accessor for an entity type. The mapping works for outside-level model previews like [ModelPreviewer]
+    /// Register an armature accessor for an entity type. The mapping works for outside-level model previews like [Model3DViewer]
     ///
     /// Passing a null armature removes the entity type's mapping.
     public void registerDefaultArmature(EntityType<?> entityType, @Nullable AssetAccessor<? extends Armature> armature) {
@@ -167,19 +182,10 @@ public abstract class ComponentsFactory {
         return owner.isLogicalClient() ? new BlendingAnimator(owner, scriptProvider) : new MontageOnlyAnimator(owner);
     }
 
-    /// A resource manager getter
-    ///
-    /// Not save the RM object directly since in mod loading stage, there could be a chance
-    /// that resource manager is not created yet.
-    private Supplier<ResourceManager> resourceManagerSupplier;
+    /// Returns the resource manager the assets are read from.
+    public abstract ResourceManager getResourceManager();
 
-    /// Register a resource manager supplier
-    public void setResourceManagerSupplier(final Supplier<ResourceManager> resourceManagerSupplier) {
-        this.resourceManagerSupplier = resourceManagerSupplier;
-    }
-
-    /// Returns the resource manager
-    public ResourceManager getResourceManager() {
-        return resourceManagerSupplier.get();
-    }
+    /// Returns [PlayerSkin] – Player model & cosmetic information belongs to [AbstractClientPlayer],
+    /// a client side only class.
+    public abstract @Nullable PlayerSkin getPlayerSkin(final Player player);
 }

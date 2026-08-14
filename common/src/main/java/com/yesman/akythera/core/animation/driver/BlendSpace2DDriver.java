@@ -1,6 +1,7 @@
 package com.yesman.akythera.core.animation.driver;
 
 import com.mojang.datafixers.util.Pair;
+import com.yesman.akythera.api.component.impl.RootMotionComponent;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.playable.BlendSpace2D;
@@ -12,7 +13,6 @@ import com.yesman.akythera.core.util.helper.MathUtils;
 import net.minecraft.core.Holder;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
-import org.jspecify.annotations.NonNull;
 
 import java.util.function.Supplier;
 
@@ -34,14 +34,14 @@ public final class BlendSpace2DDriver implements AnimationDriver {
     /// Represents that, "no triangle cached yet"
     private static final int NO_TRIANGLE = -1;
 
-    private final Holder.Reference<? extends @NonNull BlendSpace2D> blendSpace2D;
+    private final Holder.Reference<BlendSpace2D> blendSpace2D;
     private final Supplier<Float> xUpdater;
     private final Supplier<Float> yUpdater;
 
     private float fadeTime;
     private boolean isFinished;
     /// true if fading in, false if fading out
-    private boolean fadingInOrElseOut;
+    private boolean fadingInOrOut;
     private float elapsedTime;
 
     /// Last [AnimationDriver#tick] elapsedTime — passed as `prevElapsedTime`
@@ -74,11 +74,11 @@ public final class BlendSpace2DDriver implements AnimationDriver {
     private int winnerDot;
 
     public BlendSpace2DDriver(
-        final Holder.Reference<? extends @NonNull BlendSpace2D> holder,
+        final Holder.Reference<BlendSpace2D> holder,
         final Supplier<Float> xUpdater,
         final Supplier<Float> yUpdater
     ) {
-        blendSpace2D = holder;
+        this.blendSpace2D = holder;
         this.xUpdater = xUpdater;
         this.yUpdater = yUpdater;
 
@@ -122,12 +122,13 @@ public final class BlendSpace2DDriver implements AnimationDriver {
     }
 
     /// Blended root motion at `time`: a barycentric mix of the cached triangle corners' root motions,
-    /// using the same weights as [#getPose]. This is the value [com.yesman.akythera.api.animation.RootMotionComponent]
+    /// using the same weights as [#getPose]. This is the value [RootMotionComponent]
     /// would consume for a blend space (translation only, matching how root motion is applied).
     ///
     /// Experimental and TODO: test blend space root motion
     public Transform getBlendedRootMotion(final float time) {
         float t1, t2, t3;
+
         if (cachedTotalTime > 0.0F && cachedTotalTime != Float.MAX_VALUE) {
             float phase = time / cachedTotalTime;
             t1 = phase * cachedAnim1.getTotalFrameTime();
@@ -146,7 +147,7 @@ public final class BlendSpace2DDriver implements AnimationDriver {
 
     @Override
     public void update(final float frameTime) {
-        if (fadingInOrElseOut) {
+        if (fadingInOrOut) {
             fadeTime = Math.clamp(fadeTime + frameTime, 0.0F, blendSpace2D.value().fadeInTime());
         } else {
             fadeTime = Math.clamp(fadeTime - frameTime, 0.0F, blendSpace2D.value().fadeOutTime());
@@ -177,16 +178,16 @@ public final class BlendSpace2DDriver implements AnimationDriver {
         // Slow path: walk the full triangle list to relocate the control point.
         if (!cacheHit) {
             int found = nodeSpace.findContainingTriangle(targetX, targetY);
+
+            // If found == -1 the control point is outside every triangle (e.g.
+            // a degenerate node space with < 3 nodes). Keep the previous cache
+            // untouched so getPose() returns whatever was last sane.
             if (found != -1) {
                 cachedTriangleIndex = found;
                 refreshCachedTriangle(nodeSpace, found, targetX, targetY);
             }
-            // If found == -1 the control point is outside every triangle (e.g.
-            // a degenerate node space with < 3 nodes). Keep the previous cache
-            // untouched so getPose() returns whatever was last sane.
         }
 
-        // Wall-clock bound for the current corner mix
         cachedTotalTime =
             cachedAnim1.getTotalFrameTime() * cachedWeight1 +
             cachedAnim2.getTotalFrameTime() * cachedWeight2 +
@@ -268,7 +269,7 @@ public final class BlendSpace2DDriver implements AnimationDriver {
 
     @Override
     public void start() {
-        fadingInOrElseOut = true;
+        fadingInOrOut = true;
         isFinished = false;
         elapsedTime = 0.0F;
         lastUpdatedTime = 0.0F;
@@ -277,20 +278,25 @@ public final class BlendSpace2DDriver implements AnimationDriver {
 
     @Override
     public void terminate() {
-        fadingInOrElseOut = false;
+        fadingInOrOut = false;
     }
 
     @Override
     public float getWeight() {
-        if (fadingInOrElseOut) {
-            return fadeTime / blendSpace2D.value().fadeInTime();
+        if (fadingInOrOut) {
+            return MathUtils.safeDivision(fadeTime, blendSpace2D.value().fadeInTime(), 1.0F);
         } else {
-            return fadeTime / blendSpace2D.value().fadeOutTime();
+            return MathUtils.safeDivision(fadeTime, blendSpace2D.value().fadeOutTime(), 0.0F);
         }
     }
 
     @Override
     public boolean isFinished() {
         return isFinished;
+    }
+
+    @Override
+    public boolean fadingInOrOut() {
+        return fadingInOrOut;
     }
 }

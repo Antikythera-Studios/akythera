@@ -1,7 +1,7 @@
 package com.yesman.akythera.core.animation.driver;
 
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
-import com.yesman.akythera.core.animation.impl.AkytheraAnimationState;
+import com.yesman.akythera.api.animation.impl.AkytheraAnimationState;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.math.model.FiniteStateMachine;
@@ -72,13 +72,13 @@ public final class AnimationStateMachine<T extends EntityPatch<Entity>>
 
     @Override
     public Pose getPose() {
-        AnimationDriver animDriver = stateModel.getStateInstance(getState()).animDriver;
+        AnimationDriver animDriver = getCurrentStateDriver();
         return Pose.blendPoses(lastDriver.getPose(), lastDriver.getWeight(), animDriver.getPose(), animDriver.getWeight());
     }
 
     @Override
     public @Nullable PlayableAnimation getPlayingAnimation() {
-        return stateModel.getStateInstance(getState()).animDriver.getPlayingAnimation();
+        return getCurrentStateDriver().getPlayingAnimation();
     }
 
     /// Updates animation time of each state's animation driver.
@@ -89,7 +89,7 @@ public final class AnimationStateMachine<T extends EntityPatch<Entity>>
             lastDriver.update(frameTime);
         }
 
-        stateModel.getStateInstance(getState()).animDriver.update(frameTime);
+        getCurrentStateDriver().update(frameTime);
     }
 
     /// Implementation of [AnimationDriver]: tick the machine as driver
@@ -100,7 +100,7 @@ public final class AnimationStateMachine<T extends EntityPatch<Entity>>
 
     @Override
     public float getTime() {
-        return stateModel.getStateInstance(getState()).animDriver.getTime();
+        return getCurrentStateDriver().getTime();
     }
 
     /// Starts the state machine only when it's not running.
@@ -126,7 +126,7 @@ public final class AnimationStateMachine<T extends EntityPatch<Entity>>
         // Judges whether it's a first played driver by a stateful variable. The entry
         // state is removed as soon as the machine starts.
         if (firstCome) {
-            return stateModel.getStateInstance(getState()).animDriver.getWeight();
+            return getCurrentStateDriver().getWeight();
         }
 
         // Gets weight from last recorded anim driver when the state is exited
@@ -139,7 +139,16 @@ public final class AnimationStateMachine<T extends EntityPatch<Entity>>
 
     @Override
     public boolean isFinished() {
-        return stateModel.getStateInstance(getState()).animDriver.isFinished();
+        return getCurrentStateDriver().isFinished();
+    }
+
+    @Override
+    public boolean fadingInOrOut() {
+        return getCurrentStateDriver().fadingInOrOut();
+    }
+
+    private AnimationDriver getCurrentStateDriver() {
+        return stateModel.getStateInstance(getState()).animDriver;
     }
 
     public static <T extends EntityPatch<Entity>> StateModel.StateModelBuilder<T, FSMAnimationState, AnimationStateMachine<T>.AnimationStateInstance, AnimationStateMachine<T>> stateModelBuilder() {

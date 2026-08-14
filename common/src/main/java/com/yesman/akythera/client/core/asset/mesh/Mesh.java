@@ -4,9 +4,11 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import com.yesman.akythera.client.core.asset.loader.MeshLoader;
 import com.yesman.akythera.client.core.asset.loader.VertexBuilder;
-import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.client.renderer.texture.OverlayTexture;
 
 import java.util.HashMap;
 import java.util.List;
@@ -20,10 +22,10 @@ import java.util.function.Consumer;
 ///
 /// Beware that these models are incompatible with Minecraft render pipelines (e.g. render layers)
 /// due to the differences in coordinate systems.
-public interface Mesh<T extends Mesh.MeshPart> {
+public interface Mesh<T extends Mesh.MeshPart> extends AutoCloseable {
     /// Renders the whole mesh with a common render type
     default void draw(
-        PoseStack poseStack,
+        PoseStack.Pose pose,
         VertexConsumer vertexConsumer,
         DrawingFunction drawingFunction,
         int packedLight,
@@ -34,7 +36,7 @@ public interface Mesh<T extends Mesh.MeshPart> {
         int overlay
     ) {
         for (T part : getParts().values()) {
-            if (!part.visible()) part.draw(poseStack, vertexConsumer, drawingFunction, packedLight, r, g, b, a, overlay);
+            if (part.visible()) part.draw(pose, vertexConsumer, drawingFunction, packedLight, r, g, b, a, overlay);
         }
     }
 
@@ -44,7 +46,7 @@ public interface Mesh<T extends Mesh.MeshPart> {
     default void drawWithMultiRenderTypes(
         Map<String, RenderType> renderTypes,
         PoseStack poseStack,
-        MultiBufferSource bufferSource,
+        SubmitNodeCollector submitNodeCollector,
         DrawingFunction drawingFunction,
         int packedLight,
         float r,
@@ -55,8 +57,21 @@ public interface Mesh<T extends Mesh.MeshPart> {
     ) {
         for (Map.Entry<String, T> entry : getParts().entrySet()) {
             if (entry.getValue().visible()) {
-                VertexConsumer vertexConsumer = bufferSource.getBuffer(renderTypes.get(entry.getKey()));
-                entry.getValue().draw(poseStack, vertexConsumer, drawingFunction, packedLight, r, g, b, a, overlay);
+                submitNodeCollector.submitCustomGeometry(
+                    poseStack,
+                    renderTypes.get(entry.getKey()),
+                    (pose, buffer) -> draw(
+                        pose,
+                        buffer,
+                        Mesh.DrawingFunction.NEW_ENTITY,
+                        packedLight,
+                        1.0F,
+                        1.0F,
+                        1.0F,
+                        1.0F,
+                        OverlayTexture.NO_OVERLAY
+                    )
+                );
             }
         }
     }
@@ -74,14 +89,14 @@ public interface Mesh<T extends Mesh.MeshPart> {
     }
 
     /// Called on resource reloading event to destroy existing buffers
-    void destroy();
+    void close();
 
     /// Allows showing & hiding a part from a whole mesh dynamically
     interface MeshPart {
         /// Draws the part without graphic boosting solutions, or compute shaders.
         /// Just use Minecraft pipeline in raw for the best compatibility.
         void draw(
-            PoseStack poseStack,
+            PoseStack.Pose pose,
             VertexConsumer bufferBuilder,
             DrawingFunction drawingFunction,
             int packedLight,
@@ -97,6 +112,8 @@ public interface Mesh<T extends Mesh.MeshPart> {
 
         /// Returns whether the part is visible
         boolean visible();
+
+        String partName();
     }
 
     /// Modularized vertex builders for [VertexFormat], allowing to be rendered by any [RenderType]
@@ -151,11 +168,20 @@ public interface Mesh<T extends Mesh.MeshPart> {
         void draw(VertexConsumer vertexConsumer, float posX, float posY, float posZ, float normX, float normY, float normZ, int packedLight, float r, float g, float b, float a, float u, float v, int overlay);
     }
 
+    MeshLoader.Metadata getMetadata();
+
+    /// The byte offset element `elementIndex` sits at in the vertex `ByteBuf`s a mesh keeps. They
+    /// hold 4-byte elements throughout, and Netty's absolute getters address bytes.
+    static int byteIndex(final int elementIndex) {
+        return elementIndex * 4;
+    }
+
     class CommonMeshBuilder<T extends MeshPart> {
-        protected Map<String, List<VertexBuilder>> partBuilders = new HashMap<>();
-        protected float[] positions;
-        protected float[] normals;
-        protected float[] uvs;
+        public Map<String, List<VertexBuilder>> partBuilders = new HashMap<>();
+        public float[] positions;
+        public float[] normals;
+        public float[] uvs;
+        public MeshLoader.Metadata metadata = MeshLoader.Metadata.DEFAULT;
 
         /// Adds a new part
         public CommonMeshBuilder<T> addPart(String partName, List<VertexBuilder> vertexBuilders) {
@@ -178,6 +204,12 @@ public interface Mesh<T extends Mesh.MeshPart> {
         /// Primitive uv array with 2 uv coord vector elements
         public CommonMeshBuilder<T> uvs(float[] uvs) {
             this.uvs = uvs;
+            return this;
+        }
+
+        /// The asset's sidecar metadata, see [MeshLoader#metadata]
+        public CommonMeshBuilder<T> metadata(MeshLoader.Metadata metadata) {
+            this.metadata = metadata;
             return this;
         }
     }

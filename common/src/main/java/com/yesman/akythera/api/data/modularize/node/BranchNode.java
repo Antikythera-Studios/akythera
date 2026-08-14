@@ -13,13 +13,23 @@ import java.util.List;
 /// @param boolFunction criteria inside `if`. Must return `boolean`.
 /// @param whenTrue     node id to jump when `boolFunction` returns `true` (-1 when nothing to connect)
 /// @param whenFalse    node id to jump when `boolFunction` returns `false` (-1 when nothing to connect)
-public record BranchNode(PureNode boolFunction, List<FlowNode> whenTrue, List<FlowNode> whenFalse) implements FlowNode {
+public record BranchNode(
+    PureNode boolFunction, List<FlowNode> whenTrue, List<FlowNode> whenFalse, int nodeId
+) implements FlowNode {
+    /// A node with no canvas row behind it — the builders, and any hand-assembled tree.
+    public BranchNode(
+        final PureNode boolFunction, final List<FlowNode> whenTrue, final List<FlowNode> whenFalse
+    ) {
+        this(boolFunction, whenTrue, whenFalse, NO_NODE_ID);
+    }
+
     public static final Codec<BranchNode> CODEC = RecordCodecBuilder.create(
         instance ->
             instance.group(
                 PureNode.CODEC.fieldOf("boolFunction").forGetter(BranchNode::boolFunction),
                 FlowNode.CODEC.listOf().fieldOf("whenTrue").forGetter(BranchNode::whenTrue),
-                FlowNode.CODEC.listOf().fieldOf("whenFalse").forGetter(BranchNode::whenFalse)
+                FlowNode.CODEC.listOf().fieldOf("whenFalse").forGetter(BranchNode::whenFalse),
+                Codec.INT.optionalFieldOf("node_id", NO_NODE_ID).forGetter(BranchNode::nodeId)
             )
             .apply(instance, BranchNode::new)
     );
@@ -28,8 +38,6 @@ public record BranchNode(PureNode boolFunction, List<FlowNode> whenTrue, List<Fl
     public <T> T execute(final DataDrivenScript<?, ?> script, final ExecutionContext context) {
         context.enter(this);
         boolean b = Boolean.TRUE.equals(boolFunction.execute(script, context));
-        // Finish the nested structure after getting boolean param
-        context.done();
 
         if (b) {
             for (FlowNode node : whenTrue) node.execute(script, context);
@@ -37,8 +45,9 @@ public record BranchNode(PureNode boolFunction, List<FlowNode> whenTrue, List<Fl
             for (FlowNode node : whenFalse) node.execute(script, context);
         }
 
-        // Branching node doesn't return any value
-        return null;
+        // Closing here keeps the frame open across the arm, so the statements it chose are recorded
+        // inside it. Branching node doesn't return any value, and done() yields null.
+        return context.done();
     }
 
     public static BranchNode.Builder builder(final FlowFunctionNode boolFunction) {

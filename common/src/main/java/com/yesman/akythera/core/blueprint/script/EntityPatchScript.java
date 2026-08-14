@@ -4,7 +4,7 @@ import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.blueprint.ComponentBlueprint;
 import net.minecraft.world.level.Level;
 
-import java.util.List;
+import java.util.Map;
 
 public interface EntityPatchScript {
     /// Called on the constructor of [EntityPatch]
@@ -16,6 +16,6 @@ public interface EntityPatchScript {
     /// Called on [EntityPatch#postTick()]
     void update();
 
-    /// List of components to attach to the owner
-    List<ComponentBlueprint<?, ?>> componentsToAttach();
+    /// Entries of (name, components) to attach to the owner
+    Map<String, ComponentBlueprint<?, ?>> componentsToAttach();
 }

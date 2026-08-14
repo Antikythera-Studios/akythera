@@ -35,11 +35,16 @@ public final class EmptyAnimationDriver implements AnimationDriver {
 
     @Override
     public float getWeight() {
-        return 0;
+        return 1.0F;
     }
 
     @Override
     public boolean isFinished() {
+        return false;
+    }
+
+    @Override
+    public boolean fadingInOrOut() {
         return true;
     }
 }

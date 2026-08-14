@@ -19,17 +19,24 @@ import java.util.List;
 public final class BinaryMeshLoader implements MeshLoader, BinaryAssetLoader {
     private final Identifier resourcePath;
     private final Resource resource;
+    private final Metadata metadata;
 
-    public BinaryMeshLoader(Identifier resourcePath, Resource resource)
+    public BinaryMeshLoader(Identifier resourcePath, Resource resource, Metadata metadata)
         throws ResourceLoadingFailureException
     {
         this.resourcePath = resourcePath;
         this.resource = resource;
+        this.metadata = metadata;
     }
 
     @Override
     public Identifier resourcePath() {
         return resourcePath;
+    }
+
+    @Override
+    public Metadata metadata() {
+        return metadata;
     }
 
     @Override
@@ -89,6 +96,8 @@ public final class BinaryMeshLoader implements MeshLoader, BinaryAssetLoader {
                     }
                 }
             }
+
+            staticMeshBuilder.metadata(metadata);
 
             return meshConstructor.construct(staticMeshBuilder);
         } catch (IOException e) {
@@ -182,11 +191,26 @@ public final class BinaryMeshLoader implements MeshLoader, BinaryAssetLoader {
             int[] affectingWeightIndexArray = new int[boneWeightIndices.length/2];
             int[] deformationFromToArray = new int[boneCounts.length*2];
 
+            for (int i = 0; i < affectingBoneIdArray.length; i++) {
+                affectingBoneIdArray[i] = boneWeightIndices[i*2];
+                affectingWeightIndexArray[i] = boneWeightIndices[i*2 + 1];
+            }
+
+            int from = 0;
+
+            for (int i = 0; i < boneCounts.length; i++) {
+                deformationFromToArray[i*2] = from;
+                deformationFromToArray[i*2 + 1] = from + boneCounts[i];
+                from += boneCounts[i];
+            }
+
             skeletalMeshBuilder
                 .affectingBoneIdArray(affectingBoneIdArray)
                 .affectingWeightIndexArray(affectingWeightIndexArray)
                 .deformationFromToArray(deformationFromToArray)
             ;
+
+            skeletalMeshBuilder.metadata(metadata);
 
             return meshConstructor.construct(skeletalMeshBuilder);
         } catch (IOException e) {

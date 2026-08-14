@@ -24,13 +24,13 @@ public final class Bone {
 
     private final List<Bone> childBones = new ArrayList<> ();
 
-    public Bone(String name, int boneId, Matrix4f localTransform) {
+    public Bone(final String name, final int boneId, final Matrix4f localTransform) {
         this.boneId = boneId;
         this.boneName = name;
         this.localTransform = localTransform;
     }
 
-    public void addChildBones(Bone... bones) {
+    public void addChildBones(final Bone... bones) {
         for (Bone bone : bones) {
             if (!childBones.contains(bone)) {
                 childBones.add(bone);
@@ -45,7 +45,7 @@ public final class Bone {
         return list;
     }
 
-    public void iterateChildBones(Consumer<Bone> iterTask) {
+    public void iterateChildBones(final Consumer<Bone> iterTask) {
         iterTask.accept(this);
 
         for (Bone bone : childBones) {
@@ -53,7 +53,7 @@ public final class Bone {
         }
     }
 
-    private void gatherChildBones(List<Bone> list) {
+    private void gatherChildBones(final List<Bone> list) {
         list.add(this);
 
         for (Bone bone : childBones) {
@@ -65,7 +65,7 @@ public final class Bone {
     ///
     /// Memorized the inverse transform to accelerate animation calculation
     @ApiStatus.Internal
-    public void initOriginTransform(Matrix4f parentTransform) {
+    public void initOriginTransform(final Matrix4f parentTransform) {
         Matrix4f modelTransform = parentTransform.mul(localTransform, new Matrix4f());
         modelTransform.invert(inverseTransformToOrigin);
 
@@ -88,7 +88,7 @@ public final class Bone {
 
     // Null if index out of range
     @Nullable
-    public Bone getChildBone(int index) {
+    public Bone getChildBone(final int index) {
         if (index < 0 || childBones.size() <= index) {
             return null;
         }
@@ -105,7 +105,7 @@ public final class Bone {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(final Object o) {
         if (o instanceof Bone bone) {
             return boneName.equals(bone.boneName) && boneId == bone.boneId;
         } else {

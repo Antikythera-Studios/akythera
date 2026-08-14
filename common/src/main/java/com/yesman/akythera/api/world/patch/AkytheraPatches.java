@@ -7,10 +7,10 @@ import com.yesman.akythera.core.util.ClientOnly;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.api.world.patch.item.ItemPatch;
+import com.yesman.akythera.core.blueprint.ItemPatchBlueprint;
 import com.yesman.akythera.mixinaccessor.common.EntityAccessor;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.core.RegistryAccess;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.Entity;
@@ -47,23 +47,24 @@ public final class AkytheraPatches {
     }
 
     public static @Nullable ItemPatch getItemPatch(ItemStack itemStack) {
-        RegistryAccess registryAccess = StaticRegistryAccess.getRegistryAccess();
+        Item item = itemStack.getItem();
 
-        if (!ITEM_PATCH_CACHE.containsKey(itemStack.getItem())) {
-            ResourceKey<ItemPatch.Builder> itemPatchResourceKey =
+        if (!ITEM_PATCH_CACHE.containsKey(item)) {
+            ResourceKey<ItemPatchBlueprint> itemPatchResourceKey =
                 ResourceKey.create(
                     AkytheraRegistries.DataPack.ITEM_PATCH_KEY,
-                    Identifier.parse(itemStack.getItem().builtInRegistryHolder().getRegisteredName())
+                    Identifier.parse(item.builtInRegistryHolder().getRegisteredName())
                 );
 
-            StaticRegistryAccess.getRegistryAccess().get(itemPatchResourceKey).ifPresentOrElse(builder -> {
-                ITEM_PATCH_CACHE.put(itemStack.getItem(), builder.value().build(registryAccess));
-            }, () -> {
-                ITEM_PATCH_CACHE.put(itemStack.getItem(), null);
-            });
+            ITEM_PATCH_CACHE.put(
+                item,
+                StaticRegistryAccess.getRegistryAccess().get(itemPatchResourceKey)
+                    .map(blueprint -> blueprint.value().instantiate(item))
+                    .orElse(null)
+            );
         }
 
-        return ITEM_PATCH_CACHE.get(itemStack.getItem());
+        return ITEM_PATCH_CACHE.get(item);
     }
 
     /// This method should remain as the secondary option, especially when you can't fix local variables inside lambda expression.

@@ -9,7 +9,12 @@ import java.util.Locale;
 import java.util.function.BiFunction;
 
 /// A pure node that returns `boolean` of each logical operation
-public record LogicalOperationNode(PureNode bool1, PureNode bool2, Operator operator) implements PureNode {
+public record LogicalOperationNode(PureNode bool1, PureNode bool2, Operator operator, int nodeId) implements PureNode {
+    /// A node with no canvas row behind it — any hand-assembled tree.
+    public LogicalOperationNode(final PureNode bool1, final PureNode bool2, final Operator operator) {
+        this(bool1, bool2, operator, NO_NODE_ID);
+    }
+
     public static final Codec<Operator> OPERATOR_CODEC = Codec.STRING.xmap(
         name -> Operator.valueOf(name.toUpperCase(Locale.ROOT)),
         op -> op.name().toLowerCase(Locale.ROOT)
@@ -19,7 +24,8 @@ public record LogicalOperationNode(PureNode bool1, PureNode bool2, Operator oper
         instance -> instance.group(
             PureNode.CODEC.fieldOf("bool1").forGetter(LogicalOperationNode::bool1),
             PureNode.CODEC.fieldOf("bool2").forGetter(LogicalOperationNode::bool2),
-            OPERATOR_CODEC.fieldOf("operator").forGetter(LogicalOperationNode::operator)
+            OPERATOR_CODEC.fieldOf("operator").forGetter(LogicalOperationNode::operator),
+            Codec.INT.optionalFieldOf("node_id", NO_NODE_ID).forGetter(LogicalOperationNode::nodeId)
         ).apply(instance, LogicalOperationNode::new)
     );
 

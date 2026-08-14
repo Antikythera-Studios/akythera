@@ -29,7 +29,7 @@ dependencies {
 
 loom {
     // Removed due to lack of NeoForge support: https://github.com/neoforged/ModDevGradle/issues/3 and https://neoforged.net/news/21.5release/#split-sourcesets
-//    splitEnvironmentSourceSets()
+    // splitEnvironmentSourceSets()
 
     accessWidenerPath = file("../common/src/main/resources/akythera.accesswidener")
 
@@ -37,10 +37,10 @@ loom {
         register(modId) {
             sourceSet(sourceSets.main.get())
             // Removed due to lack of NeoForge support: https://github.com/neoforged/ModDevGradle/issues/3 and https://neoforged.net/news/21.5release/#split-sourcesets
-//            sourceSet(sourceSets.named("client").get())
+            // sourceSet(sourceSets.named("client").get())
         }
     }
-/*
+    /*
     runs {
         register("datagen") {
             inherit(getByName("client"))
@@ -52,7 +52,7 @@ loom {
             runDir("build/datagen")
         }
     }
-*/
+    */
 }
 
 tasks.processResources {
@@ -66,3 +66,4 @@ tasks.processResources {
 }
 
 configureModPublish(ModLoader.Fabric) { tasks.jar.get().archiveFile }
+configureMavenCentralPublish(ModLoader.Fabric)

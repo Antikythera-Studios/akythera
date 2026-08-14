@@ -6,12 +6,18 @@ import com.yesman.akythera.core.reflection.DataDrivenScript;
 import org.jspecify.annotations.NonNull;
 
 /// Returns local variable value. Internal node that is invisible in script editor.
-public record ContextVariableAccessNode(String localVariableName) implements PureNode {
+public record ContextVariableAccessNode(String localVariableName, int nodeId) implements PureNode {
+    /// A node with no canvas row behind it — the compiler's hoisted reads, and any hand-assembled tree.
+    public ContextVariableAccessNode(final String localVariableName) {
+        this(localVariableName, NO_NODE_ID);
+    }
+
     public static final Codec<ContextVariableAccessNode> CODEC =
         RecordCodecBuilder.create(
             instance ->
                 instance.group(
-                    Codec.STRING.fieldOf("name").forGetter(ContextVariableAccessNode::localVariableName)
+                    Codec.STRING.fieldOf("name").forGetter(ContextVariableAccessNode::localVariableName),
+                    Codec.INT.optionalFieldOf("node_id", NO_NODE_ID).forGetter(ContextVariableAccessNode::nodeId)
                 )
                 .apply(instance, ContextVariableAccessNode::new)
         );

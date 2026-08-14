@@ -3,8 +3,9 @@ package com.yesman.akythera.core.math.physics.collider;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.math.Transform;
-import com.yesman.akythera.core.math.physics.collider.instance.LineColliderInstance;
+import com.yesman.akythera.core.math.physics.collider.component.LineColliderComponent;
 
 public final class LineCollider extends Collider {
     public static final MapCodec<LineCollider> CODEC = RecordCodecBuilder.mapCodec(
@@ -21,12 +22,12 @@ public final class LineCollider extends Collider {
     }
 
     @Override
-    public LineColliderInstance createInstance(Transform transform) {
-        return new LineColliderInstance(this, transform);
+    public LineColliderComponent instantiate(final ComponentAttachable host) {
+        return new LineColliderComponent(this, Transform.identity());
     }
 
     @Override
     public ColliderType type() {
-        return EpicFightColliderType.LINE;
+        return AkytheraColliderType.LINE;
     }
 }

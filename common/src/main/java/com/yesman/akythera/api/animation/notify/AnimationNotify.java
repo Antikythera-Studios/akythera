@@ -29,7 +29,7 @@ public abstract class AnimationNotify<T extends EntityPatch<?>> {
     /// Notify won't be triggered if `entityPatch` is not a assignable from <T>
     @ApiStatus.Internal @SuppressWarnings("unchecked")
     public final void tryActivate(PlayableAnimation owner, final EntityPatch<?> entityPatch, float prevElapsedTime, float currentElapsedTime) {
-        if (!logicalSide.isEntityOnValidSide(entityPatch.getOwner())) {
+        if (!logicalSide.isEntityOnValidSide(entityPatch.getOriginal())) {
             return;
         }
 

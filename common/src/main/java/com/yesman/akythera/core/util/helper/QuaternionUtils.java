@@ -5,12 +5,12 @@ import org.joml.Quaternionf;
 
 public final class QuaternionUtils {
     /// Transform float quaternion to a double quaternion
-    public static Quaterniond floatToDoubleQuaternion(Quaternionf fQuaternion) {
+    public static Quaterniond floatToDoubleQuaternion(final Quaternionf fQuaternion) {
         return new Quaterniond(fQuaternion.x(), fQuaternion.y(), fQuaternion.z(), fQuaternion.w());
     }
 
     /// Transform double quaternion to a float quaternion
-    public static Quaternionf doubleToFlaotQuaternion(Quaterniond dQuaternion) {
+    public static Quaternionf doubleToFloatQuaternion(final Quaterniond dQuaternion) {
         return new Quaternionf(
             (float)dQuaternion.x(),
             (float)dQuaternion.y(),

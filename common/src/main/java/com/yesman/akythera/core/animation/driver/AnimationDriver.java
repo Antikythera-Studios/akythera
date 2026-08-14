@@ -47,7 +47,7 @@ public interface AnimationDriver {
     /// The return value gradually increases until 1.0 when being activated, and decreases
     /// until 0.0 when the driver is being deactivated.
     ///
-    /// The return value is referred to when blending animations in [BlendingAnimator] (A client side animator).
+    /// The return value is referred to when blending animationsToReplace in [BlendingAnimator]. (Client side animator)
     /// So it's negligible in server side.
     float getWeight();
 
@@ -57,4 +57,8 @@ public interface AnimationDriver {
     /// Beware the driver being *finished* only when the playback time reaches [PlayableAnimation#getTotalFrameTime]
     /// normally, without any interruption.
     boolean isFinished();
+
+    /// Returns the driver's fading mode. Returns `true` when first call of [#start] and full weighted (1.0), `false`
+    /// when the driver is pending to be terminated by [#terminate].
+    boolean fadingInOrOut();
 }

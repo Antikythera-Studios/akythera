@@ -17,6 +17,10 @@ public final class AnimationLayer {
     private final AnimationMontagePlayer montagePlayer = new AnimationMontagePlayer();
 
     public AnimationLayer(final AnimationDriver animDriver) {
+        if (animDriver == null) {
+            throw new IllegalArgumentException("The root animation driver can't be null");
+        }
+
         this.animDriver = animDriver;
     }
 

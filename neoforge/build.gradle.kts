@@ -89,18 +89,6 @@ dependencies {
     // compileOnly(libs.curios)
     // compileOnly(libs.playerAnimator)
 
-    // compileOnly(libs.kubejs)
-    // compileOnly(libs.rhino)
-    // compileOnly(libs.architectury)
-
-    // Libraries for tr7zw featured mods
-    // compileOnly("libs:TRansition:1.0.6")
-    // compileOnly("libs:TRender:1.0.7")
-
-    // compileOnly(libs.skinlayers)
-    // compileOnly(libs.firstPersonModel)
-    // compileOnly(libs.shoulderSurfing)
-
     // compileOnly(libs.controlify) {
     //     // Only need Controlify API, ignore the transitive dependencies (e.g, QuiltMC parsers)
     //     isTransitive = false
@@ -118,3 +106,4 @@ tasks.processResources {
 }
 
 configureModPublish(ModLoader.NeoForge) { tasks.jar.get().archiveFile }
+configureMavenCentralPublish(ModLoader.NeoForge)

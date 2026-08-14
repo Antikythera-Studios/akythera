@@ -1,0 +1,209 @@
+#version 330 core
+
+// Minecraft asks the driver for a 3.3 core profile as of 26.1, which caps GLSL at 330. Every
+// construct this shader takes from a later level has to be switched on by name.
+#extension GL_ARB_compute_shader : require              // layout(local_size_x), gl_GlobalInvocationID
+#extension GL_ARB_shader_storage_buffer_object : require// layout(std430) buffer, runtime-sized .length()
+#extension GL_ARB_shader_image_load_store : require     // readonly, writeonly
+#extension GL_ARB_shading_language_packing : require    // packSnorm4x8
+#extension GL_ARB_explicit_uniform_location : require   // layout(location = N) uniform
+
+layout(local_size_x = 128) in;
+
+struct VertexData {
+    float px,py,pz,nx,ny,nz,u,v;
+    int jts,jte;
+};
+
+struct ElemInfo{
+    int pool_idx;
+    int part_idx;
+};
+
+struct JointInfo{
+    int jtId;
+    float weight;
+};
+
+struct VertexAttr{
+    float px,py,pz, r,g,b,a, u0,v0;
+    uint nor, uv1, uv2;
+    // for iris
+    uint entity_id_0, entity_id_1, tangent;
+};
+
+// Dynamic Input Buffer
+layout(std430, binding = 0) readonly buffer PoseBuffer {
+    mat4 poses[];
+};
+
+// Static Buffer
+layout(std430, binding = 1) readonly buffer ElementsPool {
+    ElemInfo elements[];
+};
+
+layout(std430, binding = 2) readonly buffer VertexBuffer {
+    VertexData vertices[];
+};
+
+layout(std430, binding = 3) readonly buffer JointsPool {
+    JointInfo joints[];
+};
+
+layout(std430, binding = 4) readonly buffer PartHiddenFlagBuffer {
+    int part_hidden[];
+};
+
+// Output Buffer
+layout(std430, binding = 5) writeonly buffer VertexOut {
+    VertexAttr out_vert[];
+};
+
+layout(location=0) uniform vec4 colorIn;
+layout(location=1) uniform uint uv1In;
+layout(location=2) uniform uint uv2In;
+layout(location=3) uniform uint entity_id_0;
+layout(location=4) uniform uint entity_id_1;
+layout(location=5) uniform uint part_offset;
+layout(location=6) uniform mat4 model_view_matrix;
+layout(location=7) uniform mat3 normal_matrix;
+
+// copied form AR
+uint computeTangentSmooth(vec3 pos1, vec3 pos2, vec3 pos3, vec2 uv1, vec2 uv2, vec2 uv3, vec3 normal);
+
+vec4 getPosInPool(int pool_index){
+    return vec4(vertices[pool_index].px, vertices[pool_index].py, vertices[pool_index].pz, 1.0);
+}
+
+vec4 getNormInPool(int pool_index){
+    return vec4(normalize(vec3(vertices[pool_index].nx, vertices[pool_index].ny, vertices[pool_index].nz)), 0.0);
+}
+
+struct VertInfo{
+    vec3 pos, nor;
+    vec2 uv;
+};
+
+void storeElem(uint elem_idx, VertInfo vertInfo, uint tangent){
+    out_vert[elem_idx].px = vertInfo.pos.x;
+    out_vert[elem_idx].py = vertInfo.pos.y;
+    out_vert[elem_idx].pz = vertInfo.pos.z;
+
+    out_vert[elem_idx].nor = packSnorm4x8(vec4(normalize(vertInfo.nor), 0.0));
+
+    out_vert[elem_idx].r = colorIn.x;
+    out_vert[elem_idx].g = colorIn.y;
+    out_vert[elem_idx].b = colorIn.z;
+    out_vert[elem_idx].a = colorIn.w;
+
+    out_vert[elem_idx].u0 = vertInfo.uv.x;
+    out_vert[elem_idx].v0 = vertInfo.uv.y;
+
+    out_vert[elem_idx].uv1 = uv1In;
+    out_vert[elem_idx].uv2 = uv2In;
+
+    // for iris
+    out_vert[elem_idx].entity_id_0 = entity_id_0;
+    out_vert[elem_idx].entity_id_1 = entity_id_1;
+
+    out_vert[elem_idx].tangent = tangent;
+
+}
+
+void storeElemEmpty(uint elem_idx){
+    out_vert[elem_idx].px = 0;  out_vert[elem_idx].py = 0;  out_vert[elem_idx].pz = 0;
+    out_vert[elem_idx].nor = 0u;
+    out_vert[elem_idx].r = 0;   out_vert[elem_idx].g = 0;   out_vert[elem_idx].b = 0;   out_vert[elem_idx].a = 0;
+    out_vert[elem_idx].uv1 = uv1In;     out_vert[elem_idx].uv2 = uv2In;
+    out_vert[elem_idx].u0 = 0;          out_vert[elem_idx].v0 = 0;
+    out_vert[elem_idx].entity_id_0 = entity_id_0;   out_vert[elem_idx].entity_id_1 = entity_id_1;
+    out_vert[elem_idx].tangent = 0u;
+}
+
+bool isPartHidden(ElemInfo elem){
+    int flags = part_hidden[elem.part_idx / 32];
+    int off = elem.part_idx % 32;
+    return ((flags >> off) & 1) == 1;
+}
+
+VertInfo getFinalVertInfo(ElemInfo elem){
+    mat4 partTransform = poses[part_offset + uint(elem.part_idx)];
+    vec4 pos = getPosInPool(elem.pool_idx);
+    vec4 norm = getNormInPool(elem.pool_idx);
+    vec4 fpos = vec4(0.0);
+    vec4 fnorm = vec4(0.0);
+
+    JointInfo jtInfo;
+    for (int i = vertices[elem.pool_idx].jts; i < vertices[elem.pool_idx].jte; ++i) {
+        jtInfo = joints[i];
+        if (jtInfo.weight > 0.0) {
+            mat4 boneMat = poses[jtInfo.jtId] * partTransform;
+            fpos += (boneMat * pos) * jtInfo.weight;
+            fnorm += (boneMat * norm) * jtInfo.weight;
+        }
+    }
+
+    VertInfo result;
+    result.pos = (model_view_matrix * fpos).xyz;
+    result.nor = normalize(normal_matrix * fnorm.xyz);
+    result.uv = vec2(vertices[elem.pool_idx].u, vertices[elem.pool_idx].v);
+    return result;
+}
+
+void main() {
+    uint face_start = gl_GlobalInvocationID.x * 3u;
+    if(face_start >= uint(elements.length())) return; // check
+
+    if(isPartHidden(elements[face_start])){
+        storeElemEmpty(face_start);
+        storeElemEmpty(face_start+1u);
+        storeElemEmpty(face_start+2u);
+        return;
+    }
+
+    VertInfo v1 = getFinalVertInfo(elements[face_start]);
+    VertInfo v2 = getFinalVertInfo(elements[face_start+1u]);
+    VertInfo v3 = getFinalVertInfo(elements[face_start+2u]);
+
+    uint t1 = computeTangentSmooth(v1.pos,  v2.pos, v3. pos,
+                                   v1.uv,   v2.uv,  v3. uv,
+                                   v1.nor);
+
+    uint t2 = computeTangentSmooth(v1.pos,  v2.pos, v3. pos,
+                                   v1.uv,   v2.uv,  v3. uv,
+                                   v2.nor);
+
+    uint t3 = computeTangentSmooth(v1.pos,  v2.pos, v3. pos,
+                                   v1.uv,   v2.uv,  v3. uv,
+                                   v3.nor);
+
+    storeElem(face_start, v1 ,t1);
+    storeElem(face_start+1u, v2 ,t2);
+    storeElem(face_start+2u, v3 ,t3);
+}
+
+uint computeTangentSmooth(vec3 pos1, vec3 pos2, vec3 pos3, vec2 uv1, vec2 uv2, vec2 uv3, vec3 normal) {
+    float dot1          =   dot(pos1, normal);
+    float dot2          =   dot(pos2, normal);
+    float dot3          =   dot(pos3, normal);
+
+    pos1                -=  dot1 * normal;
+    pos2                -=  dot2 * normal;
+    pos3                -=  dot3 * normal;
+
+    vec3 edge1          =   pos2 - pos1;
+    vec3 edge2          =   pos3 - pos1;
+
+    vec2 dUV1           =   uv2 - uv1;
+    vec2 dUV2           =   uv3 - uv1;
+
+    float fdenom        =   dUV1.x * dUV2.y - dUV2.x * dUV1.y;
+    float f             =   fdenom == 0.0 ? 1.0 : 1.0 / fdenom;
+
+    vec3 tangent        =   normalize   (f * (dUV2.y * edge1 - dUV1.y * edge2));
+    vec3 aBitangent     =   normalize   (f * (-dUV2.x * edge1 + dUV1.x * edge2));
+    vec3 pBitangent     =   cross       (tangent, normal);
+    vec4 tangent4       =   vec4        (tangent, dot(aBitangent, pBitangent) < 0.0 ? -1.0 : 1.0);
+
+    return packSnorm4x8(tangent4);
+}

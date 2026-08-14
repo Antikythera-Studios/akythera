@@ -7,11 +7,15 @@
     "client.MixinClientCommonPacketListenerImpl",
     "client.MixinClientConfigurationPacketListenerImpl",
     "client.MixinClientLevel",
+    "client.MixinGpuDevice",
     "client.MixinGuiGraphicsExtractor",
     "client.MixinKeyMapping",
-    "client.MixinLevelRenderer",
+    "client.MixinLevelExtractor",
     "client.MixinLivingEntityRenderer",
-    "client.MixinLivingEntityRenderState"
+    "client.MixinLivingEntityRenderState",
+    "client.MixinMinecraft",
+    "client.MixinPreparedFrame",
+    "client.MixinRenderSystem"
   ],
   "mixins": [
     "common.MixinEntity",

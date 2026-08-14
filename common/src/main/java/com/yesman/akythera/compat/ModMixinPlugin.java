@@ -25,9 +25,10 @@ public abstract class ModMixinPlugin implements IMixinConfigPlugin {
     }
 
     /// Judges if the named mod exists by mod platform classes
-    /// Since [ModPlatformProvider#initialize] is called after
-    /// mod loader initialized but this mixin plugin activates
-    /// before it, this workaround was needed.
+    /// [ModPlatformProvider#get] is not used here because this mixin
+    /// plugin activates before the game classes may be loaded, and the
+    /// platform implementations reference them. The loader-provided
+    /// checker classes below are safe to touch this early.
     ///
     /// Definitely it is better to use more advanced build tool
     /// like Stonecutter in the future.

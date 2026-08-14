@@ -3,21 +3,23 @@ package com.yesman.akythera.core.blueprint;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import com.yesman.akythera.api.data.modularize.ScriptFunction;
 import com.yesman.akythera.api.data.modularize.node.FlowNode;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.blueprint.script.DataDrivenEntityPatchScript;
+import com.yesman.akythera.core.blueprint.script.ScriptVariables;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
-import com.yesman.akythera.core.blueprint.script.ScriptVariables;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.world.entity.Entity;
 
 import java.util.List;
-import java.util.function.Function;
+import java.util.Map;
 
 public record EntityPatchBlueprint(
-    List<ComponentBlueprint<?, ?>> components,
+    Map<String, ComponentBlueprint<?, ?>> components,
+    ScriptFunction ctor,
     FlowNode onConstruct,
     FlowNode onJoinWorld,
     FlowNode update,
@@ -27,9 +29,9 @@ public record EntityPatchBlueprint(
     public static final MapCodec<EntityPatchBlueprint> MAP_CODEC = RecordCodecBuilder.mapCodec(
         instance ->
             instance.group(
-                AkytheraRegistries.Frozen.COMPONENT_BLUEPRINT_TYPES.byNameCodec()
-                    .<ComponentBlueprint<?, ?>>dispatch(ComponentBlueprint::mapCodec, Function.identity())
-                    .listOf().fieldOf("components").forGetter(EntityPatchBlueprint::components),
+                ComponentBlueprint.componentMapCodec()
+                    .fieldOf("components").forGetter(EntityPatchBlueprint::components),
+                AkytheraRegistries.Frozen.SCRIPT_FUNCTION.byNameCodec().fieldOf("parent").forGetter(EntityPatchBlueprint::ctor),
                 FlowNode.CODEC.fieldOf("on_construct").forGetter(EntityPatchBlueprint::onConstruct),
                 FlowNode.CODEC.fieldOf("on_join_world").forGetter(EntityPatchBlueprint::onJoinWorld),
                 FlowNode.CODEC.fieldOf("update").forGetter(EntityPatchBlueprint::update),

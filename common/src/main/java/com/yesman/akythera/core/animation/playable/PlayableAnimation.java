@@ -18,7 +18,10 @@ import org.jspecify.annotations.NonNull;
 ///
 /// Abstraction of modules that returns [Pose] in a given timestamp.
 public interface PlayableAnimation {
-    Holder<@NonNull AnimationSequence> EMPTY_ANIM_HOLDER = Holder.direct(new AnimationSequence(AnimationManager.EMPTY_ANIMATION_ACCESSOR, false, false));
+    /// An empty animation sequence holder for various purposes
+    Holder<@NonNull AnimationSequence> EMPTY_ANIM_HOLDER = Holder.direct(
+        new AnimationSequence(AnimationManager.EMPTY_ANIMATION_ACCESSOR, false, false)
+    );
 
     float DEFAULT_FADE_TIME = 0.25F;
 

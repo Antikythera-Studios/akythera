@@ -22,6 +22,7 @@ public interface PureNode extends ScriptNode {
                 case CachedPoseReferenceNode _   -> "cached_pose_reference";
                 case AnimationStateMachineNode _ -> "anim_state_machine";
                 case TypeConvertNode _           -> "type_converter";
+                case MeshAccessorNode _          -> "mesh_accessor";
                 default -> throw new IllegalArgumentException(
                     "Unsupported pure node type " + node.getClass().getSimpleName()
                 );
@@ -40,6 +41,7 @@ public interface PureNode extends ScriptNode {
                 case "cached_pose_reference" -> CachedPoseReferenceNode.CODEC.fieldOf("cached_pose_reference");
                 case "anim_state_machine"    -> AnimationStateMachineNode.CODEC.fieldOf("anim_state_machine");
                 case "type_converter"        -> TypeConvertNode.CODEC.fieldOf("type_converter");
+                case "mesh_accessor"         -> MeshAccessorNode.CODEC.fieldOf("mesh_accessor");
                 default -> throw new IllegalArgumentException(
                     "Unsupported pure node type " + literal
                 );

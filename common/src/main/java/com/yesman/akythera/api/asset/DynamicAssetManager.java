@@ -13,14 +13,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.stream.Stream;
 
-/// An asset manager for heavy-weight binary assets, like meshes, armatures, and animations.
+/// An asset manager for heavy-weight binary assets, like meshes, armatures, and animationsToReplace.
 ///
 /// Loading an asset is done on the first reference, not when the game starts.
 ///
 /// Use [AssetAccessor] to get, and check usability of assets.
 ///
-/// Assets are reloaded only in physical client where tagged as [PackType#CLIENT_RESOURCES]
-/// because in dedicated servers, they don't reload resources in `\asset` directory.
+/// Reload is bound to [PackType#CLIENT_RESOURCES] on a physical client and to
+/// [PackType#SERVER_DATA] on a dedicated server, where the assets ride in the data tree.
 @NullMarked
 public abstract class DynamicAssetManager<T> implements PreparableReloadListener {
     /// Nullable: a case where an exception was thrown while trying to read asset file

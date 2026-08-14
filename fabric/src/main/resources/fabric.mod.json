@@ -15,17 +15,17 @@
   "entrypoints": {
     "main": [
       {
-        "value": "com.yesman.akythera.fabric.core.AkytheraFabric"
+        "value": "com.yesman.akythera.fabric.AkytheraFabric"
       }
     ],
     "client": [
       {
-        "value": "com.yesman.akythera.fabric.client.core.AkytheraFabricClient"
+        "value": "com.yesman.akythera.fabric.client.AkytheraFabricClient"
       }
     ],
     "server": [
       {
-        "value": "com.yesman.akythera.fabric.core.AkytheraFabricServer"
+        "value": "com.yesman.akythera.fabric.AkytheraFabricServer"
       }
     ]
   },

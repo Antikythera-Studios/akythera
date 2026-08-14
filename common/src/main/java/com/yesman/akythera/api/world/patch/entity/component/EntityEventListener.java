@@ -61,7 +61,7 @@ public final class EntityEventListener {
 
     /// Registers an event with full parameters
     public <T extends EntityPatchEvent<?>> void registerEvent(EventHook<T> event, DefaultEventSubscription<T> subscription, IdentifierProvider identifier, int priority) {
-        if (event.logicalSide().isEntityOnValidSide(entityPatch.getOwner())) {
+        if (event.logicalSide().isEntityOnValidSide(entityPatch.getOriginal())) {
             var subscriberList = eventListeners.computeIfAbsent(event, key -> new ArrayList<> ());
             subscriberList.add(new EventListener<> (identifier.getStringId(), priority, subscription));
         }
@@ -81,7 +81,7 @@ public final class EntityEventListener {
 
     /// Registers an event with full parameters
     public <T extends EntityPatchEvent<?> & CancelableEvent> void registerContextAwareEvent(EventHook<T> event, ContextAwareEventSubscription<T> subscription, IdentifierProvider identifier, int priority) {
-        if (event.logicalSide().isEntityOnValidSide(entityPatch.getOwner())) {
+        if (event.logicalSide().isEntityOnValidSide(entityPatch.getOriginal())) {
             var subscriberList = eventListeners.computeIfAbsent(event, key -> new ArrayList<>());
             subscriberList.add(new EventListener<> (identifier.getStringId(), priority, subscription));
         }

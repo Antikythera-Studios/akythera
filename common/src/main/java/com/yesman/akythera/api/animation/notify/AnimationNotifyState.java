@@ -30,7 +30,7 @@ public abstract class AnimationNotifyState<T extends EntityPatch<?>> {
     /// Checks elapsed times and activate notify in condition
     @ApiStatus.Internal @SuppressWarnings("unchecked")
     public final void tryActivate(PlayableAnimation owner, final EntityPatch<?> entityPatch, TimeWindow timeWindow, float prevElapsedTime, float currentElapsedTime) {
-        if (!logicalSide.isEntityOnValidSide(entityPatch.getOwner())) {
+        if (!logicalSide.isEntityOnValidSide(entityPatch.getOriginal())) {
             return;
         }
 

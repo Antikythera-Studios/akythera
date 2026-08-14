@@ -26,7 +26,7 @@ import org.jspecify.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 
-/// Load animations from json files. Instances are dedicated for loading a resource specified by [#resourcePath].
+/// Load animationsToReplace from json files. Instances are dedicated for loading a resource specified by [#resourcePath].
 ///
 /// Deprecated: Use [BinaryAnimationLoader] with .efasset extension to accelerate asset loading process
 @Deprecated
@@ -35,12 +35,14 @@ public final class JsonAnimationLoader implements AnimationLoader, JsonAssetLoad
 
     private final Identifier resourcePath;
     private final JsonObject jsonObject;
+    private final Metadata metadata;
 
-    public JsonAnimationLoader(Identifier resourcePath, Resource resource)
+    public JsonAnimationLoader(Identifier resourcePath, Resource resource, Metadata metadata)
         throws ResourceLoadingFailureException
     {
         this.resourcePath = resourcePath;
         jsonObject = readJsonObject(resource);
+        this.metadata = metadata;
     }
 
     @Override
@@ -49,7 +51,12 @@ public final class JsonAnimationLoader implements AnimationLoader, JsonAssetLoad
     }
 
     @Override
-    public AnimationClip loadAnimationClip(@NonNull AssetAccessor<? extends Armature> armature)
+    public Metadata metadata() {
+        return metadata;
+    }
+
+    @Override
+    public AnimationClip loadRawAnimationClip(@NonNull AssetAccessor<? extends Armature> armature)
         throws ResourceLoadingFailureException
     {
         try {

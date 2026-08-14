@@ -1,8 +1,12 @@
 package com.yesman.akythera.api.data.modularize;
 
 import com.mojang.serialization.Codec;
+import com.yesman.akythera.api.animation.animator.AnimationInterfaceKey;
 import com.yesman.akythera.api.animation.animator.AnimationLayer;
 import com.yesman.akythera.api.data.modularize.impl.NumericComparators;
+import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
+import com.yesman.akythera.api.world.patch.entity.PlayerPatch;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.animation.driver.AnimationLayerSignature;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
@@ -87,7 +91,21 @@ public final class AkytheraScriptTypes {
 
     // Animation API
 
-    public static final Holder<ScriptType> ANIMATION_LAYER = AKYTHERA_REGISTRAR.register("animation_layer", () -> new ScriptType(AnimationLayer.class));
+    public static final Holder<ScriptType> ANIMATION_LAYER = AKYTHERA_REGISTRAR.register("animation_layer",
+        () -> new ScriptType(AnimationLayer.class));
+    public static final Holder<ScriptType> ANIM_INTERFACE_KEY = AKYTHERA_REGISTRAR.register("anim_interface_key",
+        () -> new ScriptType(AnimationInterfaceKey.class, AnimationInterfaceKey.ENUM_MANAGER.getNameCodec(), Map.of(), false));
+
+    // Entity Patch
+
+    public static final Holder<ScriptType> ENTITY_PATCH = AKYTHERA_REGISTRAR.register("entity_patch",
+        () -> new ScriptType(EntityPatch.class));
+
+    public static final Holder<ScriptType> LIVING_ENTITY_PATCH = AKYTHERA_REGISTRAR.register("living_entity_patch",
+        () -> new ScriptType(LivingEntityPatch.class));
+
+    public static final Holder<ScriptType> PLAYER_PATCH = AKYTHERA_REGISTRAR.register("player_patch",
+        () -> new ScriptType(PlayerPatch.class));
 
     // EnumerableDataBlocks
 

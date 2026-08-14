@@ -8,7 +8,12 @@ import org.jspecify.annotations.NonNull;
 
 /// Pure node that applies a basic arithmetic operator to two numeric operands, widening to the
 /// wider of the two runtime types (e.g. int + float = float, byte + double = double).
-public record NumericOperatorNode(Operator operator, PureNode a, PureNode b) implements PureNode {
+public record NumericOperatorNode(Operator operator, PureNode a, PureNode b, int nodeId) implements PureNode {
+    /// A node with no canvas row behind it — any hand-assembled tree.
+    public NumericOperatorNode(final Operator operator, final PureNode a, final PureNode b) {
+        this(operator, a, b, NO_NODE_ID);
+    }
+
     public static final Codec<Operator> OPERATOR_CODEC = Codec.STRING.xmap(
         name -> Operator.valueOf(ParseUtils.toUpperCase(name)),
         op -> ParseUtils.toLowerCase(op.name())
@@ -18,7 +23,8 @@ public record NumericOperatorNode(Operator operator, PureNode a, PureNode b) imp
         instance -> instance.group(
             OPERATOR_CODEC.fieldOf("operator").forGetter(NumericOperatorNode::operator),
             PureNode.CODEC.fieldOf("a").forGetter(NumericOperatorNode::a),
-            PureNode.CODEC.fieldOf("b").forGetter(NumericOperatorNode::b)
+            PureNode.CODEC.fieldOf("b").forGetter(NumericOperatorNode::b),
+            Codec.INT.optionalFieldOf("node_id", NO_NODE_ID).forGetter(NumericOperatorNode::nodeId)
         ).apply(instance, NumericOperatorNode::new)
     );
 

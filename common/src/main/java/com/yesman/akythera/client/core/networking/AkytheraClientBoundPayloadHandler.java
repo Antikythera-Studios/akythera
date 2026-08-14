@@ -27,10 +27,10 @@ public interface AkytheraClientBoundPayloadHandler {
     }
 
     static void handlePlayMontage(ClientBoundPlayAnimMontage payload, PayloadContext context) {
-        AkytheraPatches.getEntityPatchOptional(context.receiver()).ifPresent(playerPatch -> {
-            if (playerPatch.getArmatureComponent() == null) return;
+        AkytheraPatches.getEntityPatchOptional(context.receiver()).ifPresent(entityPatch -> {
+            if (entityPatch.getArmatureComponent() == null) return;
 
-            playerPatch.getArmatureComponent().getAnimator().playAnimMontage(
+            entityPatch.getArmatureComponent().getAnimator().playAnimMontage(
                 ResourceKey.create(AkytheraRegistries.DataPack.ANIM_MONTAGE_KEY, payload.montageId()),
                 payload.montageSection()
             );

@@ -26,13 +26,21 @@ import java.util.Optional;
 /// serializes what values are belong to script.
 public final class ScriptVariables {
     private final Map<String, Object> variables = new HashMap<>();
-    private final Map<String, VariableInfo> variableInfo = new HashMap<>();
+    private final Map<String, VariableInfo> memberVariables = new HashMap<>();
 
-    public ScriptVariables(final List<VariableInfo> variables) {
-        variables.forEach(v -> {
-            this.variables.put(v.name(), v.defaultVal());
-            this.variableInfo.put(v.name(), v);
-        });
+    // Without member variables
+    public ScriptVariables() {
+        this(null);
+    }
+
+    // Use `ScriptVariables()` with no member variables
+    public ScriptVariables(final List<VariableInfo> memberVariables) {
+        if (memberVariables != null) {
+            memberVariables.forEach(v -> {
+                this.variables.put(v.name(), v.defaultVal());
+                this.memberVariables.put(v.name(), v);
+            });
+        }
     }
 
     public boolean hasVariable(final String name) {
@@ -52,12 +60,12 @@ public final class ScriptVariables {
 
     public void reset() {
         // Remove local variables
-        variables.entrySet().removeIf(entry -> !variableInfo.containsKey(entry.getKey()));
+        variables.entrySet().removeIf(entry -> !memberVariables.containsKey(entry.getKey()));
     }
 
     @Override
     public String toString() {
-        return "Script Variables: " + variables + "\nmember variables: " + variableInfo;
+        return "Script Variables: " + variables + "\nmember variables: " + memberVariables;
     }
 
     /// @param defaultVal allowed only for primitives or string. No default value of references.

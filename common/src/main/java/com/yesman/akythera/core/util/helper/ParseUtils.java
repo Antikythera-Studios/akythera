@@ -21,7 +21,7 @@ public class ParseUtils {
     /// Convert a [JsonArray] into primitive float array
     ///
     /// @throws JsonSyntaxException when given array is not a float array
-    public static float[] jsonArrayToPrimitiveFloat(JsonArray array) throws JsonSyntaxException {
+    public static float[] jsonArrayToPrimitiveFloat(final JsonArray array) throws JsonSyntaxException {
         try {
             FloatList result = new FloatArrayList();
 
@@ -38,7 +38,7 @@ public class ParseUtils {
     /// Convert a [JsonArray] into primitive int array
     ///
     /// @throws JsonSyntaxException when given array is not a int array
-    public static int[] jsonArrayToPrimitiveInt(JsonArray array) throws JsonSyntaxException {
+    public static int[] jsonArrayToPrimitiveInt(final JsonArray array) throws JsonSyntaxException {
         try {
             IntList result = new IntArrayList();
 
@@ -53,7 +53,7 @@ public class ParseUtils {
     }
 
     /// Returns an enum object by enum name that is non-case sensitive
-    public static <T extends Enum<T>> @Nullable T enumValueOfOrNull(Class<T> enumCls, String enumName) {
+    public static <T extends Enum<T>> @Nullable T enumValueOfOrNull(final Class<T> enumCls, final String enumName) {
         try {
             return Enum.valueOf(enumCls, enumName.toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException | NullPointerException e) {
@@ -62,7 +62,7 @@ public class ParseUtils {
     }
 
     /// Pack the map entry into list with key-value pair
-    public static <F, S> List<Pair<F, S>> mapEntriesToPair(Map<F, S> map) {
+    public static <F, S> List<Pair<F, S>> mapEntriesToPair(final Map<F, S> map) {
         List<Pair<F, S>> list = new ArrayList<>();
 
         for (Map.Entry<F, S> entry : map.entrySet()) {
@@ -73,27 +73,27 @@ public class ParseUtils {
     }
 
     /// Returns a string with lower cases
-    public static String toLowerCase(String s) {
+    public static String toLowerCase(final String s) {
         return s.toLowerCase(Locale.ROOT);
     }
 
     /// Returns a string with lower cases. Accepts any type of object and translate by `toString`
-    public static String toLowerCase(Object s) {
+    public static String toLowerCase(final Object s) {
         return s.toString().toLowerCase(Locale.ROOT);
     }
 
     /// Returns a string with upper cases
-    public static String toUpperCase(String s) {
+    public static String toUpperCase(final String s) {
         return s.toUpperCase(Locale.ROOT);
     }
 
     /// Returns a string with upper cases. Accepts any type of object and translate by `toString`
-    public static String toUpperCase(Object s) {
+    public static String toUpperCase(final Object s) {
         return s.toString().toUpperCase(Locale.ROOT);
     }
 
     /// Transform a snake case string into camel
-    public static String snakeToCamel(String snake) {
+    public static String snakeToCamel(final String snake) {
         if (snake == null) {
             return "";
         }
@@ -114,7 +114,7 @@ public class ParseUtils {
     }
 
     /// Transform a camel case string into snake
-    public static String camelToSnake(String name) {
+    public static String camelToSnake(final String name) {
         return name.replaceAll("([a-z0-9])([A-Z])", "$1_$2")
             .replaceAll("([A-Z]+)([A-Z][a-z])", "$1_$2")
             .toLowerCase(Locale.ROOT);
@@ -122,7 +122,7 @@ public class ParseUtils {
 
     /// Transform a camel case string into spaced pascal case, for display labels.
     /// e.g. `getRootComponent` -> "Get Root Component"; `lastPosition` -> "Last Position".
-    public static String camelToSpacedPascal(String name) {
+    public static String camelToSpacedPascal(final String name) {
         if (name == null || name.isEmpty()) {
             return "";
         }
@@ -135,7 +135,7 @@ public class ParseUtils {
 
     /// `"player_script"` / `"humanoid/walk_run"` → `"PlayerScript"` / `"HumanoidWalkRun"` — the
     /// PascalCase entry-name half of the generated `<EntryName>AnimatorScript` class name.
-    public static String pascalCase(String idPath) {
+    public static String pascalCase(final String idPath) {
         StringBuilder out = new StringBuilder(idPath.length());
         boolean upper = true;
 
@@ -152,7 +152,7 @@ public class ParseUtils {
     }
 
     /// Returns whether param 's' can be converted to 'T'.
-    public static <T extends Number> boolean isParsable(String s, Function<String, T> parser) {
+    public static <T extends Number> boolean isParsable(final String s, final Function<String, T> parser) {
         try {
             parser.apply(s);
             return true;
@@ -164,22 +164,47 @@ public class ParseUtils {
     /// Parse to string given float
     ///
     /// Live due to [Float#toString] is ambiguous when using as lambda
-    public static String floatingPointToString(float f) {
+    public static String floatingPointToString(final float f) {
         return Float.toString(f);
     }
 
     /// Returns 'a' if it's not null. Otherwise, returns 'b'.
-    public static <T> T nvl(@Nullable T a, @NonNull T b) {
+    public static <T> T nvl(@Nullable final T a, @NonNull final T b) {
         return a == null ? b : a;
     }
 
     /// Optional wrapper for providers, used for [RecordCodecBuilder]
-    public static <O, T> Function<O, Optional<T>> provideOptional(Function<O, @Nullable T> valueProvider) {
+    public static <O, T> Function<O, Optional<T>> provideOptional(final Function<O, @Nullable T> valueProvider) {
         return obj -> Optional.ofNullable(valueProvider.apply(obj));
     }
 
+    /// Underscore-separated identifier → spaced, title-cased display name:
+    /// `PLAYER_ANIMATION_LIBRARY` becomes `Player Animation Library`.
+    ///
+    /// Every character but a word's first is lowercased, so the result reads the same whether the
+    /// source was screaming snake case (an enum constant name) or plain snake case (a serialized name).
+    public static String toDisplayName(final String name) {
+        StringBuilder displayName = new StringBuilder(name.length());
+        boolean wordStart = true;
+
+        for (int i = 0; i < name.length(); i++) {
+            char c = name.charAt(i);
+
+            if (c == '_') {
+                displayName.append(' ');
+                wordStart = true;
+                continue;
+            }
+
+            displayName.append(wordStart ? Character.toUpperCase(c) : Character.toLowerCase(c));
+            wordStart = false;
+        }
+
+        return displayName.toString();
+    }
+
     /// Trim extension from path
-    public static String trimExtensions(String path, String... expectedExtensions) {
+    public static String trimExtensions(final String path, final String... expectedExtensions) {
         int idx = path.lastIndexOf(".");
 
         if (idx < 0) {
@@ -195,15 +220,29 @@ public class ParseUtils {
         return path.substring(0, idx);
     }
 
-    /// Return a primitive type of wrapper class if parameter is a wrapper class.
-    public static Class<?> unwrapPrimitive(Class<?> c) {
-        if (c == Float.class) return float.class;
-        if (c == Double.class) return double.class;
-        if (c == Integer.class) return int.class;
-        if (c == Long.class) return long.class;
-        if (c == Short.class) return short.class;
-        if (c == Byte.class) return byte.class;
-        if (c == Boolean.class) return boolean.class;
+    /// Return a wrapper class type of primitive if the type supports it.
+    public static Class<?> box(final Class<?> t) {
+        if (!t.isPrimitive()) return t;
+        if (t == boolean.class) return Boolean.class;
+        if (t == byte.class)    return Byte.class;
+        if (t == short.class)   return Short.class;
+        if (t == char.class)    return Character.class;
+        if (t == int.class)     return Integer.class;
+        if (t == long.class)    return Long.class;
+        if (t == float.class)   return Float.class;
+        if (t == double.class)  return Double.class;
+        return t;
+    }
+
+    /// Return a primitive type of wrapper class if the type supports it.
+    public static Class<?> unbox(final Class<?> c) {
+        if (c == Float.class)     return float.class;
+        if (c == Double.class)    return double.class;
+        if (c == Integer.class)   return int.class;
+        if (c == Long.class)      return long.class;
+        if (c == Short.class)     return short.class;
+        if (c == Byte.class)      return byte.class;
+        if (c == Boolean.class)   return boolean.class;
         if (c == Character.class) return char.class;
         return c;
     }

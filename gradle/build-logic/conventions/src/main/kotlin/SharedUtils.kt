@@ -1,5 +1,10 @@
 // Shared utilities between all Gradle projects or plugins.
 
+import com.vanniktech.maven.publish.JavaLibrary
+import com.vanniktech.maven.publish.JavadocJar
+import com.vanniktech.maven.publish.MavenPublishBaseExtension
+import com.vanniktech.maven.publish.SourcesJar
+import groovy.util.Node
 import me.modmuss50.mpp.ModPublishExtension
 import org.gradle.api.GradleException
 import org.gradle.api.Project
@@ -9,6 +14,10 @@ import org.gradle.api.artifacts.dsl.RepositoryHandler
 import org.gradle.api.file.RegularFile
 import org.gradle.api.plugins.BasePluginExtension
 import org.gradle.api.provider.Provider
+import org.gradle.api.publish.PublishingExtension
+import org.gradle.api.publish.maven.MavenPublication
+import org.gradle.api.publish.tasks.GenerateModuleMetadata
+import org.gradle.plugins.signing.SigningExtension
 import java.net.URI
 
 // Note: Prefer "strictMaven()" over "maven { ... }" to reduce unnecessary repository lookups (i.e., reduce network calls)
@@ -58,9 +67,6 @@ val Project.modId: String
 val Project.mcVersion: String
     get() = catalogVersion("minecraft")
 
-val Project.parchmentMc: String
-    get() = catalogVersion("parchmentMappings")
-
 val Project.javaVersion: Int
     get() = catalogVersion("java").toInt()
 
@@ -87,6 +93,9 @@ private val Project.modAuthors: String
 
 val Project.groupId: String
     get() = gradleProperty("group_id")
+
+private val Project.mavenArtifactId: String
+    get() = gradleProperty("artifact_id")
 
 private val Project.fabricLoaderVersion: String
     get() = catalogVersion("fabric-loader")
@@ -265,6 +274,108 @@ fun Project.configureModPublish(
         */
     }
 }
+
+/**
+ * Configures publishing the platform mod JAR file to Maven Central,
+ * using the "com.vanniktech.maven.publish" Gradle plugin.
+ *
+ * The uploaded JAR files are the same ones produced by the "build" task:
+ * the plugin publishes the "java" component, which Fabric Loom wires to the remapped JAR
+ * (and ModDevGradle leaves as the plain "jar" task output).
+ *
+ * The group and artifact IDs are read from "gradle.properties" ("group_id" and "artifact_id");
+ * the artifact ID is suffixed with the mod loader name (e.g., "akythera-neoforge"),
+ * since each platform needs unique Maven coordinates.
+ *
+ * Run "gradlew publishToMavenCentral" to upload (or "publishAndReleaseToMavenCentral" to also
+ * release automatically). Requires the "mavenCentralUsername", "mavenCentralPassword" and
+ * "signingInMemoryKey" Gradle properties, or their "ORG_GRADLE_PROJECT_*" environment variables:
+ * https://vanniktech.github.io/gradle-maven-publish-plugin/central/#secrets
+ */
+fun Project.configureMavenCentralPublish(modLoader: ModLoader) {
+    val project = this
+
+    extensions.getByType(MavenPublishBaseExtension::class.java).apply {
+        publishToMavenCentral()
+        signAllPublications()
+
+        // Signing is skipped when no key is configured, so "publishToMavenLocal" works without
+        // credentials. Maven Central rejects unsigned uploads regardless, so this cannot
+        // accidentally publish an unsigned release.
+        extensions.getByType(SigningExtension::class.java).isRequired =
+            providers.gradleProperty("signingInMemoryKey").isPresent
+
+        // Maven Central requires a javadoc JAR; an empty one is uploaded since
+        // javadoc doesn't run cleanly on the mod sources.
+        configure(JavaLibrary(javadocJar = JavadocJar.Empty(), sourcesJar = SourcesJar.Sources()))
+
+        // The version is intentionally not passed to coordinates(), since it would override
+        // "project.version" and therefore the JAR file names set by configureBaseArchive().
+        coordinates(
+            groupId = project.groupId,
+            artifactId = "${project.mavenArtifactId}-${modLoader.name.lowercase()}",
+        )
+
+        pom {
+            name.set("$modDisplayName (${modLoader.conventionalName})")
+            description.set(modDescription)
+            url.set(modDisplayUrl)
+
+            licenses {
+                license {
+                    name.set(modLicense)
+                    url.set("${modSourceCode.trimEnd('/')}/blob/main/LICENSE")
+                }
+            }
+
+            developers {
+                modAuthors.split(",").forEach { author ->
+                    developer { name.set(author.trim()) }
+                }
+            }
+
+            scm {
+                url.set(modSourceCode)
+                connection.set("scm:git:${modSourceCode.trimEnd('/')}.git")
+                developerConnection.set("scm:git:${modSourceCode.trimEnd('/')}.git")
+            }
+
+            issueManagement {
+                url.set(modIssueTracker)
+            }
+
+            withXml {
+                // The ":common" classes and resources are bundled into the platform JAR
+                // (see multiloader-platform.gradle.kts), and ":common" itself is not published,
+                // so it must not be declared as a POM dependency.
+                asNode().childrenNamed("dependencies").forEach { dependenciesNode ->
+                    dependenciesNode.childrenNamed("dependency")
+                        .filter { dependency ->
+                            dependency.childrenNamed("groupId").any { it.text() == project.groupId } &&
+                                    dependency.childrenNamed("artifactId").any { it.text() == "common" }
+                        }
+                        .forEach { dependenciesNode.remove(it) }
+                }
+            }
+        }
+    }
+
+    // Distinguishes uploads per Minecraft version, since the platform artifact ID stays the same across them.
+    extensions.getByType(PublishingExtension::class.java)
+        .publications.withType(MavenPublication::class.java)
+        .configureEach { version = "${mcVersion}-${modVersion}" }
+
+    // Unlike the POM, the Gradle module metadata cannot drop the bundled ":common" project
+    // dependency, so only the POM is published.
+    tasks.withType(GenerateModuleMetadata::class.java).configureEach { isEnabled = false }
+}
+
+// XML element lookup by local name, since POM elements are namespaced (groovy.namespace.QName).
+private fun Node.childrenNamed(localName: String): List<Node> =
+    children().filterIsInstance<Node>().filter {
+        val name = it.name()
+        name == localName || (name is groovy.namespace.QName && name.localPart == localName)
+    }
 
 /**
  * The placeholders to be replaced with in mod loader metadata (fabric.mod.json, neoforge.mods.toml).

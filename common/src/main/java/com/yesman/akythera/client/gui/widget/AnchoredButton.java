@@ -47,6 +47,8 @@ public class AnchoredButton extends Button implements AnchoredWidget, ThemeAppli
 
     protected final Font font;
     protected final Function<AbstractWidget, Boolean> isHighlighted;
+    protected final Function<AnchoredButton, @Nullable Tooltip> tooltipProvider;
+
     @Nullable
     protected final SpriteInfo sprite;
     protected final Holder.@Nullable Reference<@NonNull SoundEvent> pressSound;
@@ -66,6 +68,7 @@ public class AnchoredButton extends Button implements AnchoredWidget, ThemeAppli
         final VerticalAnchorType verticalAnchorType,
         final ButtonTheme theme,
         final Function<AbstractWidget, Boolean> isHighlighted,
+        final Function<AnchoredButton, @Nullable Tooltip> tooltipProvider,
         final Holder.@Nullable Reference<@NonNull SoundEvent> pressSound
     ) {
         super(0, 0, 0, 0, message, onPress, createNarration);
@@ -79,6 +82,7 @@ public class AnchoredButton extends Button implements AnchoredWidget, ThemeAppli
         this.verticalAnchorType = verticalAnchorType;
         this.theme = theme;
         this.isHighlighted = isHighlighted;
+        this.tooltipProvider = tooltipProvider;
         this.sprite = sprite;
         this.pressSound = pressSound;
     }
@@ -98,15 +102,17 @@ public class AnchoredButton extends Button implements AnchoredWidget, ThemeAppli
             builder.verticalAnchorType,
             builder.buttonTheme,
             builder.isHighlighted,
+            builder.tooltipProvider,
             builder.pressSound
         );
 
-        setTooltip(builder.tooltip);
         setAlpha(builder.alpha);
     }
 
     @Override
     protected void extractContents(@NonNull GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+        setTooltip(tooltipProvider.apply(this));
+
         theme.renderBackground(this, graphics, mouseX, mouseY, partialTick);
 
         // Apply theme label font color
@@ -152,8 +158,7 @@ public class AnchoredButton extends Button implements AnchoredWidget, ThemeAppli
         private final Font font;
         private final Component message;
         private final OnPress onPress;
-        @Nullable
-        private Tooltip tooltip;
+        private Function<AnchoredButton, @Nullable Tooltip> tooltipProvider;
         @Nullable
         private SpriteInfo sprite;
         private Unit x1;
@@ -177,6 +182,7 @@ public class AnchoredButton extends Button implements AnchoredWidget, ThemeAppli
             this.verticalAnchorType = VerticalAnchorType.TOP_HEIGHT;
             this.buttonTheme = BuiltInButtonTheme.VANILLA_BUTTON;
             this.isHighlighted = AbstractWidget::isHoveredOrFocused;
+            this.tooltipProvider = _ -> null;
             this.alpha = 1.0F;
         }
 
@@ -202,8 +208,10 @@ public class AnchoredButton extends Button implements AnchoredWidget, ThemeAppli
             return this;
         }
 
-        public AnchoredButton.Builder tooltip(@Nullable Tooltip tooltip) {
-            this.tooltip = tooltip;
+        /// The tooltip is asked for every frame, so a button whose state changes can answer
+        /// differently. Return null for no tooltip.
+        public AnchoredButton.Builder tooltip(Function<AnchoredButton, @Nullable Tooltip> tooltipProvider) {
+            this.tooltipProvider = tooltipProvider;
             return this;
         }
 

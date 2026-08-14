@@ -48,7 +48,7 @@ public final class AnimationMontagePlayer implements AnimationDriver {
     private boolean isFinished = true;
 
     // true if fading in, false if fading out
-    private boolean fadingInOrElseOut = false;
+    private boolean fadingInOrOut = false;
 
     /// Montage animation player is reloadable
     private Holder.@Nullable Reference<@NonNull AnimationMontage> currentPlaying;
@@ -63,7 +63,7 @@ public final class AnimationMontagePlayer implements AnimationDriver {
             cachedLastMontagePose = getPose();
         }
 
-        fadingInOrElseOut = true;
+        fadingInOrOut = true;
         isFinished = false;
         elapsedTime = 0.0F;
         lastUpdatedTime = 0.0F;
@@ -111,7 +111,7 @@ public final class AnimationMontagePlayer implements AnimationDriver {
         montageCallbackHandle.triggerComplete(animMontage, true);
         cachedLastMontagePose = getPose();
         fadeTime = currentPlaying.value().fadeOutTime();
-        fadingInOrElseOut = false;
+        fadingInOrOut = false;
         isFinished = true;
     }
 
@@ -148,7 +148,7 @@ public final class AnimationMontagePlayer implements AnimationDriver {
         } else {
             boolean fadingProgressing;
 
-            if (fadingInOrElseOut) {
+            if (fadingInOrOut) {
                 float fadeInTime = currentPlaying.value().fadeInTime();
                 boolean wasFadingIn = fadeTime < fadeInTime;
                 fadeTime = Math.clamp(fadeTime + frameTime, 0.0F, fadeInTime);
@@ -209,7 +209,7 @@ public final class AnimationMontagePlayer implements AnimationDriver {
     public Pose getPose() {
         if (currentPlaying == null) return cachedLastMontagePose;
 
-        if (fadingInOrElseOut) {
+        if (fadingInOrOut) {
             // When fading mode is set to "fade-in", and the time haven't reached the total
             // fade in time, blend the cached last pose to animation pose to start
             if (fadeTime < currentPlaying.value().fadeInTime()) {
@@ -241,16 +241,21 @@ public final class AnimationMontagePlayer implements AnimationDriver {
             return 0.0F;
         }
 
-        if (fadingInOrElseOut) {
-            return MathUtils.divideOrElse(fadeTime, currentPlaying.value().fadeInTime(), 1.0F);
+        if (fadingInOrOut) {
+            return MathUtils.safeDivision(fadeTime, currentPlaying.value().fadeInTime(), 1.0F);
         } else {
-            return MathUtils.divideOrElse(fadeTime, currentPlaying.value().fadeOutTime(), 0.0F);
+            return MathUtils.safeDivision(fadeTime, currentPlaying.value().fadeOutTime(), 0.0F);
         }
     }
 
     @Override
     public boolean isFinished() {
         return isFinished;
+    }
+
+    @Override
+    public boolean fadingInOrOut() {
+        return fadingInOrOut;
     }
 
     @Override

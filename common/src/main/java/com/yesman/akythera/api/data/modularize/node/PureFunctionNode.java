@@ -14,7 +14,12 @@ import java.util.List;
 /// This node consists the tree hierarchy to structure [FlowFunctionNode#params()]
 /// or another pure node's [PureFunctionNode#params] – A list of provider functions that
 /// [#function()] requires to execute.
-public record PureFunctionNode(ScriptFunction function, List<PureNode> params) implements FunctionNode, PureNode {
+public record PureFunctionNode(ScriptFunction function, List<PureNode> params, int nodeId) implements FunctionNode, PureNode {
+    /// A node with no canvas row behind it — the builders, and any hand-assembled tree.
+    public PureFunctionNode(final ScriptFunction function, final List<PureNode> params) {
+        this(function, params, NO_NODE_ID);
+    }
+
     /// Recursive node codec for the execution tree: `{ "function": <id>, "params": [ <node>... ] }`.
     public static final Codec<PureFunctionNode> CODEC =
         RecordCodecBuilder.create(
@@ -25,7 +30,10 @@ public record PureFunctionNode(ScriptFunction function, List<PureNode> params) i
                         .forGetter(PureFunctionNode::function),
                     PureNode.CODEC.listOf()
                         .optionalFieldOf("params", List.of())
-                        .forGetter(PureFunctionNode::params)
+                        .forGetter(PureFunctionNode::params),
+                    Codec.INT
+                        .optionalFieldOf("node_id", NO_NODE_ID)
+                        .forGetter(PureFunctionNode::nodeId)
                 )
                 .apply(instance, PureFunctionNode::new)
         );

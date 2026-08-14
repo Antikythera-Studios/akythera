@@ -1,6 +1,6 @@
 package com.yesman.akythera.api.world.patch.entity.component;
 
-import com.yesman.akythera.api.component.PatchComponent;
+import com.yesman.akythera.api.component.DynamicPatchComponent;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Targeting;
@@ -10,8 +10,8 @@ import org.jspecify.annotations.Nullable;
 /// Abstraction of all entity patches that can have attack target
 ///
 /// Modeled after [Targeting] interface but [EntityPatch] version.
-public final class EnemyPerception implements PatchComponent<EntityPatch<LivingEntity>> {
-    private final EntityPatch<LivingEntity> owner;
+public final class EnemyPerception implements DynamicPatchComponent<EntityPatch<LivingEntity>> {
+    private EntityPatch<LivingEntity> owner;
     private LivingEntity targeting;
 
     public EnemyPerception(EntityPatch<LivingEntity> owner) {
@@ -38,5 +38,13 @@ public final class EnemyPerception implements PatchComponent<EntityPatch<LivingE
     @Override
     public EntityPatch<LivingEntity> getOwner() {
         return owner;
+    }
+
+    @Override
+    public DynamicPatchComponent<EntityPatch<LivingEntity>> getRenewed(EntityPatch<LivingEntity> newOwner) {
+        owner = newOwner;
+        targeting = null;
+
+        return this;
     }
 }

@@ -118,7 +118,14 @@ public class WidgetTable extends ContainerObjectSelectionList<WidgetTable.@NonNu
     }
 
     public WidgetTable newRow() {
-        lastEntry = new WidgetEntry();
+        return newRow(0);
+    }
+
+    /// Starts a row whose widgets anchor against the table rectangle inset by `indent` pixels on
+    /// the left — nested rows (deeper property levels) shift right while right-anchored widgets
+    /// stay put, so the depth a row belongs to reads off its left edge.
+    public WidgetTable newRow(int indent) {
+        lastEntry = new WidgetEntry(indent);
         addEntry(lastEntry);
 
         return this;
@@ -192,15 +199,21 @@ public class WidgetTable extends ContainerObjectSelectionList<WidgetTable.@NonNu
         int widgetIndex = 0;
 
         for (WidgetEntry widgetEntry : children()) {
+            ScreenRectangle rowRectangle = widgetEntry.indent == 0
+                ? tableRectangle
+                : new ScreenRectangle(
+                    tableRectangle.left() + widgetEntry.indent, tableRectangle.top(),
+                    Math.max(0, tableRectangle.width() - widgetEntry.indent), tableRectangle.height());
+
             for (AnchoredWidget widget : widgetEntry.anchored()) {
-                int height = widget.getVerticalAnchorType().scaler().withSize(tableRectangle, widget);
+                int height = widget.getVerticalAnchorType().scaler().withSize(rowRectangle, widget);
 
                 // Locate the widget at the vertical center of the current row, as we don't allow anchoring
                 // rather than VerticalAnchorType.TOP_HEIGHT in addWidget(), the operation is expected to work
                 // as same as AbstractWidget#setY()
-                int top = getRowTop(widgetIndex) + (defaultEntryHeight - height) / 2 - tableRectangle.top();
+                int top = getRowTop(widgetIndex) + (defaultEntryHeight - height) / 2 - rowRectangle.top();
                 widget.setY1(AnchoredWidget.pixel(top));
-                widget.relocate(tableRectangle);
+                widget.relocate(rowRectangle);
             }
 
             widgetIndex++;
@@ -223,14 +236,17 @@ public class WidgetTable extends ContainerObjectSelectionList<WidgetTable.@NonNu
         // Checks the focusing entry first for the cases that widgets could be pressed out of the row bounds (e.g. combo box dropdown)
         if (getFocused() != null) {
             int index = children().indexOf(getFocused());
-            int focusTop = getRowTop(index);
-            int focusBottom = getRowBottom(index);
 
-            // When the focused entry is in a visible area
-            if (focusTop <= getBottom() && focusBottom >= getY()) {
-                for (GuiEventListener e : getFocused().children()) {
-                    if (e.mouseScrolled(x, y, xDelta, yDelta)) {
-                        return true;
+            if (index >= 0) {
+                int focusTop = getRowTop(index);
+                int focusBottom = getRowBottom(index);
+
+                // When the focused entry is in a visible area
+                if (focusTop <= getBottom() && focusBottom >= getY()) {
+                    for (GuiEventListener e : getFocused().children()) {
+                        if (e.mouseScrolled(x, y, xDelta, yDelta)) {
+                            return true;
+                        }
                     }
                 }
             }
@@ -268,6 +284,13 @@ public class WidgetTable extends ContainerObjectSelectionList<WidgetTable.@NonNu
         final List<AnchoredWidget> anchored = new ArrayList<> ();
         final List<DataBoundWidget<?>> dataBound = new ArrayList<> ();
 
+        /// Left inset in pixels the row's widgets anchor against, see [WidgetTable#newRow(int)].
+        final int indent;
+
+        WidgetEntry(int indent) {
+            this.indent = indent;
+        }
+
         @Override
         public @NonNull Optional<GuiEventListener> getChildAt(double x, double y) {
             for (GuiEventListener widget : widgets) {
@@ -296,12 +319,13 @@ public class WidgetTable extends ContainerObjectSelectionList<WidgetTable.@NonNu
         public List<? extends DataBoundWidget<?>> dataBound() {
             return dataBound;
         }
-
+        
         @Override
         public void setFocused(@Nullable GuiEventListener focused) {
-            // Fix: triggering setFocused for already focusing object
-            if (getFocused() == focused) {
-                return;
+            if (getFocused() == focused) return;
+
+            if (focused != null && !focused.isFocused()) {
+                super.setFocused(null);
             }
 
             super.setFocused(focused);

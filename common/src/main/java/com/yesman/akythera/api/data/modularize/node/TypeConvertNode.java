@@ -7,7 +7,12 @@ import com.yesman.akythera.core.reflection.DataDrivenScript;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import org.jspecify.annotations.NonNull;
 
-public record TypeConvertNode(ScriptType from, ScriptType to, PureNode input) implements PureNode {
+public record TypeConvertNode(ScriptType from, ScriptType to, PureNode input, int nodeId) implements PureNode {
+    /// A node with no canvas row behind it — any hand-assembled tree.
+    public TypeConvertNode(final ScriptType from, final ScriptType to, final PureNode input) {
+        this(from, to, input, NO_NODE_ID);
+    }
+
     public static final Codec<TypeConvertNode> CODEC =
         RecordCodecBuilder.create(
             instance ->
@@ -18,7 +23,8 @@ public record TypeConvertNode(ScriptType from, ScriptType to, PureNode input) im
                     AkytheraRegistries.Frozen.SCRIPT_TYPE.byNameCodec()
                         .fieldOf("to")
                         .forGetter(TypeConvertNode::to),
-                    PureNode.CODEC.fieldOf("from_value").forGetter(TypeConvertNode::input)
+                    PureNode.CODEC.fieldOf("from_value").forGetter(TypeConvertNode::input),
+                    Codec.INT.optionalFieldOf("node_id", NO_NODE_ID).forGetter(TypeConvertNode::nodeId)
                 )
                 .apply(instance, TypeConvertNode::new)
         );

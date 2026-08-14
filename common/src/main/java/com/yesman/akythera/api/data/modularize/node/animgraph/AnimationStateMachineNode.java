@@ -88,7 +88,7 @@ public record AnimationStateMachineNode(
     /// empty / non-boolean condition (nothing wired) reads as an unconditional (always-true) transition.
     private static Transition.TransitionCheck<?, ?> check(final DataDrivenScript<?, ?> script, final PureNode condition) {
         return (_, _) -> {
-            Object value = condition.execute(script, new ExecutionContext(script.getScriptVariable(), false));
+            Object value = condition.execute(script, new ExecutionContext(script.getScriptVariable()));
             return !(value instanceof Boolean bool) || bool;
         };
     }

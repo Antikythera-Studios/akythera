@@ -188,6 +188,6 @@ public interface ScriptFunction {
     }
 
     enum Usage {
-        SCRIPT, ANIM_GRAPH, PARTICLE_GENERATION, MOTION_WARPING
+        SCRIPT, ANIM_GRAPH, ENTITY_PATCH_CTOR, PARTICLE_GENERATION, MOTION_WARPING
     }
 }

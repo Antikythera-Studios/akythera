@@ -15,7 +15,12 @@ import org.jspecify.annotations.NonNull;
 import java.util.Optional;
 
 /// Pure node that returns literal value
-public record LiteralNode<T>(ScriptType type, T literal) implements PureNode {
+public record LiteralNode<T>(ScriptType type, T literal, int nodeId) implements PureNode {
+    /// A node with no canvas row behind it — the compilers' typed defaults, and any hand-assembled tree.
+    public LiteralNode(final ScriptType type, final T literal) {
+        this(type, literal, NO_NODE_ID);
+    }
+
     public static final Codec<LiteralNode<?>> CODEC =
         RecordCodecBuilder.create(
             instance ->
@@ -23,18 +28,19 @@ public record LiteralNode<T>(ScriptType type, T literal) implements PureNode {
                     AkytheraRegistries.Frozen.SCRIPT_TYPE.byNameCodec()
                         .fieldOf("type")
                         .forGetter(LiteralNode::type),
-                    Codec.PASSTHROUGH.optionalFieldOf("value").forGetter(ParseUtils.provideOptional(LiteralNode::valueAsDynamic))
+                    Codec.PASSTHROUGH.optionalFieldOf("value").forGetter(ParseUtils.provideOptional(LiteralNode::valueAsDynamic)),
+                    Codec.INT.optionalFieldOf("node_id", NO_NODE_ID).forGetter(LiteralNode::nodeId)
                 )
                 .apply(instance, LiteralNode::decode)
         );
 
     @SuppressWarnings("unchecked")
-    private static <V> LiteralNode<V> decode(final ScriptType type, final Optional<Dynamic<?>> value) {
+    private static <V> LiteralNode<V> decode(final ScriptType type, final Optional<Dynamic<?>> value, final int nodeId) {
         V literal = value.isEmpty() || type.codec() == null
             ? null
             : ((Codec<V>) type.codec()).parse(value.get()).getOrThrow();
 
-        return new LiteralNode<>(type, literal);
+        return new LiteralNode<>(type, literal, nodeId);
     }
 
     @Override

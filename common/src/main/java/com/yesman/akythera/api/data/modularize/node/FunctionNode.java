@@ -2,6 +2,7 @@ package com.yesman.akythera.api.data.modularize.node;
 
 import com.yesman.akythera.api.data.modularize.ScriptFunction;
 import com.yesman.akythera.core.reflection.DataDrivenScript;
+import com.yesman.akythera.core.reflection.FunctionSignature;
 
 import java.util.List;
 
@@ -12,119 +13,55 @@ public interface FunctionNode extends ScriptNode {
 
     @Override
     default <T> T execute(final DataDrivenScript<?, ?> script, final ExecutionContext context) {
-        boolean returnsVoid = function().functionSignature().returnType() == void.class
-            || function().functionSignature().returnType() == Void.class;
+        FunctionSignature signature = function().functionSignature();
+        boolean returnsVoid = signature.returnType() == void.class || signature.returnType() == Void.class;
 
         context.enter(this);
 
-        switch (params().size()) {
-            case 0 -> {
-                if (returnsVoid) {
-                    function().castToRunnable().runnable().run();
-                    return context.done();
-                } else {
-                    return context.returnVal(function().castToSupplier().supplier().get());
-                }
-            }
-            case 1 -> {
-                PureNode param1 = params().getFirst();
+        List<PureNode> params = params();
+        Object[] args = new Object[params.size()];
 
-                if (returnsVoid) {
-                    function().castToConsumer().consumer().accept(param1.execute(script, context));
-                    return context.done();
-                } else {
-                    return context.returnVal(function().castToUniFunction().function().apply(
-                        param1.execute(script, context)
-                    ));
-                }
-            }
-            case 2 -> {
-                PureNode param1 = params().get(0);
-                PureNode param2 = params().get(1);
-
-                if (returnsVoid) {
-                    function().castToBiConsumer().biConsumer().accept(param1.execute(script, context), param2.execute(script, context));
-                    return context.done();
-                } else {
-                    return context.returnVal(function().castToBiFunction().biFunction().apply(
-                        param1.execute(script, context),
-                        param2.execute(script, context)
-                    ));
-                }
-            }
-            case 3 -> {
-                PureNode param1 = params().get(0);
-                PureNode param2 = params().get(1);
-                PureNode param3 = params().get(2);
-
-                if (returnsVoid) {
-                    function().castToTriConsumer().triConsumer().accept(
-                        param1.execute(script, context),
-                        param2.execute(script, context),
-                        param3.execute(script, context)
-                    );
-                    return context.done();
-                } else {
-                    return context.returnVal(function().castToTriFunction().triFunction().apply(
-                        param1.execute(script, context),
-                        param2.execute(script, context),
-                        param3.execute(script, context)
-                    ));
-                }
-            }
-            case 4 -> {
-                PureNode param1 = params().get(0);
-                PureNode param2 = params().get(1);
-                PureNode param3 = params().get(2);
-                PureNode param4 = params().get(3);
-
-                if (returnsVoid) {
-                    function().castToQuadConsumer().quadConsumer().accept(
-                        param1.execute(script, context),
-                        param2.execute(script, context),
-                        param3.execute(script, context),
-                        param4.execute(script, context)
-                    );
-                    return context.done();
-                } else {
-                    return context.returnVal(function().castToQuadFunction().quadFunction().apply(
-                        param1.execute(script, context),
-                        param2.execute(script, context),
-                        param3.execute(script, context),
-                        param4.execute(script, context)
-                    ));
-                }
-            }
-            case 5 -> {
-                PureNode param1 = params().get(0);
-                PureNode param2 = params().get(1);
-                PureNode param3 = params().get(2);
-                PureNode param4 = params().get(3);
-                PureNode param5 = params().get(4);
-
-                if (returnsVoid) {
-                    function().castToQuintConsumer().quintConsumer().accept(
-                        param1.execute(script, context),
-                        param2.execute(script, context),
-                        param3.execute(script, context),
-                        param4.execute(script, context),
-                        param5.execute(script, context)
-                    );
-                    return context.done();
-                } else {
-                    return context.returnVal(function().castToQuintFunction().quintFunction().apply(
-                        param1.execute(script, context),
-                        param2.execute(script, context),
-                        param3.execute(script, context),
-                        param4.execute(script, context),
-                        param5.execute(script, context)
-                    ));
-                }
-            }
+        for (int i = 0; i < args.length; i++) {
+            args[i] = params.get(i).execute(script, context);
         }
 
-        throw new IllegalStateException(
-            function().metadata().label() + " has an unsupported parameter count: " + params().size() + " (max 5)."
+        context.recordInputs(args);
+
+        if (returnsVoid) {
+            invokeVoid(args);
+            return context.done();
+        }
+
+        return context.returnVal(invokeReturning(args));
+    }
+
+    private void invokeVoid(final Object[] args) {
+        switch (args.length) {
+            case 0 -> function().castToRunnable().runnable().run();
+            case 1 -> function().castToConsumer().consumer().accept(args[0]);
+            case 2 -> function().castToBiConsumer().biConsumer().accept(args[0], args[1]);
+            case 3 -> function().castToTriConsumer().triConsumer().accept(args[0], args[1], args[2]);
+            case 4 -> function().castToQuadConsumer().quadConsumer().accept(args[0], args[1], args[2], args[3]);
+            case 5 -> function().castToQuintConsumer().quintConsumer().accept(args[0], args[1], args[2], args[3], args[4]);
+            default -> throw unsupportedParameterCount(args.length);
+        }
+    }
+
+    private Object invokeReturning(final Object[] args) {
+        return switch (args.length) {
+            case 0 -> function().castToSupplier().supplier().get();
+            case 1 -> function().castToUniFunction().function().apply(args[0]);
+            case 2 -> function().castToBiFunction().biFunction().apply(args[0], args[1]);
+            case 3 -> function().castToTriFunction().triFunction().apply(args[0], args[1], args[2]);
+            case 4 -> function().castToQuadFunction().quadFunction().apply(args[0], args[1], args[2], args[3]);
+            case 5 -> function().castToQuintFunction().quintFunction().apply(args[0], args[1], args[2], args[3], args[4]);
+            default -> throw unsupportedParameterCount(args.length);
+        };
+    }
+
+    private IllegalStateException unsupportedParameterCount(final int count) {
+        return new IllegalStateException(
+            function().metadata().label() + " has an unsupported parameter count: " + count + " (max 5)."
         );
     }
 }

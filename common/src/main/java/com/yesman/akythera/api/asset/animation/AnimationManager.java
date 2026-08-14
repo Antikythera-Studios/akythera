@@ -17,6 +17,9 @@ import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.util.HashSet;
+import java.util.Set;
+
 public final class AnimationManager extends DynamicAssetManager<@NotNull AnimationClip> {
     public static final AssetAccessor<AnimationClip> EMPTY_ANIMATION_ACCESSOR = new SingletonAccessor<> (
         Identifier.fromNamespaceAndPath(Akythera.MODID, "empty"),
@@ -37,6 +40,10 @@ public final class AnimationManager extends DynamicAssetManager<@NotNull Animati
         );
 
     public static final AnimationManager INSTANCE = new AnimationManager();
+
+    /// Identifiers whose clip is being read right now. An additive clip reads its reference pose
+    /// mid-load, so the registry is re-entered while one entry is still being produced.
+    private final Set<Identifier> loading = new HashSet<>();
 
     public static AnimationManager getInstance() {
         return INSTANCE;
@@ -76,7 +83,7 @@ public final class AnimationManager extends DynamicAssetManager<@NotNull Animati
     public static AssetAccessor<AnimationClip> accessor(String namespace, String animPath, AssetAccessor<? extends Armature> armature) {
         Identifier fullPath = Identifier.fromNamespaceAndPath(
             namespace,
-            armature.identifier().getPath().replaceAll("armatures/", "animations/") + "/" + animPath
+            armature.identifier().getPath().replaceAll("armatures/", "animationsToReplace/") + "/" + animPath
         );
 
         return (AssetAccessor<AnimationClip>)INSTANCE.issuedAccessor.computeIfAbsent(
@@ -97,16 +104,31 @@ public final class AnimationManager extends DynamicAssetManager<@NotNull Animati
     ) implements AssetAccessor<AnimationClip> {
         @Override
         public AnimationClip get() {
+            // A cached null is a load that already failed — kept until the game reloads, so the
+            // broken file is not re-read on every reference.
+            if (INSTANCE.loadedObjectsRegistry.containsKey(identifier)) {
+                return INSTANCE.loadedObjectsRegistry.get(identifier);
+            }
+
+            if (!INSTANCE.loading.add(identifier)) {
+                throw new ResourceLoadingFailureException(
+                    identifier, "Reference pose cycle: this animation reaches itself through 'ref_pose_provider'.");
+            }
+
             try {
-                return INSTANCE.loadedObjectsRegistry.computeIfAbsent(identifier, id ->
-                    AnimationLoader
-                        .getLoader(id, ComponentsFactory.getImpl().getResourceManager())
-                        .loadAnimationClip(armature)
-                );
+                AnimationClip clip = AnimationLoader
+                    .getLoader(identifier, ComponentsFactory.getImpl().getResourceManager())
+                    .loadAnimationClip(armature);
+
+                INSTANCE.loadedObjectsRegistry.put(identifier, clip);
+
+                return clip;
             } catch (ResourceLoadingFailureException e) {
                 // leave null object for given identifier. live until the game is reloaded
                 INSTANCE.loadedObjectsRegistry.put(identifier, null);
                 throw e;
+            } finally {
+                INSTANCE.loading.remove(identifier);
             }
         }
 

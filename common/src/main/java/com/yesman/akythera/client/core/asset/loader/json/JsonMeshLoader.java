@@ -27,19 +27,26 @@ import java.util.Map;
 public final class JsonMeshLoader implements MeshLoader, JsonAssetLoader {
     private final Identifier resourcePath;
     private final JsonObject jsonObject;
+    private final Metadata metadata;
 
     /// @param resourcePath a resource path identifier
     /// @param resource     a resource object
-    public JsonMeshLoader(Identifier resourcePath, Resource resource)
+    public JsonMeshLoader(Identifier resourcePath, Resource resource, Metadata metadata)
         throws ResourceLoadingFailureException
     {
         this.resourcePath = resourcePath;
         jsonObject = readJsonObject(resource);
+        this.metadata = metadata;
     }
 
     @Override
     public Identifier resourcePath() {
         return resourcePath;
+    }
+
+    @Override
+    public Metadata metadata() {
+        return metadata;
     }
 
     @Override
@@ -76,6 +83,8 @@ public final class JsonMeshLoader implements MeshLoader, JsonAssetLoader {
                 staticMeshBuilder.addPart(UNGROUPED_PART_NAME, VertexBuilder.create(ParseUtils.jsonArrayToPrimitiveInt(indices.get("array").getAsJsonArray())));
             }
 
+            staticMeshBuilder.metadata(metadata);
+
             return meshConstructor.construct(staticMeshBuilder);
         } catch (JsonSyntaxException e) {
             throw new ResourceLoadingFailureException(resourcePath, e);
@@ -109,8 +118,8 @@ public final class JsonMeshLoader implements MeshLoader, JsonAssetLoader {
             int[] deformationFromToArray = new int[affectingBoneCounts.size()*2];
 
             for (int i = 0; i < affectingBoneIdsAndWeightIndices.size() / 2; i++) {
-                affectingBoneIdArray[i] = GsonHelper.convertToInt(affectingBoneCounts.get(i*2), "vindices");
-                affectingWeightIndexArray[i] = GsonHelper.convertToInt(affectingBoneCounts.get(i*2+1), "vindices");
+                affectingBoneIdArray[i] = GsonHelper.convertToInt(affectingBoneIdsAndWeightIndices.get(i*2), "vindices");
+                affectingWeightIndexArray[i] = GsonHelper.convertToInt(affectingBoneIdsAndWeightIndices.get(i*2+1), "vindices");
             }
 
             int from = 0;
@@ -142,6 +151,8 @@ public final class JsonMeshLoader implements MeshLoader, JsonAssetLoader {
             if (indices != null) {
                 skeletalMeshBuilder.addPart(UNGROUPED_PART_NAME, VertexBuilder.create(ParseUtils.jsonArrayToPrimitiveInt(indices.get("array").getAsJsonArray())));
             }
+
+            skeletalMeshBuilder.metadata(metadata);
 
             return meshConstructor.construct(skeletalMeshBuilder);
         } catch (JsonSyntaxException e) {

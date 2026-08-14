@@ -1,5 +1,6 @@
 package com.yesman.akythera.core.util;
 
+import com.google.common.base.Suppliers;
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
 import com.mojang.serialization.Codec;
@@ -8,16 +9,20 @@ import com.mojang.serialization.MapCodec;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.util.helper.ParseUtils;
 import net.minecraft.core.Registry;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import org.jetbrains.annotations.ApiStatus;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
 /// A manager class for [EnumerableDataBlock]
 ///
@@ -36,8 +41,9 @@ public final class EnumerableDataBlockManager<T extends EnumerableDataBlock> {
 
     private final String enumType;
 
-    private final Codec<T> nameCodec;
     private final MapCodec<T> mapCodec;
+    private final Supplier<Codec<T>> byNameCodec;
+    private final Supplier<StreamCodec<? super RegistryFriendlyByteBuf, T>> streamCodec;
 
     private int lastOrdinal = 0;
 
@@ -48,12 +54,25 @@ public final class EnumerableDataBlockManager<T extends EnumerableDataBlock> {
         this.enumType = enumName;
         this.mapCodec = mapCodec;
 
-        nameCodec = Identifier.CODEC.comapFlatMap(
+        // codecs are memorized suppliers for non-
+        byNameCodec = Suppliers.memoize(() -> Identifier.CODEC.comapFlatMap(
             identifier -> get(identifier)
                 .map(DataResult::success)
                 .orElseGet(() -> DataResult.error(() -> String.format("Unknown enum object %s in %s", enumName, identifier))),
             EnumerableDataBlock::identifier
-        );
+        ));
+
+        streamCodec = Suppliers.memoize(() -> new StreamCodec<> () {
+            @Override
+            public void encode(@NonNull RegistryFriendlyByteBuf buffer, @NonNull T obj) {
+                buffer.writeInt(obj.universalOrdinal());
+            }
+
+            @Override
+            public @NonNull T decode(@NonNull RegistryFriendlyByteBuf buffer) {
+                return getOrThrow(buffer.readInt());
+            }
+        });
 
         directoryKey = ResourceKey.createRegistryKey(Identifier.fromNamespaceAndPath(namespace, "datablock/" + enumName));
     }
@@ -73,7 +92,19 @@ public final class EnumerableDataBlockManager<T extends EnumerableDataBlock> {
     ///
     /// This must be called in a constructor of mod entrypoint class
     public void registerEnumCls(final String modId, final Class<? extends EnumerableDataBlock> cls) {
-        TreeSet<Class<? extends EnumerableDataBlock>> treeset = enumClasses.computeIfAbsent(modId, _ -> new TreeSet<>(Comparator.comparing((Class<? extends EnumerableDataBlock> c) -> c.getSimpleName())));
+        // Checks whether the same class has registered with different mod id.
+        for (Map.Entry<String, TreeSet<Class<? extends EnumerableDataBlock>>> e : enumClasses.entrySet()) {
+            if (e.getValue().contains(cls)) {
+                Akythera.LOGGER.error("{} is already registered. Skipped.", cls.getCanonicalName());
+                return;
+            }
+        }
+
+        TreeSet<Class<? extends EnumerableDataBlock>> treeset = enumClasses.computeIfAbsent(
+            modId,
+            _ -> new TreeSet<>(Comparator.comparing((Class<? extends EnumerableDataBlock> c) -> c.getSimpleName()))
+        );
+
         treeset.add(cls);
         Akythera.LOGGER.debug("Registered Extensible Enum {} for {}", enumType, modId);
     }
@@ -213,11 +244,15 @@ public final class EnumerableDataBlockManager<T extends EnumerableDataBlock> {
     }
 
     public Codec<T> getNameCodec() {
-        return nameCodec;
+        return byNameCodec.get();
     }
 
     public MapCodec<T> getMapCodec() {
         return mapCodec;
+    }
+
+    public StreamCodec<? super RegistryFriendlyByteBuf, T> getStreamCodec() {
+        return streamCodec.get();
     }
 
     public ResourceKey<Registry<T>> directoryKey() {

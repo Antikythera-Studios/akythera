@@ -2,9 +2,9 @@ package com.yesman.akythera.core.animation.driver;
 
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.animation.keyframe.Pose;
-import com.yesman.akythera.core.animation.notify.AnimationNotifyTrack;
 import com.yesman.akythera.core.animation.playable.AnimationMontage;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
+import com.yesman.akythera.core.util.helper.MathUtils;
 import com.yesman.akythera.core.util.helper.ParseUtils;
 import net.minecraft.core.Holder;
 import net.minecraft.world.entity.Entity;
@@ -22,11 +22,11 @@ public final class AnimationPlayer implements AnimationDriver {
     private float fadeTime;
     private boolean isFinished;
 
-    /// Last time updated in fixed tick. Memorized for [AnimationNotifyTrack].
+    /// Last time updated in fixed tick. Memorized for [PlayableAnimation#tick].
     private float lastUpdatedTime;
 
     // true if fading in, false if fading out
-    private boolean fadingInOrElseOut;
+    private boolean fadingInOrOut;
 
     /// Custom control of animation looping, has higher priority of [PlayableAnimation#loops]
     private final @Nullable Boolean loops;
@@ -42,7 +42,7 @@ public final class AnimationPlayer implements AnimationDriver {
     /// Restart the player from 0 time
     @Override
     public void start() {
-        fadingInOrElseOut = true;
+        fadingInOrOut = true;
         isFinished = false;
         elapsedTime = 0.0F;
         lastUpdatedTime = 0.0F;
@@ -50,7 +50,7 @@ public final class AnimationPlayer implements AnimationDriver {
 
     @Override
     public void terminate() {
-        fadingInOrElseOut = false;
+        fadingInOrOut = false;
     }
 
     /// Drives the underlying [PlayableAnimation]'s notify track for this tick.
@@ -63,7 +63,7 @@ public final class AnimationPlayer implements AnimationDriver {
 
     @Override
     public void update(float frameTime) {
-        if (fadingInOrElseOut) {
+        if (fadingInOrOut) {
             fadeTime = Math.clamp(fadeTime + frameTime, 0.0F, playableAnimation.value().fadeInTime());
         } else {
             fadeTime = Math.clamp(fadeTime - frameTime, 0.0F, playableAnimation.value().fadeOutTime());
@@ -93,16 +93,21 @@ public final class AnimationPlayer implements AnimationDriver {
 
     @Override
     public float getWeight() {
-        if (fadingInOrElseOut) {
-            return fadeTime / playableAnimation.value().fadeInTime();
+        if (fadingInOrOut) {
+            return MathUtils.safeDivision(fadeTime, playableAnimation.value().fadeInTime(), 1.0F);
         } else {
-            return fadeTime / playableAnimation.value().fadeOutTime();
+            return MathUtils.safeDivision(fadeTime, playableAnimation.value().fadeOutTime(), 0.0F);
         }
     }
 
     @Override
     public boolean isFinished() {
         return isFinished;
+    }
+
+    @Override
+    public boolean fadingInOrOut() {
+        return fadingInOrOut;
     }
 
     @Override

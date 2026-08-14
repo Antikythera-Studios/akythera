@@ -1,8 +1,12 @@
 package com.yesman.akythera.neoforged.core;
 
+import com.yesman.akythera.api.animation.animator.AnimationInterfaceKey;
 import com.yesman.akythera.core.Akythera;
+import com.yesman.akythera.core.animation.driver.AnimationLayerSignature;
+import com.yesman.akythera.core.animation.driver.FSMAnimationState;
 import com.yesman.akythera.core.networking.NetworkingHelper;
 import com.yesman.akythera.neoforged.core.networking.NeoForgedNetworkingHelper;
+import com.yesman.akythera.platform.ModPlatformProvider;
 import com.yesman.akythera.platform.neoforged.NeoForgedModPlatform;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
@@ -14,9 +18,9 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
 @Mod(Akythera.MODID)
 public class AkytheraNeoForged {
     public AkytheraNeoForged(IEventBus modEventBus, ModContainer modContainer) {
-        NeoForgedModPlatform neoForgedModPlatform = new NeoForgedModPlatform();
-        Akythera.initializePlatform(neoForgedModPlatform);
+        NeoForgedModPlatform neoForgedModPlatform = (NeoForgedModPlatform) ModPlatformProvider.get();
         Akythera.onModConstructed();
+        Akythera.registerBuiltInDataBlockClasses();
 
         // Register mod bus events
 		modEventBus.addListener(this::doCommonStuff);

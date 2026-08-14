@@ -8,10 +8,13 @@
 //
 // * configureModPublish: with the mod loader and output JAR file, since it's different based on the mod toolchain.
 //    This will set up the mod publishing to CurseForge and Modrinth.
+// * configureMavenCentralPublish: with the mod loader. This will set up publishing
+//    the platform JAR file to Maven Central (via the "publishToMavenCentral" task).
 
 plugins {
     id("multiloader-base")
     id("me.modmuss50.mod-publish-plugin")
+    id("com.vanniktech.maven.publish")
 }
 
 val commonProject: Project = project(":common")

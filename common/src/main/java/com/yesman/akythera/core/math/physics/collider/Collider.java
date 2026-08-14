@@ -1,55 +1,63 @@
 package com.yesman.akythera.core.math.physics.collider;
 
-import com.mojang.serialization.Codec;
+import com.mojang.serialization.MapCodec;
+import com.yesman.akythera.api.component.ComponentAttachable;
+import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.core.asset.armature.BoneSocket;
+import com.yesman.akythera.core.blueprint.ComponentBlueprint;
 import com.yesman.akythera.core.math.Transform;
-import com.yesman.akythera.core.math.physics.collider.instance.ColliderInstance;
+import com.yesman.akythera.core.math.physics.collider.component.ColliderComponent;
 import net.minecraft.world.phys.AABB;
 
-/// Detects whether two objects are overlapped in a 3D space.
+/// The authored shape of a collider, and the blueprint of the [ColliderComponent] that carries it
+/// at a transform. Compatible with Minecraft's collider, [AABB].
 ///
-/// Compatible with Minecraft's collider, [AABB].
+/// Attachable under anything that hosts components — a [BoneSocket], an [EntityPatch], anything —
+/// which is why the host is taken as a plain [ComponentAttachable] and never read: a collider is
+/// placed by whoever queries it, not by what it hangs off.
 ///
-/// Beware colliders are not directly used to check collision.
-/// [ColliderInstance], the stateful version of colliders, is
-/// in charge of detecting intersects of objects in a world.
-public abstract class Collider {
-    public static final Codec<? extends Collider> CODEC =
+/// Beware colliders are not directly used to check collision — [ColliderComponent] is.
+public abstract class Collider implements ComponentBlueprint<ColliderComponent<?>, ComponentAttachable> {
+    /// Shape dispatch. Keyed `shape`, not `type`: the component blueprint registry already spends
+    /// `type` on the component id (`akythera:collider`) in the very same object.
+    public static final MapCodec<Collider> MAP_CODEC =
         ColliderType.ENUM_MANAGER.getNameCodec()
-            .dispatch(
-                Collider::type,
-                ColliderType::mapCodec
-            );
-
-    /// Cast to captured type of [#CODEC]
-    @SuppressWarnings("unchecked")
-    public static <T extends Collider> T cast(Collider collider) {
-        return (T)collider;
-    }
+            .dispatchMap("shape", Collider::type, ColliderType::mapCodec);
 
     /// Transform of a pivot point
     ///
-    /// Kept the transform info for [Codec], while most collider
+    /// Kept the transform info for [MapCodec], while most collider
     /// components are already applied by pivot transform.
     private final Transform pivotTransform;
 
     /// Creates interpolated colliders between previous and next tick
     private final int interpolations;
 
-    public Collider(Transform pivotTransform, int interpolations) {
+    public Collider(final Transform pivotTransform, final int interpolations) {
         this.pivotTransform = pivotTransform;
         this.interpolations = interpolations;
     }
 
-    /// Creates a stateful collider instance
-    public abstract ColliderInstance<?> createInstance(Transform transform);
+    /// Builds this shape's component. `host` is unread — it exists only so any component host can
+    /// attach a collider; the component starts at the identity transform and is placed by whoever
+    /// runs the collision query, through [ColliderComponent#applyTransform].
+    @Override
+    public abstract ColliderComponent<?> instantiate(final ComponentAttachable host);
 
     public abstract ColliderType type();
 
+    /// Every shape rides the one dispatching codec, so `akythera:collider` is a single registered
+    /// component type with [#type] choosing the shape inside it.
+    @Override
+    public final MapCodec<Collider> mapCodec() {
+        return MAP_CODEC;
+    }
+
     public Transform getPivotTransform() {
-        return this.pivotTransform;
+        return pivotTransform;
     }
 
     public int getInterpolations() {
-        return this.interpolations;
+        return interpolations;
     }
 }

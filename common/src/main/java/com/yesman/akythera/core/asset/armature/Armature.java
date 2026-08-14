@@ -34,7 +34,7 @@ public class Armature {
     /// A pose with identity transform matrices, DO NOT modify the pose.
     private final Pose tPose;
 
-    public Armature(Bone rootBone, int boneCount, Map<String, Bone> bonesByName) {
+    public Armature(final Bone rootBone, final int boneCount, final Map<String, Bone> bonesByName) {
         this.boneCount = boneCount;
         this.rootBone = rootBone;
         this.boneByName = bonesByName;
@@ -51,22 +51,22 @@ public class Armature {
     }
 
     /// Check whether named bone exists
-    public boolean hasBone(String name) {
+    public boolean hasBone(final String name) {
         return boneByName.containsKey(name);
     }
 
     /// Returns a bone by ID. the ID are specified by vertex group order in Blender.
-    public @Nullable Bone getBoneById(int id) {
+    public @Nullable Bone getBoneById(final int id) {
         return boneById.get(id);
     }
 
     /// Returns a bone by name
-    public @Nullable Bone getBoneByName(String name) {
+    public @Nullable Bone getBoneByName(final String name) {
         return boneByName.get(name);
     }
 
     /// Initializing purpose
-    public @Nullable Bone getBoneByName(String name, Consumer<NoSuchElementException> exceptionHandler) {
+    public @Nullable Bone getBoneByName(final String name, final Consumer<NoSuchElementException> exceptionHandler) {
         if (!boneByName.containsKey(name)) {
             exceptionHandler.accept(new NoSuchElementException("No bone named " + name));
             return null;
@@ -76,7 +76,7 @@ public class Armature {
     }
 
     /// Initializing purpose
-    public @NonNull Bone getBoneByNameOrThrow(String name) {
+    public @NonNull Bone getBoneByNameOrThrow(final String name) {
         if (!boneByName.containsKey(name)) {
             throw new NoSuchElementException("No bone named " + name);
         }
@@ -85,7 +85,7 @@ public class Armature {
     }
 
     /// Iterate bones (tree order is not ensured)
-    public void visitBones(Consumer<Bone> bone) {
+    public void visitBones(final Consumer<Bone> bone) {
         boneByName.values().forEach(bone);
     }
 

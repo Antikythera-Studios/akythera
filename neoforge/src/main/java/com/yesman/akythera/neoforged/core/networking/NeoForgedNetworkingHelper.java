@@ -52,9 +52,7 @@ public final class NeoForgedNetworkingHelper extends NetworkingHelper {
 
     /// Maps a payload handler to use [PayloadContext] instead [IPayloadContext]
     private static <T extends CustomPacketPayload> IPayloadHandler<@NonNull T> mapContext(BiConsumer<T, PayloadContext> original) {
-        return (payload, context) -> {
-            original.accept(payload, PayloadContext.createContext(context.player()));
-        };
+        return (payload, context) -> original.accept(payload, PayloadContext.createContext(context.player()));
     }
 
     /// Register payload types and their handlers
@@ -65,20 +63,29 @@ public final class NeoForgedNetworkingHelper extends NetworkingHelper {
     public static void register(final RegisterPayloadHandlersEvent event) {
         final PayloadRegistrar payloadRegistrar = event.registrar(PROTOCOL_VERSION);
 
-        AkytheraPayloadTypes.CLIENT_BOUND.forEach(payloadChannel -> {
+        AkytheraPayloadTypes.CLIENT_BOUND.forEach(payloadChannel ->
             payloadRegistrar.playToClient(
                 (CustomPacketPayload.Type<CustomPacketPayload>)payloadChannel.type(),
                 (StreamCodec<? super RegistryFriendlyByteBuf, CustomPacketPayload>)payloadChannel.streamCodec(),
                 mapContext((BiConsumer<CustomPacketPayload, PayloadContext>)payloadChannel.handler())
-            );
-        });
+            )
+        );
 
-        AkytheraPayloadTypes.SERVER_BOUND.forEach(payloadChannel -> {
+        AkytheraPayloadTypes.SERVER_BOUND.forEach(payloadChannel ->
             payloadRegistrar.playToServer(
                 (CustomPacketPayload.Type<CustomPacketPayload>)payloadChannel.type(),
                 (StreamCodec<? super RegistryFriendlyByteBuf, CustomPacketPayload>)payloadChannel.streamCodec(),
                 mapContext((BiConsumer<CustomPacketPayload, PayloadContext>)payloadChannel.handler())
-            );
-        });
+            )
+        );
+
+        AkytheraPayloadTypes.BI_DIRECTIONAL.forEach(payloadChannel ->
+            payloadRegistrar.playBidirectional(
+                (CustomPacketPayload.Type<CustomPacketPayload>)payloadChannel.type(),
+                (StreamCodec<? super RegistryFriendlyByteBuf, CustomPacketPayload>)payloadChannel.streamCodec(),
+                mapContext((BiConsumer<CustomPacketPayload, PayloadContext>)payloadChannel.handler()),
+                mapContext((BiConsumer<CustomPacketPayload, PayloadContext>)payloadChannel.handler())
+            )
+        );
     }
 }

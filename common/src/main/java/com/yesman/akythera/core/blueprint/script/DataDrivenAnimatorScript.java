@@ -58,7 +58,7 @@ public final class DataDrivenAnimatorScript
         variables.setValue("poseCaches", cachedPoseDrivers);
 
         try {
-            getBlueprint().value().construct().execute(this, new ScriptNode.ExecutionContext(variables, false));
+            getBlueprint().value().construct().execute(this, new ScriptNode.ExecutionContext(variables));
         } catch (Throwable throwable) {
             constructThrownError = true;
 
@@ -83,7 +83,7 @@ public final class DataDrivenAnimatorScript
         variables.setValue("partialTick", partialTick);
 
         try {
-            getBlueprint().value().update().execute(this, new ScriptNode.ExecutionContext(variables, false));
+            getBlueprint().value().update().execute(this, new ScriptNode.ExecutionContext(variables));
         } catch (Throwable throwable) {
             updateThrownError = true;
 
@@ -107,7 +107,7 @@ public final class DataDrivenAnimatorScript
         variables.setValue("layers", layers);
 
         try {
-            return getBlueprint().value().poseGetter().execute(this, new ScriptNode.ExecutionContext(variables, false));
+            return getBlueprint().value().poseGetter().execute(this, new ScriptNode.ExecutionContext(variables));
         } catch (Throwable throwable) {
             getPoseThrownError = true;
 

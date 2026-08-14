@@ -1,0 +1,155 @@
+// No `#version` line: the backend prepends its own preamble, along with the `AKYTHERA_GL` or
+// `AKYTHERA_VULKAN` define that selects the uniform declarations below.
+
+layout(local_size_x = 128) in;
+
+struct VertexData {
+    float px, py, pz, nx, ny, nz, u, v;
+    int boneFrom, boneTo, part;
+};
+
+struct BoneWeight {
+    int boneId;
+    float weight;
+};
+
+// DefaultVertexFormat.ENTITY, 36 bytes. Every field's offset is fixed by the vertex format
+// the backend builds the vertex array from; do not reorder.
+struct VertexAttr {
+    float px, py, pz;
+    uint color;
+    float u0, v0;
+    uint uv1;
+    uint uv2;
+    uint nor;
+};
+
+// DefaultVertexFormat.POSITION_TEX_COLOR, 24 bytes.
+struct OutlineAttr {
+    float px, py, pz;
+    float u0, v0;
+    uint color;
+};
+
+layout(std430, binding = 0) readonly buffer PoseBuffer {
+    mat4 poses[];
+};
+
+layout(std430, binding = 1) readonly buffer VertexBuffer {
+    VertexData vertices[];
+};
+
+layout(std430, binding = 2) readonly buffer BoneWeightPool {
+    BoneWeight boneWeights[];
+};
+
+layout(std430, binding = 3) readonly buffer PartVisibilityFlagsBuffer {
+    int part_hidden_flags[];
+};
+
+layout(std430, binding = 4) writeonly buffer VertexOut {
+    VertexAttr out_vert[];
+};
+
+layout(std430, binding = 5) writeonly buffer OutlineOut {
+    OutlineAttr out_outline[];
+};
+
+// The two halves declare the same names in the same order. Vulkan has no uniforms outside a block,
+// and a block with no instance name puts its members in the global scope, so the body below reads
+// identically either way.
+//
+// The push-constant block is exactly 128 bytes, which is the smallest `maxPushConstantsSize` a
+// Vulkan implementation may report. Both colors are packed rather than `vec4` to stay under it.
+#ifdef AKYTHERA_VULKAN
+layout(push_constant, std430) uniform Uniforms {
+    mat4 model_view_matrix;
+    mat3 normal_matrix;
+    uint colorIn;
+    uint outlineColorIn;
+    uint uv1In;
+    uint uv2In;
+};
+#else
+uniform mat4 model_view_matrix;
+uniform mat3 normal_matrix;
+uniform uint colorIn;
+uniform uint outlineColorIn;
+uniform uint uv1In;
+uniform uint uv2In;
+#endif
+
+bool isPartHidden(int part) {
+    return ((part_hidden_flags[part / 32] >> (part % 32)) & 1) != 0;
+}
+
+// A hidden part collapses onto the origin. Visibility is per part and a triangle never straddles
+// two parts, so all three of its vertices collapse together and the rasterizer drops the
+// zero-area triangle.
+void storeCollapsed(uint elem_idx) {
+    out_vert[elem_idx].px = 0.0;
+    out_vert[elem_idx].py = 0.0;
+    out_vert[elem_idx].pz = 0.0;
+    out_vert[elem_idx].color = 0u;
+    out_vert[elem_idx].u0 = 0.0;
+    out_vert[elem_idx].v0 = 0.0;
+    out_vert[elem_idx].uv1 = uv1In;
+    out_vert[elem_idx].uv2 = uv2In;
+    out_vert[elem_idx].nor = 0u;
+
+    out_outline[elem_idx].px = 0.0;
+    out_outline[elem_idx].py = 0.0;
+    out_outline[elem_idx].pz = 0.0;
+    out_outline[elem_idx].u0 = 0.0;
+    out_outline[elem_idx].v0 = 0.0;
+    out_outline[elem_idx].color = 0u;
+}
+
+void main() {
+    uint vertex_id = gl_GlobalInvocationID.x;
+
+    if (vertex_id >= uint(vertices.length())) {
+        return;
+    }
+
+    VertexData v = vertices[vertex_id];
+
+    if (isPartHidden(v.part)) {
+        storeCollapsed(vertex_id);
+        return;
+    }
+
+    vec4 position = vec4(v.px, v.py, v.pz, 1.0);
+    vec4 normal = vec4(normalize(vec3(v.nx, v.ny, v.nz)), 0.0);
+    vec4 skinnedPosition = vec4(0.0);
+    vec4 skinnedNormal = vec4(0.0);
+
+    for (int i = v.boneFrom; i < v.boneTo; ++i) {
+        BoneWeight bone = boneWeights[i];
+
+        if (bone.weight > 0.0) {
+            skinnedPosition += (poses[bone.boneId] * position) * bone.weight;
+            skinnedNormal += (poses[bone.boneId] * normal) * bone.weight;
+        }
+    }
+
+    vec3 finalPosition = (model_view_matrix * skinnedPosition).xyz;
+    vec3 finalNormal = normalize(normal_matrix * skinnedNormal.xyz);
+
+    out_vert[vertex_id].px = finalPosition.x;
+    out_vert[vertex_id].py = finalPosition.y;
+    out_vert[vertex_id].pz = finalPosition.z;
+    out_vert[vertex_id].color = colorIn;
+    out_vert[vertex_id].u0 = v.u;
+    out_vert[vertex_id].v0 = v.v;
+    out_vert[vertex_id].uv1 = uv1In;
+    out_vert[vertex_id].uv2 = uv2In;
+    out_vert[vertex_id].nor = packSnorm4x8(vec4(finalNormal, 0.0));
+
+    out_outline[vertex_id].px = finalPosition.x;
+    out_outline[vertex_id].py = finalPosition.y;
+    out_outline[vertex_id].pz = finalPosition.z;
+    out_outline[vertex_id].u0 = v.u;
+    out_outline[vertex_id].v0 = v.v;
+    out_outline[vertex_id].color = outlineColorIn;
+}

@@ -2,7 +2,7 @@ package com.yesman.akythera.core.networking.payload.clientbound;
 
 import com.yesman.akythera.core.Akythera;
 import net.minecraft.nbt.Tag;
-import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -17,7 +17,7 @@ public record ClientBoundDataBlockSync(Identifier dataBlockType, Map<Identifier,
     public static final CustomPacketPayload.Type<ClientBoundDataBlockSync> TYPE =
         new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(Akythera.MODID, "data_block_sync_client"));
 
-    public static final StreamCodec<FriendlyByteBuf, ClientBoundDataBlockSync> STREAM_CODEC =
+    public static final StreamCodec<RegistryFriendlyByteBuf, ClientBoundDataBlockSync> STREAM_CODEC =
         StreamCodec.composite(
             Identifier.STREAM_CODEC,
             ClientBoundDataBlockSync::dataBlockType,

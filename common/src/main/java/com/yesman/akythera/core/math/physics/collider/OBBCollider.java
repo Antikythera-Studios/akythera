@@ -3,8 +3,9 @@ package com.yesman.akythera.core.math.physics.collider;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.math.Transform;
-import com.yesman.akythera.core.math.physics.collider.instance.OBBColliderInstance;
+import com.yesman.akythera.core.math.physics.collider.component.OBBColliderComponent;
 import com.yesman.akythera.core.util.helper.VectorUtils;
 import net.minecraft.util.Util;
 import net.minecraft.world.phys.Vec3;
@@ -51,35 +52,35 @@ public final class OBBCollider extends Collider {
     public OBBCollider(Transform transform, Vec3 length, int interpolations) {
         super(transform, interpolations);
 
-        this.upwardVertices[0] = transform.mulDirection(new Vec3(length.x * 0.5D, length.y * 0.5D, -length.z * 0.5D));
-        this.upwardVertices[1] = transform.mulDirection(new Vec3(length.x * 0.5D, length.y * 0.5D, length.z * 0.5D));
-        this.upwardVertices[2] = transform.mulDirection(new Vec3(-length.x * 0.5D, length.y * 0.5D, length.z * 0.5D));
-        this.upwardVertices[3] = transform.mulDirection(new Vec3(-length.x * 0.5D, length.y * 0.5D, -length.z * 0.5D));
-        this.normals[0] = VectorUtils.rotateByQuaternion(transform.rot(), 1.0D, 0.0D, 0.0D);
-        this.normals[1] = VectorUtils.rotateByQuaternion(transform.rot(), 0.0D, 1.0D, 0.0D);
-        this.normals[2] = VectorUtils.rotateByQuaternion(transform.rot(), 0.0D, 0.0D, 1.0D);
         this.length = length;
+        upwardVertices[0] = transform.mulDirection(new Vec3(length.x * 0.5D, length.y * 0.5D, -length.z * 0.5D));
+        upwardVertices[1] = transform.mulDirection(new Vec3(length.x * 0.5D, length.y * 0.5D, length.z * 0.5D));
+        upwardVertices[2] = transform.mulDirection(new Vec3(-length.x * 0.5D, length.y * 0.5D, length.z * 0.5D));
+        upwardVertices[3] = transform.mulDirection(new Vec3(-length.x * 0.5D, length.y * 0.5D, -length.z * 0.5D));
+        normals[0] = VectorUtils.rotateByQuaternion(transform.rot(), 1.0D, 0.0D, 0.0D);
+        normals[1] = VectorUtils.rotateByQuaternion(transform.rot(), 0.0D, 1.0D, 0.0D);
+        normals[2] = VectorUtils.rotateByQuaternion(transform.rot(), 0.0D, 0.0D, 1.0D);
     }
 
     public Vec3 getUpwardVertex(int index) {
-        return this.upwardVertices[index];
+        return upwardVertices[index];
     }
 
     public Vec3 getNormal(int index) {
-        return this.normals[index];
+        return normals[index];
     }
 
     public Vec3 getLength() {
-        return this.length;
+        return length;
     }
 
     @Override
-    public OBBColliderInstance createInstance(Transform transform) {
-        return new OBBColliderInstance(this, transform);
+    public OBBColliderComponent instantiate(final ComponentAttachable host) {
+        return new OBBColliderComponent(this, Transform.identity());
     }
 
     @Override
     public ColliderType type() {
-        return EpicFightColliderType.ORIENTATED_BOUNDING_BOX;
+        return AkytheraColliderType.ORIENTATED_BOUNDING_BOX;
     }
 }

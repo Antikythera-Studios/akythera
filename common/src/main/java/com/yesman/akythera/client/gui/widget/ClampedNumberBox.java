@@ -214,6 +214,11 @@ public class ClampedNumberBox<T extends Number> extends AbstractContainerWidget 
         }
     }
 
+    /// Turns the text field read-only. The value still refreshes through [#setValue].
+    public void setEditable(boolean editable) {
+        editBox.setEditable(editable);
+    }
+
     public void increase() {
         fireDiscreteCommit(increment);
     }

@@ -11,7 +11,7 @@ public interface FlowNode extends ScriptNode {
         node ->
             switch (node) {
                 case SequenceNode _             -> "sequence_node";
-                case BranchNode _            -> "branching_node";
+                case BranchNode _               -> "branching_node";
                 case FlowFunctionNode _         -> "flow_function_node";
                 case ScriptVariableSetterNode _ -> "script_variable_setter";
                 default -> throw new IllegalArgumentException(

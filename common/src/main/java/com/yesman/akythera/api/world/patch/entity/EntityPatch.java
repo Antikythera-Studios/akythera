@@ -1,11 +1,9 @@
 package com.yesman.akythera.api.world.patch.entity;
 
-import com.yesman.akythera.api.animation.ArmatureComponent;
+import com.mojang.datafixers.util.Pair;
 import com.yesman.akythera.api.asset.AnimatableObject;
-import com.yesman.akythera.api.component.PatchComponent;
-import com.yesman.akythera.api.component.ReloadablePatchComponent;
-import com.yesman.akythera.api.component.SerializablePatchComponent;
-import com.yesman.akythera.api.component.TickablePatchComponent;
+import com.yesman.akythera.api.component.*;
+import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.event.BuiltInEventHooks;
 import com.yesman.akythera.api.event.entity.EntityConstructEvent;
 import com.yesman.akythera.api.event.entity.HandlePersistentDataEvent;
@@ -28,6 +26,7 @@ import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.text.MessageFormat;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -37,14 +36,14 @@ import java.util.Map;
 /// API is here.
 ///
 /// Class Inheritance opened, but not recommended for commonly-shared entities
-/// like player. Use the [PatchComponent] system for custom behaviors you want
+/// like player. Use the [DynamicPatchComponent] system for custom behaviors you want
 /// while keeping compatibility with other addons.
 ///
 /// Register custom entity patches via [ComponentsFactory#registerEntityPatchProvider].
-public class EntityPatch<T extends Entity> implements AnimatableObject, PatchComponent<T> {
-    /// A owner of this patch. Use [#getOwner()] to access this field.
+public class EntityPatch<T extends Entity> implements AnimatableObject, ComponentAttachable {
+    /// An owner of the patch. Use [#getOriginal()] to access this field.
     @NonNull
-	private final T owner;
+	private final T original;
 
     // Null if entity patch is provided by custom
     @Nullable
@@ -53,34 +52,37 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, PatchCom
     /// Dynamic event listeners
     private final EntityEventListener entityEventListener;
 
-    private final Map<Class<? extends PatchComponent<T>>, ? extends PatchComponent<T>> components;
+    private final Map<String, ? extends PatchComponent> components;
+
+    /// Components by type. Each component is unique in the patch
+    private final Map<Class<? extends UniqueComponent>, ? extends UniqueComponent> uniqueComponents;
 
     // Constructor for hardcoded entity patches. Register components manually using
     // `BuiltInEventHooks.Entity.CONSTRUCTED` event in subclasses.
-    public EntityPatch(@NonNull final T owner) {
-        this((EntityPatchBlueprint)null, owner);
+    public EntityPatch(@NonNull final T original) {
+        this((EntityPatchBlueprint)null, original);
     }
 
     // Data-driven entity patches
-    public EntityPatch(final Holder.@Nullable Reference<EntityPatchBlueprint> blueprint, @NonNull final T owner) {
-        this(blueprint == null ? null : blueprint.value(), owner);
+    public EntityPatch(final Holder.@Nullable Reference<EntityPatchBlueprint> blueprint, @NonNull final T original) {
+        this(blueprint == null ? null : blueprint.value(), original);
     }
 
     // Generate entity patch components by script.
     @SuppressWarnings("unchecked")
-    public EntityPatch(final EntityPatchBlueprint blueprint, @NonNull final T owner) {
-        this.owner = owner;
+    public EntityPatch(final EntityPatchBlueprint blueprint, @NonNull final T original) {
+        this.original = original;
         this.script = blueprint == null ? null : blueprint.instantiate((EntityPatch<Entity>)this);
 
         entityEventListener = new EntityEventListener(this);
         buildEventListeners();
 
-        Map<Class<? extends PatchComponent<T>>, PatchComponent<T>> componentGather = new HashMap<>();
+        Map<String, PatchComponent> componentGather = new HashMap<>();
         EntityConstructEvent event = new EntityConstructEvent(this, componentGather, false);
 
         if (script != null) {
-            for (ComponentBlueprint<?, ?> componentBp : script.componentsToAttach()) {
-                event.addComponent(((ComponentBlueprint<?, Object>)componentBp).instantiate(this));
+            for (Map.Entry<String, ComponentBlueprint<?, ?>> entry : script.componentsToAttach().entrySet()) {
+                event.addComponent(entry.getKey(), ((ComponentBlueprint<?, Object>)entry.getValue()).instantiate(this));
             }
 
             script.onConstruct();
@@ -90,31 +92,65 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, PatchCom
 
         // Type casting exception may occur, but this is not the engine's responsibility.
         components = Collections.unmodifiableMap(componentGather);
+
+        Map<Class<? extends UniqueComponent>, UniqueComponent> uniqueComponentMap = new HashMap<>();
+
+        for (Map.Entry<String, ? extends PatchComponent> entry : components.entrySet()) {
+            if (entry.getValue() instanceof UniqueComponent uc) {
+                if (uniqueComponentMap.containsKey(uc.getClass())) {
+                    throw new IllegalStateException(
+                        MessageFormat.format("""
+                            Detected more than one component of {0}, {0} is UniqueComponent that does not allow duplicated types of components. {1} must be removed to properly launch the game.
+                        """, uc.getClass(), entry.getKey())
+                    );
+                }
+
+                uniqueComponentMap.put(uc.getClass(), uc);
+            }
+        }
+
+        uniqueComponents = Collections.unmodifiableMap(uniqueComponentMap);
     }
 
     /// Copy constructor. Called on datapack reload and dimension changes.
     @SuppressWarnings({"unchecked", "rawtypes"})
     public EntityPatch(final EntityPatch<T> copyTarget) {
-        owner = copyTarget.owner;
+        original = copyTarget.original;
         script = copyTarget.script;
 
         // Note: event listener must be fully reloaded with new lambda because the old lambda points the old entity patch's methods.
         entityEventListener = new EntityEventListener(this);
         buildEventListeners();
 
-        final Map<Class<? extends PatchComponent<T>>, PatchComponent<T>> componentGather = new HashMap<>();
+        final Map<String, PatchComponent> componentGather = new HashMap<>();
 
-        copyTarget.components.values().stream()
+        copyTarget.components.entrySet().stream()
             .map(entry ->
-                entry instanceof ReloadablePatchComponent reloadableComponent ? reloadableComponent.getRenewed(this) : entry
-            ).forEach(renewedComponent ->
-                componentGather.put((Class<? extends PatchComponent<T>>)renewedComponent.getClass(), renewedComponent)
+                Pair.of(
+                    entry.getKey(),
+                    entry.getValue() instanceof DynamicPatchComponent reloadableComponent
+                        ? reloadableComponent.getRenewed(this)
+                        : entry.getValue()
+                )
+            ).forEach(pair ->
+                componentGather.put(pair.getFirst(), pair.getSecond())
             );
 
         EntityConstructEvent event = new EntityConstructEvent(this, componentGather, true);
         BuiltInEventHooks.Entity.CONSTRUCTED.post(event);
 
         components = Collections.unmodifiableMap(componentGather);
+
+        Map<Class<? extends UniqueComponent>, UniqueComponent> uniqueComponentMap = new HashMap<>();
+
+        for (Map.Entry<String, ? extends PatchComponent> entry : components.entrySet()) {
+            if (entry.getValue() instanceof UniqueComponent uc) {
+                // No validation, the old patch has already been verified no duplicated unique components.
+                uniqueComponentMap.put(uc.getClass(), uc);
+            }
+        }
+
+        uniqueComponents = Collections.unmodifiableMap(uniqueComponentMap);
     }
 
     protected void buildEventListeners() {
@@ -133,10 +169,9 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, PatchCom
         entityEventListener.registerEvent(BuiltInEventHooks.Entity.DESERIALIZE, event -> readData(event.getCompoundTag()));
     }
 
-    /// Returns component
-    @SuppressWarnings("unchecked")
-    public <C extends PatchComponent<?>> @Nullable C getComponent(Class<C> type) {
-        return (C)components.get(type);
+    @Override
+    public Map<String, ? extends PatchComponent> getComponents() {
+        return components;
     }
 
     /// Called when a player in a server level starts to track this entity in their local client
@@ -168,8 +203,8 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, PatchCom
     /// Ticks after [Entity#tick]
 	public void postTick() {
         components.values().forEach(component -> {
-            if (component instanceof TickablePatchComponent<?> tickablePatchComponent) {
-                tickablePatchComponent.tick();
+            if (component instanceof TickableDynamicComponent<?> tickableDynamicComponent) {
+                tickableDynamicComponent.tick();
             }
         });
 
@@ -194,8 +229,8 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, PatchCom
         // deltaTime == 0.0 means the game is paused, so don't call the update logic
         if (deltaTime > 0.0F) {
             components.values().forEach(component -> {
-                if (component instanceof TickablePatchComponent<?> tickablePatchComponent) {
-                    tickablePatchComponent.frameUpdate(deltaTime, partialTick);
+                if (component instanceof TickableDynamicComponent<?> tickableDynamicComponent) {
+                    tickableDynamicComponent.frameUpdate(deltaTime, partialTick);
                 }
             });
         }
@@ -204,7 +239,7 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, PatchCom
     /// Saves permanent data
 	public void writeData(final CompoundTag compound) {
         components.values().forEach(component -> {
-            if (component instanceof SerializablePatchComponent<?> serializableComponent) {
+            if (component instanceof SerializableDynamicComponent<?> serializableComponent) {
                 serializableComponent.writeData(compound);
             }
         });
@@ -215,7 +250,7 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, PatchCom
     /// Read the entity data from saved file
 	public void readData(final CompoundTag compound) {
         components.values().forEach(component -> {
-            if (component instanceof SerializablePatchComponent<?> serializableComponent) {
+            if (component instanceof SerializableDynamicComponent<?> serializableComponent) {
                 serializableComponent.readData(compound);
             }
         });
@@ -228,13 +263,13 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, PatchCom
     }
 
     /// Returns an owner of the patch. Behaves same as
-	public final @NonNull T getOwner() {
-		return owner;
+	public final @NonNull T getOriginal() {
+		return original;
 	}
 
     /// Returns a level that an owner is belonged to
 	public final Level getLevel() {
-		return owner.level();
+		return original.level();
 	}
 
     /// Returns a dynamic event listener manager
@@ -249,7 +284,7 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, PatchCom
     /// optionally the entity's pitch rotation.
     public Vec3 fromRelativeToWorldVector(final Vec3 relativeVector, final boolean calculatePitch) {
         final float yawRad = getVisualYRot() * Mth.DEG_TO_RAD;
-        final float pitchRad = calculatePitch ? getOwner().getXRot() * Mth.DEG_TO_RAD : 0.0F;
+        final float pitchRad = calculatePitch ? getOriginal().getXRot() * Mth.DEG_TO_RAD : 0.0F;
         final float cosYaw = Mth.cos(yawRad);
         final float sinYaw = Mth.sin(yawRad);
         final float cosPitch = Mth.cos(pitchRad);
@@ -269,6 +304,11 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, PatchCom
         return new Vec3(worldX, py, worldZ);
     }
 
+    @SuppressWarnings("unchecked") @Override
+    public <C extends UniqueComponent> C getComponent(final Class<C> type) {
+        return (C)uniqueComponents.get(type);
+    }
+
     @Override
     public @Nullable ArmatureComponent getArmatureComponent() {
         return getComponent(ArmatureComponent.class);
@@ -280,12 +320,12 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, PatchCom
 
     @ScriptFunction(pure = true, label = "Get Id")
     public final int getId() {
-        return owner.getId();
+        return original.getId();
     }
 
     @ScriptFunction(pure = true, label = "Is Logical Client", desc = "Returns whether the entity is in a client level")
     public boolean isLogicalClient() {
-        return owner.level().isClientSide();
+        return original.level().isClientSide();
     }
 
     @ScriptFunction(pure = true, label = "Is Logical Server", desc = "Returns whether the entity is in a server level")
@@ -294,48 +334,57 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, PatchCom
     }
 
     @ScriptFunction(pure = true, label = "Get View Vector", desc = "Get a view vector of an entity based on x, y rotations.")
-    public final Vec3 calculateViewVector(float xRot, float yRot) {
-        return getOwner().calculateViewVector(xRot, yRot);
+    public final Vec3 calculateViewVector(final float xRot, final float yRot) {
+        return getOriginal().calculateViewVector(xRot, yRot);
     }
 
     @ScriptFunction(pure = true, label = "Get X Rot")
-    public float getXRot(float partialTick) {
-        return getOwner().getXRot(partialTick);
+    public float getXRot(final float partialTick) {
+        return getOriginal().getXRot(partialTick);
     }
 
     @ScriptFunction(pure = true, label = "Get Y Rot")
-    public float getYRot(float partialTick) {
-        return getOwner().getYRot(partialTick);
+    public float getYRot(final float partialTick) {
+        return getOriginal().getYRot(partialTick);
     }
 
     @ScriptFunction(pure = true, label = "Get Y Body Rot", desc = "Returns the entity body model's visual rotation.")
     public float getVisualYRot() {
-        return getOwner() instanceof LivingEntity livingEntity ? livingEntity.yBodyRot : getOwner().getYRot();
+        return getOriginal() instanceof LivingEntity livingEntity ? livingEntity.yBodyRot : getOriginal().getYRot();
+    }
+
+    @ScriptFunction(pure = true, label = "Get Animation Speed", desc = "Returns animation playback speed by movement.")
+    public double getAnimationSpeed(final float partialTick) {
+        if (original instanceof LivingEntity livingEntity) {
+            return livingEntity.walkAnimation.speed(partialTick);
+        }
+
+        return original.getDeltaMovement().length();
     }
 
     @ScriptFunction(pure = true, label = "Get Position")
     public Vec3 position() {
-        return getOwner().position();
+        return getOriginal().position();
     }
 
     @ScriptFunction(pure = true, label = "Get Position (Partial)")
     public Vec3 getPosition(final float partialTick) {
-        return getOwner().getPosition(partialTick);
+        return getOriginal().getPosition(partialTick);
     }
 
     @ScriptFunction(pure = true, label = "On Ground")
     public boolean onGround() {
-        return getOwner().onGround();
+        return getOriginal().onGround();
     }
 
     @ScriptFunction(pure = true, label = "Is Under Water", desc = "Returns whether the entity's eyes are in water.")
     public boolean isUnderWater() {
-        return getOwner().isUnderWater();
+        return getOriginal().isUnderWater();
     }
 
     @ScriptFunction(pure = true, label = "Flying", desc = "Returns whether the entity is flying. Always false for entities that can't fly")
     public boolean isFlying() {
-        if (getOwner() instanceof Player player) {
+        if (getOriginal() instanceof Player player) {
             return player.getAbilities().flying;
         }
 

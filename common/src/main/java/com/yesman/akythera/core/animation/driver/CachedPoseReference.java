@@ -77,15 +77,16 @@ public final class CachedPoseReference implements AnimationDriver {
         return ref().isFinished();
     }
 
+    @Override
+    public boolean fadingInOrOut() {
+        return ref().fadingInOrOut();
+    }
+
     private AnimationDriver ref() {
         return blendingAnimator.getCachedPoseDriver(cacheName());
     }
 
     public String cacheName() {
         return cacheName;
-    }
-
-    public BlendingAnimator blendingAnimator() {
-        return blendingAnimator;
     }
 }

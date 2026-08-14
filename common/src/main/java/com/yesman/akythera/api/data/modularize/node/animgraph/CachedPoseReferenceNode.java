@@ -27,6 +27,11 @@ public record CachedPoseReferenceNode(String poseCacheName) implements PureNode 
     public <T> T execute(final DataDrivenScript<?, ?> script, final ExecutionContext context) {
         BlendingAnimator animator = context.locals().getValue("animator");
         Map<String, AnimationDriver> poseCaches = context.locals().getValue("poseCaches");
+
+        if (poseCaches.containsKey(poseCacheName())) {
+            return (T)poseCaches.get(poseCacheName());
+        }
+
         CachedPoseReference cachedPoseReference = new CachedPoseReference(poseCacheName(), animator);
         poseCaches.put(poseCacheName(), cachedPoseReference);
 

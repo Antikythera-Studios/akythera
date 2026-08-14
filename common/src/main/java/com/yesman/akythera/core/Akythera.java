@@ -2,6 +2,8 @@ package com.yesman.akythera.core;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.yesman.akythera.api.animation.animator.AnimationInterfaceKey;
+import com.yesman.akythera.api.asset.animation.AnimationManager;
+import com.yesman.akythera.api.asset.armature.ArmatureManager;
 import com.yesman.akythera.api.data.modularize.AkytheraScriptFunctions;
 import com.yesman.akythera.api.data.modularize.AkytheraScriptTypes;
 import com.yesman.akythera.api.lifecycle.ComponentsFactory;
@@ -9,15 +11,16 @@ import com.yesman.akythera.api.lifecycle.ServerComponentsFactory;
 import com.yesman.akythera.api.world.patch.AkytheraPatches;
 import com.yesman.akythera.client.api.lifecycle.ClientComponentsFactory;
 import com.yesman.akythera.commands.AnimatorControlCommand;
-import com.yesman.akythera.compat.IModCompatibility;
-import com.yesman.akythera.compat.MinecraftMod;
+import com.yesman.akythera.compat.IModPlugin;
+import com.yesman.akythera.compat.CompatibleMod;
 import com.yesman.akythera.core.animation.driver.AnimationLayerSignature;
 import com.yesman.akythera.core.animation.driver.FSMAnimationState;
-import com.yesman.akythera.core.animation.impl.AkytheraAnimationLayerSignature;
-import com.yesman.akythera.core.animation.impl.AkytheraAnimationState;
-import com.yesman.akythera.core.animation.impl.EpicFightAnimationInterfaceKey;
-import com.yesman.akythera.core.asset.DedicatedServerModFileResourceManager;
+import com.yesman.akythera.api.animation.impl.AkytheraAnimationLayerSignature;
+import com.yesman.akythera.api.animation.impl.AkytheraAnimationState;
 import com.yesman.akythera.core.blueprint.AkytheraComponentBlueprints;
+import com.yesman.akythera.core.math.physics.collider.AkytheraColliderType;
+import com.yesman.akythera.core.math.physics.collider.ColliderType;
+import com.yesman.akythera.core.math.physics.collider.CollisionDetectionLogics;
 import com.yesman.akythera.core.registry.entry.AkytheraAnimNotifyStateTypes;
 import com.yesman.akythera.core.registry.entry.AkytheraAnimNotifyTypes;
 import com.yesman.akythera.core.util.EnumerableDataBlockSync;
@@ -26,6 +29,7 @@ import com.yesman.akythera.platform.ModPlatform;
 import com.yesman.akythera.platform.ModPlatformProvider;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.packs.PackType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jspecify.annotations.NonNull;
@@ -51,25 +55,14 @@ public final class Akythera {
         return Identifier.fromNamespaceAndPath(MODID, path);
     }
 
-    /// Initializes common functionalities.
-    ///
-    /// Provides the global [ModPlatform] instance given by the mod platform (e.g., NeoForge, Fabric)
-    /// to common vanilla code for sharing.
-    public static void initializePlatform(@NonNull final ModPlatform platform) {
-        ModPlatformProvider.initialize(platform);
-        ComponentsFactory.initialize(platform.getPhysicalSide().isClient() ? new ClientComponentsFactory() : new ServerComponentsFactory());
-    }
-
     /// Called on each mod loader's mod entry point class's constructor
     public static void onModConstructed() {
-        AnimationInterfaceKey.ENUM_MANAGER.registerEnumCls(MODID, EpicFightAnimationInterfaceKey.class);
-        FSMAnimationState.ENUM_MANAGER.registerEnumCls(MODID, AkytheraAnimationState.class);
-        AnimationLayerSignature.ENUM_MANAGER.registerEnumCls(MODID, AkytheraAnimationLayerSignature.class);
+        ComponentsFactory.initialize(ModPlatformProvider.get().getPhysicalSide().isClient() ? new ClientComponentsFactory() : new ServerComponentsFactory());
 
         try {
             // Init the registry holder classes explicitly to preload registries before "newRegistryEvent" and "newDatapackRegistryEvent" are called
-            Class.forName("com.yesman.akythera.core.registry.AkytheraRegistries$DataPack");
             Class.forName("com.yesman.akythera.core.registry.AkytheraRegistries$Frozen");
+            Class.forName("com.yesman.akythera.core.registry.AkytheraRegistries$DataPack");
 
             AkytheraAnimNotifyTypes.REGISTRAR.notifyPresence();
             AkytheraAnimNotifyStateTypes.REGISTRAR.notifyPresence();
@@ -92,32 +85,49 @@ public final class Akythera {
 
     /// Called on mod loader lifecycle when the mod initializes
     public static void onModInitialized() {
-        AnimationInterfaceKey.ENUM_MANAGER.loadEnum();
-        FSMAnimationState.ENUM_MANAGER.loadEnum();
-        AnimationLayerSignature.ENUM_MANAGER.loadEnum();
-
-        Arrays.stream(MinecraftMod.values())
+        Arrays.stream(CompatibleMod.values())
             .filter(mod -> ModPlatformProvider.get().isModLoaded(mod.getModId()) && mod.getCompatibilityModule() != null)
             .map(mod -> {
                 try {
                     return mod.getCompatibilityModule().getDeclaredConstructor().newInstance();
                 } catch (
-                    InstantiationException |
-                    IllegalAccessException |
-                    InvocationTargetException |
-                    NoSuchMethodException e
+                    InstantiationException | IllegalAccessException | InvocationTargetException | NoSuchMethodException e
                 ) {
                     Akythera.LOGGER.error("Can't create an instance of compatibility module {}. Skipped.", mod.getModId(), e);
                     return null;
                 }
             })
             .filter(Objects::nonNull)
-            .forEach(IModCompatibility::onInitialize);
+            .forEach(IModPlugin::onInitialize);
+
+        AnimationInterfaceKey.ENUM_MANAGER.loadEnum();
+        FSMAnimationState.ENUM_MANAGER.loadEnum();
+        AnimationLayerSignature.ENUM_MANAGER.loadEnum();
+        ColliderType.ENUM_MANAGER.loadEnum();
+
+        // Pair logics reference the collider type constants, so they bind after the enum loads.
+        CollisionDetectionLogics.registerBuiltInLogics();
+    }
+
+    public static void registerBuiltInDataBlockClasses() {
+        FSMAnimationState.ENUM_MANAGER.registerEnumCls(MODID, AkytheraAnimationState.class);
+        AnimationLayerSignature.ENUM_MANAGER.registerEnumCls(MODID, AkytheraAnimationLayerSignature.class);
+        ColliderType.ENUM_MANAGER.registerEnumCls(MODID, AkytheraColliderType.class);
     }
 
     /// Called on mod loader lifecycle when the mod initializes in a dedicated server
     public static void onModInitializedInDedicatedServer() {
-        ComponentsFactory.getImpl().setResourceManagerSupplier(DedicatedServerModFileResourceManager::new);
+        ModPlatform platform = ModPlatformProvider.get();
+
+        platform.registerReloadListener(
+            identifier("dedicated_server_assets"),
+            PackType.SERVER_DATA,
+            ServerComponentsFactory.getImpl().getResourceManager()
+        );
+
+        // Assets ride in the data tree on this side, so their caches drop on a data pack reload.
+        platform.registerReloadListener(identifier("armature_manager_dynamic"), PackType.SERVER_DATA, ArmatureManager.getInstance());
+        platform.registerReloadListener(identifier("anim_manager_dynamic"), PackType.SERVER_DATA, AnimationManager.getInstance());
     }
 
     /// Register in-game commands

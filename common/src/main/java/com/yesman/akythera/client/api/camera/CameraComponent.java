@@ -1,6 +1,6 @@
 package com.yesman.akythera.client.api.camera;
 
-import com.yesman.akythera.api.component.PatchComponent;
+import com.yesman.akythera.api.component.DynamicPatchComponent;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.util.ClientOnly;
 import net.minecraft.client.Camera;
@@ -13,8 +13,8 @@ import org.jspecify.annotations.Nullable;
 
 /// An abstracted [Camera] object in world
 @ClientOnly
-public final class CameraComponent implements PatchComponent<EntityPatch<LocalPlayer>> {
-    private final EntityPatch<LocalPlayer> localPlayerPatch;
+public final class CameraComponent implements DynamicPatchComponent<EntityPatch<LocalPlayer>> {
+    private EntityPatch<LocalPlayer> localPlayerPatch;
 
     /// Custom relative location of camera from player.
     ///
@@ -34,6 +34,12 @@ public final class CameraComponent implements PatchComponent<EntityPatch<LocalPl
     @Override
     public EntityPatch<LocalPlayer> getOwner() {
         return localPlayerPatch;
+    }
+
+    @Override
+    public DynamicPatchComponent<EntityPatch<LocalPlayer>> getRenewed(EntityPatch<LocalPlayer> newOwner) {
+        localPlayerPatch = newOwner;
+        return this;
     }
 
     /// Determine whether camera and player entity share the same yaw.

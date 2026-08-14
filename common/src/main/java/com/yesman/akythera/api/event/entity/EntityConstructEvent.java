@@ -13,31 +13,30 @@ import java.util.Map;
 /// [EntityConstructEvent] called when [EntityPatch] is just instantiated,
 /// while [EntitySpawnEvent] is called when an entity placed to a world. This
 /// includes a case when an entity changes dimension from overworld to nether.
-///
-/// Note [PatchComponent] is raw-typed. Type checking is developer's call.
-@SuppressWarnings({"rawtypes", "unchecked"})
 public final class EntityConstructEvent extends EntityPatchEvent<EntityPatch<?>> {
-    private final Map<Class<? extends PatchComponent>, PatchComponent> componentsToAttach;
+    private final Map<String, PatchComponent> componentsToAttach;
 
     /// Whether the event is called by copy constructor. [#componentsToAttach] is already filled by previous entity patch.
     private final boolean copied;
 
     public <T extends Entity> EntityConstructEvent(
         final EntityPatch<T> entityPatch,
-        final Map<Class<? extends PatchComponent<T>>, PatchComponent<T>> componentsToAttach,
+        final Map<String, PatchComponent> componentsToAttach,
         final boolean copied
     ) {
         super(entityPatch);
-        this.componentsToAttach = (Map<Class<? extends PatchComponent>, PatchComponent>)(Object)componentsToAttach;
+
+        this.componentsToAttach = componentsToAttach;
         this.copied = copied;
     }
 
-    public void addComponent(final PatchComponent<?> component) {
-        componentsToAttach.put(component.getClass(), component);
+    public void addComponent(final String componentName, final PatchComponent patchComponent) {
+        componentsToAttach.put(componentName, patchComponent);
     }
 
-    public <T extends PatchComponent<?>> @Nullable T getComponent(Class<T> type) {
-        return (T)componentsToAttach.get(type);
+    @SuppressWarnings("unchecked")
+    public <T extends PatchComponent> @Nullable T getComponent(final String componentName) {
+        return (T)componentsToAttach.get(componentName);
     }
 
     /// True when called by [EntityPatch]'s copy constructor.

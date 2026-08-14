@@ -1,17 +1,21 @@
 package com.yesman.akythera.api.data.modularize;
 
+import com.yesman.akythera.api.animation.animator.AnimationInterfaceKey;
 import com.yesman.akythera.api.animation.animator.AnimationLayer;
 import com.yesman.akythera.api.animation.animator.Animator;
-import com.yesman.akythera.core.blueprint.script.AnimatorScript;
+import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
+import com.yesman.akythera.api.world.patch.entity.PlayerPatch;
 import com.yesman.akythera.core.Akythera;
+import com.yesman.akythera.core.animation.animator.BlendingAnimator;
 import com.yesman.akythera.core.animation.driver.AnimationDriver;
 import com.yesman.akythera.core.animation.driver.EmptyAnimationDriver;
 import com.yesman.akythera.core.animation.keyframe.Pose;
+import com.yesman.akythera.core.blueprint.script.AnimatorScript;
 import com.yesman.akythera.core.reflection.FunctionSignature;
 import com.yesman.akythera.core.reflection.ScriptModularizeHelper;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.helper.*;
-import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.platform.ModPlatform;
 import com.yesman.akythera.platform.ModPlatformProvider;
 import net.minecraft.core.Holder;
@@ -21,6 +25,10 @@ import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityDimensions;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.player.PlayerModelType;
+import net.minecraft.world.entity.player.PlayerSkin;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
@@ -56,10 +64,100 @@ public final class AkytheraScriptFunctions {
 
             // Entity & Entity patches
             ScriptModularizeHelper.scanScriptModulesAndRegister(MINECRAFT_REGISTRAR, EntityPatch.class, "World/Entity", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(MINECRAFT_REGISTRAR, LivingEntityPatch.class, "World/Entity", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(MINECRAFT_REGISTRAR, PlayerPatch.class, "World/Entity", ScriptFunction.Usage.SCRIPT);
         } catch (Throwable e) {
             throw new IllegalStateException("Failed at scanning and registering modular function", e);
         }
     }
+
+    // ***********************************************
+    // Entity Patch Constructors (Code only)
+    // ***********************************************
+
+    public static final Holder<ScriptFunction> ENTITY_PATCH_CONSTRUCTOR = AKYTHERA_REGISTRAR.register("entity_patch_ctor", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (BiFunction<Holder.Reference, Entity, EntityPatch>)EntityPatch::new,
+            FunctionSignature.create(EntityPatch.class, List.of("blueprint", "original"), Holder.Reference.class, Entity.class),
+            "Entity Patch",
+            "Entity Patch",
+            "Components, flows and variables, for any entity",
+            true,
+            ScriptFunction.Usage.ENTITY_PATCH_CTOR
+        )
+    );
+
+    public static final Holder<ScriptFunction> LIVING_ENTITY_PATCH_CONSTRUCTOR = AKYTHERA_REGISTRAR.register("living_entity_patch_ctor", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (BiFunction<Holder.Reference, LivingEntity, LivingEntityPatch>)LivingEntityPatch::new,
+            FunctionSignature.create(LivingEntityPatch.class, List.of("blueprint", "original"), Holder.Reference.class, LivingEntity.class),
+            "Living Entity Patch",
+            "Entity Patch",
+            "Adds the living-entity surface",
+            true,
+            ScriptFunction.Usage.ENTITY_PATCH_CTOR
+        )
+    );
+
+    public static final Holder<ScriptFunction> PLAYER_PATCH_CONSTRUCTOR = AKYTHERA_REGISTRAR.register("player_patch_ctor", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (BiFunction<Holder.Reference, Player, PlayerPatch>)PlayerPatch::new,
+            FunctionSignature.create(PlayerPatch.class, List.of("blueprint", "original"), Holder.Reference.class, Player.class),
+            "Player Patch",
+            "Entity Patch",
+            "Adds the player surface",
+            true,
+            ScriptFunction.Usage.ENTITY_PATCH_CTOR
+        )
+    );
+
+    // ***********************************************
+    // Player skin
+    // ***********************************************
+
+    public static final Holder<ScriptFunction> PLAYER_SKIN_MODEL = MINECRAFT_REGISTRAR.register("player_skin_model", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (Function<PlayerSkin, PlayerModelType>) skin -> skin == null ? PlayerModelType.WIDE : skin.model(),
+            FunctionSignature.create(PlayerModelType.class, List.of("playerSkin"), PlayerSkin.class),
+            "Model Type",
+            "Online",
+            "The skin's model type. A skin that has not resolved yet reads as WIDE",
+            true,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> IS_SLIM_PLAYER_MODEL = MINECRAFT_REGISTRAR.register("is_slim_player_model", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (Function<PlayerModelType, Boolean>) model -> model == PlayerModelType.SLIM,
+            FunctionSignature.create(Boolean.class, List.of("modelType"), PlayerModelType.class),
+            "Is Slim Model",
+            "Online",
+            "Whether the model type is the slim (3px arm) variant",
+            true,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    // ***********************************************
+    // Selection
+    // ***********************************************
+
+    /// Untyped on both branches: the engine only picks a reference, and the editor's
+    /// [ScriptFunction.Usage#SCRIPT] node keeps its wildcard pins in step so a graph never wires two
+    /// different types into it.
+    public static final Holder<ScriptFunction> SELECT = AKYTHERA_REGISTRAR.register("select", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (ScriptFunction.TriFunction<Boolean, Object, Object, Object>) (condition, whenTrue, whenFalse) ->
+                Boolean.TRUE.equals(condition) ? whenTrue : whenFalse,
+            FunctionSignature.create(Object.class, List.of("condition", "whenTrue", "whenFalse"), Boolean.class, Object.class, Object.class),
+            "Select",
+            "Logic",
+            "Yields one of two values by a boolean",
+            true,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
 
     // ***********************************************
     // Anim Graph Nodes
@@ -128,6 +226,39 @@ public final class AkytheraScriptFunctions {
             "Empty Pose",
             "Animation/Pose",
             "An empty animation driver (no pose)",
+            true,
+            ScriptFunction.Usage.ANIM_GRAPH
+        )
+    );
+
+    public static final Holder<ScriptFunction> PLAY_ANIM_SEQUENCE_INTERFACE = AKYTHERA_REGISTRAR.register("play_anim_sequence_interface", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (ScriptFunction.TriFunction<BlendingAnimator, AnimationInterfaceKey, String, AnimationDriver>) (animator, interfaceKey, id) ->
+                AnimatorScript.instantiateAnimSequenceInterface(
+                    animator, interfaceKey,
+                    ResourceKey.create(AkytheraRegistries.DataPack.ANIM_SEQUENCE_KEY, Identifier.parse(id))
+                ),
+            FunctionSignature.create(AnimationDriver.class, List.of("animator", "interfaceKey", "sequenceId"), BlendingAnimator.class, AnimationInterfaceKey.class, String.class),
+            "Anim Sequence Animation Interface",
+            "Animation/Pose",
+            "Plays a replaceable animation sequence registered under an animation interface key",
+            true,
+            ScriptFunction.Usage.ANIM_GRAPH
+        )
+    );
+
+    public static final Holder<ScriptFunction> PLAY_BLEND_SPACE_2D_INTERFACE = AKYTHERA_REGISTRAR.register("play_blend_space_2d_interface", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (ScriptFunction.QuintFunction<BlendingAnimator, AnimationInterfaceKey, String, Supplier, Supplier, AnimationDriver>) (animator, interfaceKey, id, x, y) ->
+                AnimatorScript.instantiateBlendSpace2DInterface(
+                    animator, interfaceKey,
+                    ResourceKey.create(AkytheraRegistries.DataPack.BLEND_SPACE_2D_KEY, Identifier.parse(id)),
+                    (Supplier<Float>) x, (Supplier<Float>) y
+                ),
+            FunctionSignature.create(AnimationDriver.class, List.of("animator", "interfaceKey", "blendSpaceId", "x", "y"), BlendingAnimator.class, AnimationInterfaceKey.class, String.class, Supplier.class, Supplier.class),
+            "Blend Space 2D Animation Interface",
+            "Animation/Pose",
+            "Plays a replaceable 2D blendspace registered under an animation interface key",
             true,
             ScriptFunction.Usage.ANIM_GRAPH
         )
@@ -335,12 +466,13 @@ public final class AkytheraScriptFunctions {
     // Method signature: (EntityPatch), return Vec3
     //
     // Used by particle generation, motion warping
+    // TODO: Remove, move to Epic Fight.
     // ***********************************************
 
     public static final Holder<ScriptFunction> RANDOM_LOCATION_IN_BOUNDING_BOX = AKYTHERA_REGISTRAR.register("random_in_bb", () ->
         ScriptModularizeHelper.makeCustomScript(
             (Function<EntityPatch<?>, Vec3>) entityPatch -> {
-                Entity entity = entityPatch.getOwner();
+                Entity entity = entityPatch.getOriginal();
                 RandomSource random = entity.getRandom();
                 EntityDimensions dimensions = entity.getDimensions(entity.getPose());
 

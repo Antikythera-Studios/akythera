@@ -2,6 +2,7 @@ package com.yesman.akythera.core.math;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import com.yesman.akythera.core.util.helper.MathUtils;
 import com.yesman.akythera.core.util.helper.Matrix4fUtils;
 import com.yesman.akythera.core.util.helper.QuaternionUtils;
 import com.yesman.akythera.core.util.helper.VectorUtils;
@@ -99,7 +100,7 @@ public record Transform(
         return new Matrix4f().translate(
             VectorUtils.doubleToFloatVector(loc)
         ).rotate(
-            QuaternionUtils.doubleToFlaotQuaternion(rot)
+            QuaternionUtils.doubleToFloatQuaternion(rot)
         ).scale(
             VectorUtils.doubleToFloatVector(sca)
         );
@@ -137,7 +138,7 @@ public record Transform(
 
     /// Apply rotation
     public Transform rotate(final Quaterniond quaterniond) {
-        return new Transform(loc(), rot().mul(quaterniond), sca());
+        return new Transform(loc(), rot().mul(quaterniond, new Quaterniond()), sca());
     }
 
     /// Apply scaling
@@ -145,11 +146,12 @@ public record Transform(
         return new Transform(loc(), rot(), sca().multiply(scale));
     }
 
-    /// Multiplies to another transform
+    /// Composes with a child transform: the child is rotated and scaled into this one's space before
+    /// its translation is added, so `parent.mul(child)` places `child` under `parent`.
     public Transform mul(final Transform operand) {
         return new Transform(
-            loc().add(operand.loc()),
-            rot().mul(operand.rot()),
+            loc().add(mulDirection(operand.loc())),
+            rot().mul(operand.rot(), new Quaterniond()),
             sca().multiply(operand.sca())
         );
     }
@@ -184,4 +186,19 @@ public record Transform(
         );
     }
 
+    /// This transform expressed relative to `base`, component-wise: translation subtracted,
+    /// rotation right-multiplied by the inverse, scale divided.
+    ///
+    /// @see com.yesman.akythera.core.asset.loader.AnimationLoader.ImportType#ADDITIVE
+    public Transform relativeTo(final Transform base) {
+        return new Transform(
+            loc().subtract(base.loc()),
+            rot().mul(base.rot().invert(new Quaterniond()), new Quaterniond()).normalize(),
+            new Vec3(
+                MathUtils.divideOrZero(sca().x(), base.sca().x()),
+                MathUtils.divideOrZero(sca().y(), base.sca().y()),
+                MathUtils.divideOrZero(sca().z(), base.sca().z())
+            )
+        );
+    }
 }

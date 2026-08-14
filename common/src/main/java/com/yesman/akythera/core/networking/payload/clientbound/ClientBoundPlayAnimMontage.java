@@ -1,7 +1,7 @@
 package com.yesman.akythera.core.networking.payload.clientbound;
 
 import com.yesman.akythera.core.Akythera;
-import io.netty.buffer.ByteBuf;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -13,7 +13,7 @@ public record ClientBoundPlayAnimMontage(Identifier montageId, String montageSec
     public static final CustomPacketPayload.Type<ClientBoundPlayAnimMontage> TYPE =
         new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(Akythera.MODID, "play_anim_montage"));
 
-    public static final StreamCodec<ByteBuf, ClientBoundPlayAnimMontage> STREAM_CODEC =
+    public static final StreamCodec<RegistryFriendlyByteBuf, ClientBoundPlayAnimMontage> STREAM_CODEC =
         StreamCodec.composite(
             Identifier.STREAM_CODEC,
             ClientBoundPlayAnimMontage::montageId,

@@ -19,7 +19,12 @@ import java.util.function.Function;
 ///                              types (e.g. float -> double) are not included here. Didn't use `ScriptType` as key
 ///                              since "use before declaration" issue. Can't be null, provide as least an empty map.
 /// @param usedAsVariable Indicates if the script type can be used as variable in script editor
-public record ScriptType(Class<?> type, @Nullable Codec<?> codec, @NonNull Map<Class<?>, Function<?, ?>> explicitCastableTypes, boolean usedAsVariable) {
+public record ScriptType(
+    Class<?> type,
+    @Nullable Codec<?> codec,
+    @NonNull Map<Class<?>, Function<?, ?>> explicitCastableTypes,
+    boolean usedAsVariable
+) {
     // Expose the type only to engine. Won't be used in AkytheraLabs
     public ScriptType(Class<?> type) {
         this(type, null, Map.of(), false);

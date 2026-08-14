@@ -31,7 +31,7 @@ public final class PlaySoundNotify extends AnimationNotify<EntityPatch<?>> {
 
     @Override
     public void onNotified(EntityPatch<?> entityPatch, PlayableAnimation owner, float prevElapsedTime, float currentElapsedTime) {
-        entityPatch.getOwner().playSound(soundEvent.value());
+        entityPatch.getOriginal().playSound(soundEvent.value());
     }
 
     public Holder<@NonNull SoundEvent> soundEvent() {

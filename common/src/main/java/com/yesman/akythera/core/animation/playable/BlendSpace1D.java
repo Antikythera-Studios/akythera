@@ -13,6 +13,8 @@ import java.util.TreeMap;
 /// A mixture of multiple animation nodes placed in 1D array shape
 ///
 /// /// Inspired by [UE Blend Space](https://dev.epicgames.com/documentation/unreal-engine/blend-spaces-in-unreal-engine)
+
+@Deprecated // In-progress
 public final class BlendSpace1D implements PlayableAnimation {
     // TODO: Finish Codec
     // public static final Codec<BlendSpace1D> CODEC;
@@ -95,6 +97,11 @@ public final class BlendSpace1D implements PlayableAnimation {
 
         @Override
         public boolean isFinished() {
+            return false;
+        }
+
+        @Override
+        public boolean fadingInOrOut() {
             return false;
         }
     }

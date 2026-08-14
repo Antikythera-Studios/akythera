@@ -4,6 +4,7 @@ import com.yesman.akythera.api.animation.animator.*;
 import com.yesman.akythera.api.event.BuiltInEventHooks;
 import com.yesman.akythera.api.event.entity.animation.InitBlendingAnimatorEvent;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.api.world.patch.item.component.ReplaceAnimations;
 import com.yesman.akythera.core.animation.driver.*;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.playable.AnimationMontage;
@@ -11,6 +12,7 @@ import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.blueprint.script.AnimatorScript;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
 import net.minecraft.core.Holder;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.Entity;
 import org.jetbrains.annotations.ApiStatus;
@@ -18,6 +20,7 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -37,7 +40,7 @@ public final class BlendingAnimator implements Animator {
 
     /// Anim interfaces belonged to this animator. Do not manually modify the entries
     @ApiStatus.Internal
-    private final Map<AnimationInterfaceKey, AnimationInterface> animInterfaces = new HashMap<>();
+    private final Map<AnimationInterfaceKey, AbstractAnimationInterface<?, ?>> animInterfaces = new HashMap<>();
 
     /// Animation layer map. Do not manually modify the entries
     @ApiStatus.Internal
@@ -64,32 +67,43 @@ public final class BlendingAnimator implements Animator {
         BuiltInEventHooks.Animation.INIT_BLENDING_ANIMATOR.post(new InitBlendingAnimatorEvent(owner, animScript, this));
     }
 
-    /// Internal call only, don't call this method in addon side
-    @ApiStatus.Internal
-    public void addAnimInterface(final AnimationInterfaceKey key, final AnimationInterface animInterface) {
+    /// Register animation interfaces. (initializer)
+    ///
+    /// [AbstractAnimationInterface] holds initial animation which is set as default. They can be modified by
+    /// [#replaceAnimation], and rolled back by either [#resetAnimInterface] or [#resetAllInterfaces]
+    public void addAnimInterface(final AnimationInterfaceKey key, final AbstractAnimationInterface<?, ?> animInterface) {
         // In case add-ons declare the same key twice, it needs to be fixed.
-        if (!animInterfaces.containsKey(key))
-            throw new IllegalStateException("Animation Interface key " + key + " is already used");
+        if (animInterfaces.containsKey(key))
+            throw new IllegalStateException("Animation Interface key `" + key + "` is already in use");
 
         animInterfaces.put(key, animInterface);
     }
 
-    /// Injects an animation to anim interface.
+    /// Replace animation by interface key, through animation interface. This keeps the default animation info in interface
+    /// so it can be rolled back to default animation anytime.
     ///
-    /// Animation interfaces are defined on initialization, [AnimatorScript#construct]. Check the
-    /// implementations of [AnimatorScript] to find available interface keys for the corresponding entity.
-    public void injectAnimInterface(final AnimationInterfaceKey key, final PlayableAnimation playableAnimation) {
-        if (animInterfaces.containsKey(key)) {
-            animInterfaces.get(key).overwrite(playableAnimation);
+    /// This function has no effect if no key exists.
+    public void replaceAnimation(final AnimationInterfaceKey key, final Holder.Reference<? extends PlayableAnimation> animation) {
+        if (animInterfaces.containsKey(key)) animInterfaces.get(key).replace(animation);
+    }
+
+    /// Unpack the animation interface replacement data
+    public void replaceAnimation(final List<ReplaceAnimations.Replace> animationsToReplace) {
+        for (ReplaceAnimations.Replace replace : animationsToReplace) {
+            RegistryAccess registryAccess = getOwner().getOriginal().level().registryAccess();
+            Holder.Reference<? extends PlayableAnimation> animation = registryAccess.getOrThrow(replace.animResourceKey());
+            replaceAnimation(replace.interfaceKey(), animation);
         }
     }
 
-    /// Removes injected interface animation by [#injectAnimInterface] and goes back to the default one
-    /// declared in [AnimationInterface]'s constructor
+    /// Reset animation interfaces to [AbstractAnimationInterface#reset]
     public void resetAnimInterface(final AnimationInterfaceKey key) {
-        if (animInterfaces.containsKey(key)) {
-            animInterfaces.get(key).reset();
-        }
+        if (animInterfaces.containsKey(key)) animInterfaces.get(key).reset();
+    }
+
+    /// Reset every interface to default one
+    public void resetAllInterfaces() {
+        animInterfaces.values().forEach(AbstractAnimationInterface::reset);
     }
 
     @Override

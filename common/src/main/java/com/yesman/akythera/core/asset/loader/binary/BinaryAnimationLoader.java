@@ -20,16 +20,18 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 
-/// Load animations from binary files. Instances are dedicated for loading a resource specified by [#resourcePath].
+/// Load animationsToReplace from binary files. Instances are dedicated for loading a resource specified by [#resourcePath].
 public final class BinaryAnimationLoader implements AnimationLoader, BinaryAssetLoader {
     private final Identifier resourcePath;
     private final Resource resource;
+    private final Metadata metadata;
 
-    public BinaryAnimationLoader(Identifier resourcePath, Resource resource)
+    public BinaryAnimationLoader(final Identifier resourcePath, final Resource resource, final Metadata metadata)
         throws ResourceLoadingFailureException
     {
         this.resourcePath = resourcePath;
         this.resource = resource;
+        this.metadata = metadata;
     }
 
     @Override
@@ -37,9 +39,14 @@ public final class BinaryAnimationLoader implements AnimationLoader, BinaryAsset
         return resourcePath;
     }
 
+    @Override
+    public Metadata metadata() {
+        return metadata;
+    }
+
     /// @param armature No use for binary loader, just exists for .json
     @Override
-    public AnimationClip loadAnimationClip(@Nullable AssetAccessor<? extends Armature> armature)
+    public AnimationClip loadRawAnimationClip(@Nullable final AssetAccessor<? extends Armature> armature)
         throws ResourceLoadingFailureException
     {
         try (InputStream inputStream = resource.open()) {

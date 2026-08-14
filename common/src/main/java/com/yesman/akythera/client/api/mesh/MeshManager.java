@@ -1,19 +1,19 @@
 package com.yesman.akythera.client.api.mesh;
 
 import com.mojang.serialization.Codec;
-import com.mojang.serialization.DataResult;
 import com.yesman.akythera.api.asset.AssetAccessor;
 import com.yesman.akythera.api.asset.DynamicAssetManager;
 import com.yesman.akythera.api.lifecycle.ComponentsFactory;
+import com.yesman.akythera.client.api.lifecycle.ClientComponentsFactory;
 import com.yesman.akythera.client.core.asset.loader.MeshLoader;
 import com.yesman.akythera.client.core.asset.mesh.Mesh;
 import com.yesman.akythera.client.core.asset.mesh.SkeletalMesh;
 import com.yesman.akythera.client.core.asset.mesh.StaticMesh;
 import com.yesman.akythera.core.asset.loader.ResourceLoadingFailureException;
 import net.minecraft.resources.Identifier;
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
 
-public final class MeshManager extends DynamicAssetManager<@NotNull Mesh<?>> {
+public final class MeshManager extends DynamicAssetManager<@NonNull Mesh<?>> {
     public static final String DIRECTORY = "animmodels/meshes/";
     public static final MeshManager INSTANCE = new MeshManager();
 
@@ -21,25 +21,28 @@ public final class MeshManager extends DynamicAssetManager<@NotNull Mesh<?>> {
         return INSTANCE;
     }
 
-    /// Serialized form is the trimmed id (no [#DIRECTORY] prefix), which is also how
-    /// [#issuedAccessor] is keyed here. Unlike [com.yesman.akythera.api.asset.armature.ArmatureManager#CODEC],
-    /// decode cannot issue on demand — the id alone doesn't say whether the mesh is static or
-    /// skeletal, and each accessor needs its type-specific constructor — so an id nothing has
-    /// issued yet decodes to a proper error instead of poisoning the record codec with a null.
     public static final Codec<AssetAccessor<? extends Mesh<?>>> CODEC =
-        Identifier.CODEC.comapFlatMap(
-            id -> {
-                AssetAccessor<? extends Mesh<?>> accessor = INSTANCE.getRegisteredAccessorById(id);
-                return accessor == null
-                    ? DataResult.error(() -> "No mesh accessor has been issued for " + id)
-                    : DataResult.success(accessor);
-            },
+        Identifier.CODEC.xmap(
+            MeshManager::unresolved,
             accessor ->
                 Identifier.fromNamespaceAndPath(
                     accessor.identifier().getNamespace(),
                     accessor.identifier().getPath().replace(DIRECTORY, "") // trim asset directory
                 )
         );
+
+    /// Returns a [Mesh] accessor by id.
+    ///
+    /// Assets are loaded in first reference, by [AssetAccessor#get].
+    @SuppressWarnings("unchecked")
+    public static AssetAccessor<Mesh<?>> unresolved(Identifier identifier) throws IllegalArgumentException {
+        return (AssetAccessor<Mesh<?>>)INSTANCE.issuedAccessor.computeIfAbsent(
+            identifier,
+            _ -> new UnresolvedMeshAccessor(
+                Identifier.fromNamespaceAndPath(identifier.getNamespace(), DIRECTORY + identifier.getPath())
+            )
+        );
+    }
 
     /// Returns a [StaticMesh] accessor by id
     ///
@@ -73,12 +76,56 @@ public final class MeshManager extends DynamicAssetManager<@NotNull Mesh<?>> {
 
     @Override
     public void onAssetReloaded() {
+        ClientComponentsFactory.getImpl().invalidateComputeShaderPrograms();
+
         for (Mesh<?> mesh : loadedObjectsRegistry.values()) {
             // Explicit call to release buffers
-            if (mesh != null) mesh.destroy();
+            if (mesh != null) mesh.close();
         }
 
         super.onAssetReloaded();
+    }
+
+    /// A mesh accessor that tries loading both [SkeletalMesh] and [StaticMesh].
+    ///
+    /// Used for data serialization, without needs for specifying mesh loader
+    private static class UnresolvedMeshAccessor implements AssetAccessor<Mesh<?>> {
+        private final Identifier identifier;
+        private Type type = Type.STATIC_MESH;
+
+        public UnresolvedMeshAccessor(final Identifier identifier) {
+            this.identifier = identifier;
+        }
+
+        @Override
+        public Mesh<?> get() throws ResourceLoadingFailureException {
+            return INSTANCE.loadedObjectsRegistry.computeIfAbsent(identifier, id -> {
+                Mesh<?> mesh = null;
+
+                try {
+                    // Tries to load as skeletal mesh first, as it's subset of static mesh
+                    mesh = MeshLoader.getLoader(id, ComponentsFactory.getImpl().getResourceManager()).loadSkeletalMesh(SkeletalMesh::new);
+                    type = Type.SKELETAL_MESH;
+                } catch (ResourceLoadingFailureException e) {
+                    try {
+                        mesh = MeshLoader.getLoader(id, ComponentsFactory.getImpl().getResourceManager()).loadStaticMesh(StaticMesh::new);
+                    } catch (ResourceLoadingFailureException _) {
+                    }
+                }
+
+                return mesh;
+            });
+        }
+
+        @Override
+        public Type type() {
+            return type;
+        }
+
+        @Override
+        public Identifier identifier() {
+            return identifier;
+        }
     }
 
     /// Accessor for [StaticMesh]
@@ -106,7 +153,7 @@ public final class MeshManager extends DynamicAssetManager<@NotNull Mesh<?>> {
         }
 
         @Override
-        public @NotNull String toString() {
+        public @NonNull String toString() {
             return identifier.toString();
         }
 
@@ -156,7 +203,7 @@ public final class MeshManager extends DynamicAssetManager<@NotNull Mesh<?>> {
         }
 
         @Override
-        public @NotNull String toString() {
+        public @NonNull String toString() {
             return identifier.toString();
         }
 
