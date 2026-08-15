@@ -81,14 +81,14 @@ public interface AnimationLoader extends AssetLoader {
         return builder.build();
     }
 
-    /// Returns a matching asset loader depending on the file extension (`.efasset` or `.json`)
+    /// Returns a matching asset loader depending on the file extension (`.akasset` or `.json`)
     ///
     /// If both binary and json files exist, binary file has higher priority to load (beware no fallback load for .json)
     static AnimationLoader getLoader(Identifier resourcePath, ResourceManager resourceManager)
         throws ResourceLoadingFailureException
     {
         Metadata metadata = AssetLoader.readMetadata(resourcePath, resourceManager, Metadata.CODEC, Metadata.DEFAULT);
-        Identifier asBinary = Identifier.fromNamespaceAndPath(resourcePath.getNamespace(), resourcePath.getPath() + ".efasset");
+        Identifier asBinary = Identifier.fromNamespaceAndPath(resourcePath.getNamespace(), resourcePath.getPath() + "." + AssetLoader.BINARY_EXTENSION);
         Optional<Resource> binaryResource = resourceManager.getResource(asBinary);
 
         if (binaryResource.isPresent()) {
@@ -106,7 +106,7 @@ public interface AnimationLoader extends AssetLoader {
             return new JsonAnimationLoader(asJson, jsonResource.get(), metadata);
         }
 
-        throw new ResourceLoadingFailureException(resourcePath, "Found neither binary(.efasset) nor json(.json) asset file");
+        throw new ResourceLoadingFailureException(resourcePath, "Found neither binary(.akasset) nor json(.json) asset file");
     }
 
     record Metadata(ImportType importType, @Nullable AssetAccessor<AnimationClip> refPoseProvider, float refPoseTimeStamp) {

@@ -16,7 +16,7 @@ import java.nio.charset.StandardCharsets;
 
 /// Common json loader helper that read and parse the whole file content into a root [JsonObject]
 ///
-/// Since the Epic Fight 16 version (akythera), we support binary files (.efasset) to optimize file
+/// Since the Epic Fight 16 version (akythera), we support binary files (.akasset) to optimize file
 /// size and loading process.
 ///
 /// The .json loader exists for old assets' support, especially retargeting animationsToReplace in AkytheraLabs.

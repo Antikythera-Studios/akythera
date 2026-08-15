@@ -22,7 +22,7 @@ import java.util.Map;
 
 /// Load meshes from json files. Instances are dedicated for loading a resource specified by [#resourcePath].
 ///
-/// Deprecated: Use [BinaryMeshLoader] with .efasset extension to accelerate asset loading process
+/// Deprecated: Use [BinaryMeshLoader] with .akasset extension to accelerate asset loading process
 @Deprecated
 public final class JsonMeshLoader implements MeshLoader, JsonAssetLoader {
     private final Identifier resourcePath;

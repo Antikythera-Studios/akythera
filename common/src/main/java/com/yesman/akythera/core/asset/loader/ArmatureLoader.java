@@ -21,13 +21,13 @@ public interface ArmatureLoader extends AssetLoader {
     /// Loads an armature with type constructor
     <T extends Armature> T loadArmature(ArmatureConstructor<T> armatureConstructor) throws ResourceLoadingFailureException;
 
-    /// Returns a matching asset loader depending on the file extension (`.efasset` or `.json`)
+    /// Returns a matching asset loader depending on the file extension (`.akasset` or `.json`)
     ///
     /// If both binary and json files exist, binary file has higher priority to load
     static ArmatureLoader getLoader(Identifier resourcePath, ResourceManager resourceManager)
         throws ResourceLoadingFailureException
     {
-        Identifier asBinary = Identifier.fromNamespaceAndPath(resourcePath.getNamespace(), resourcePath.getPath() + ".efasset");
+        Identifier asBinary = Identifier.fromNamespaceAndPath(resourcePath.getNamespace(), resourcePath.getPath() + "." + AssetLoader.BINARY_EXTENSION);
         Optional<Resource> binaryResource = resourceManager.getResource(asBinary);
 
         if (binaryResource.isPresent()) {
@@ -45,7 +45,7 @@ public interface ArmatureLoader extends AssetLoader {
             return new JsonArmatureLoader(asJson, jsonResource.get());
         }
 
-        throw new ResourceLoadingFailureException(resourcePath, "Found neither binary(.efasset) nor json(.json) asset file");
+        throw new ResourceLoadingFailureException(resourcePath, "Found neither binary(.akasset) nor json(.json) asset file");
     }
 
     /// Typed armature constructors to return typed objects

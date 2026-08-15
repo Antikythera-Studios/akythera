@@ -26,19 +26,20 @@ public interface AssetLoader {
     /// Coord system converter as Blender has Z-Up system, and Minecraft has Y-Up basis.
     Matrix4f BLENDER_TO_MINECRAFT_COORD_SYSTEM = new Matrix4f().rotate((float)Math.toRadians(-90.0F), 1.0F, 0.0F, 0.0F);
 
-    /// File extension of an asset's sidecar metadata: `walk.efasset` is described by `walk.akmeta`.
-    /// The content is json, but the extension is its own so that a sidecar is never picked up by the
-    /// `.json` probes that read asset files.
+    /// File extension of assets as binary files.
+    String BINARY_EXTENSION = "akasset";
+
+    /// File extension of an asset's sidecar metadata. The content is `.json`.
     String METADATA_EXTENSION = ".akmeta";
 
     /// A resource path identifier
     Identifier resourcePath();
 
-    /// The sidecar metadata id of an asset path, with or without its `.efasset` / `.json` extension.
+    /// The sidecar metadata id of an asset path, with or without its `.akasset` / `.json` extension.
     static Identifier metadataPath(final Identifier assetPath) {
         return Identifier.fromNamespaceAndPath(
             assetPath.getNamespace(),
-            ParseUtils.trimExtensions(assetPath.getPath(), "efasset", "json") + METADATA_EXTENSION
+            ParseUtils.trimExtensions(assetPath.getPath(), BINARY_EXTENSION, "json") + METADATA_EXTENSION
         );
     }
 

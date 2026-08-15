@@ -28,7 +28,7 @@ import java.util.List;
 
 /// Load animationsToReplace from json files. Instances are dedicated for loading a resource specified by [#resourcePath].
 ///
-/// Deprecated: Use [BinaryAnimationLoader] with .efasset extension to accelerate asset loading process
+/// Deprecated: Use [BinaryAnimationLoader] with .akasset extension to accelerate asset loading process
 @Deprecated
 public final class JsonAnimationLoader implements AnimationLoader, JsonAssetLoader {
     private static final String LEGACY_ROOT_BONE_NAME = "Coord";

@@ -12,12 +12,10 @@ import java.util.zip.Inflater;
 
 /// Since Epic Fight 16, binary assets are introduced to optimized file size
 /// and asset load process. All assets are highly recommended to be exported
-/// as binary. (.efasset)
+/// as binary. (.akasset)
 ///
 /// Track the official blender exporter updates [here](https://github.com/Epic-Fight/blender-json-addon)
 public interface BinaryAssetLoader {
-    String EXTENSION = "efasset";
-
     byte[] PADDING = "EFAS".getBytes(StandardCharsets.US_ASCII);
 
     Identifier resourcePath();

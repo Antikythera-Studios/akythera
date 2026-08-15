@@ -42,14 +42,14 @@ public interface MeshLoader extends AssetLoader {
     /// @exception ResourceLoadingFailureException when asset file doesn't exist, invalid formats, or others
     <T extends SkeletalMesh> T loadSkeletalMesh(MeshConstructor<T, SkeletalMesh.SkeletalMeshBuilder> meshConstructor) throws ResourceLoadingFailureException;
 
-    /// Returns a matching asset loader depending on the file extension (`.efasset` or `.json`)
+    /// Returns a matching asset loader depending on the file extension (`.akasset` or `.json`)
     ///
     /// If both binary and json files exist, binary file has higher priority to load
     static MeshLoader getLoader(Identifier resourcePath, ResourceManager resourceManager)
         throws ResourceLoadingFailureException
     {
         Metadata metadata = AssetLoader.readMetadata(resourcePath, resourceManager, Metadata.CODEC, Metadata.DEFAULT);
-        Identifier asBinary = Identifier.fromNamespaceAndPath(resourcePath.getNamespace(), resourcePath.getPath() + ".efasset");
+        Identifier asBinary = Identifier.fromNamespaceAndPath(resourcePath.getNamespace(), resourcePath.getPath() + "." + AssetLoader.BINARY_EXTENSION);
         Optional<Resource> binaryResource = resourceManager.getResource(asBinary);
 
         if (binaryResource.isPresent()) {
@@ -67,7 +67,7 @@ public interface MeshLoader extends AssetLoader {
             return new JsonMeshLoader(asJson, jsonResource.get(), metadata);
         }
 
-        throw new ResourceLoadingFailureException(resourcePath, "Found neither binary(.efasset) nor json(.json) asset file");
+        throw new ResourceLoadingFailureException(resourcePath, "Found neither binary(.akasset) nor json(.json) asset file");
     }
 
     /// Typed mesh constructors to return typed objects
