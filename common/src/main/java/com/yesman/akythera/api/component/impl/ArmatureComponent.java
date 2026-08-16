@@ -7,6 +7,7 @@ import com.yesman.akythera.api.component.DynamicPatchComponent;
 import com.yesman.akythera.api.component.TickableDynamicComponent;
 import com.yesman.akythera.api.component.UniqueComponent;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.asset.armature.Armature;
 import com.yesman.akythera.core.asset.armature.Bone;
 import com.yesman.akythera.core.asset.armature.BoneSocket;
@@ -33,6 +34,11 @@ public class ArmatureComponent
     private final Map<String, BoneSocket> boneSockets = new HashMap<>();
 
     private EntityPatch<Entity> owner;
+
+    /// Last pose resulted by [Animator#getPose()]
+    ///
+    /// Access pose via this field instead of calling [Animator#getPose()] every time.
+    private Pose cachedPose;
 
     /// The forward-bound skeleton at the pose [#updateBoundTransforms] last wrote. Sized on the
     /// first update: a preview armature has no armature yet when its constructor runs.
@@ -88,7 +94,8 @@ public class ArmatureComponent
             boundTransforms = Matrix4fUtils.allocateMatrixArray(resolved.getBoneCount());
         }
 
-        getAnimator().getPose().getForwardBoundTransforms(accessor, boundTransforms);
+        cachedPose = getAnimator().getPose();
+        cachedPose.getForwardBoundTransforms(accessor, boundTransforms);
     }
 
     public Animator getAnimator() {
@@ -97,6 +104,14 @@ public class ArmatureComponent
 
     public AssetAccessor<? extends Armature> getArmature() {
         return armature;
+    }
+
+    public Pose getCachedPose() {
+        return cachedPose;
+    }
+
+    public Matrix4f[] getBoundTransforms() {
+        return boundTransforms;
     }
 
     // The call site must be in-game time. Crashed when try to use this component in preview model.

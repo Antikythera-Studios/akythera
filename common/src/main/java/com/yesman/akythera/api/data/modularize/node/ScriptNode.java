@@ -12,6 +12,13 @@ public interface ScriptNode {
     /// singleton, or a tree built by hand.
     int NO_NODE_ID = -1;
 
+    /// Canvas key of a sub-tree no editor canvas produced — a hand-assembled tree, or a pack built
+    /// without them.
+    ///
+    /// Row ids are numbered per canvas, so a sub-tree whose evaluation outlives the entry point that
+    /// built it names the canvas its rows were numbered against as well as the row.
+    String NO_CANVAS = "";
+
     /// Script node graph identifier determined in editor side to debug the node graph.
     ///
     /// [#NO_NODE_ID] when no editor row produced this node. Ids are assigned per export and are only

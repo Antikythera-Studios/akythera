@@ -100,6 +100,7 @@ public final class BlendSpace2DDriver implements AnimationDriver {
         // corners at raw elapsedTime freezes any shorter clip on its last keyframe until
         // the wrap. Sample each corner at the shared phase scaled to its own length.
         float t1, t2, t3;
+
         if (cachedTotalTime > 0.0F && cachedTotalTime != Float.MAX_VALUE) {
             float phase = elapsedTime / cachedTotalTime;
             t1 = phase * cachedAnim1.getTotalFrameTime();

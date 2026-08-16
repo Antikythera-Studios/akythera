@@ -351,7 +351,6 @@ public final class EntityModelComponent implements Model3DViewerComponent, Anima
             // Add a headless anim manager, this would cause crash under the premise of animation-only usage
             AvatarAnimManager avatarAnimManager = new AvatarAnimManager(null);
             AkytheraAnimationLayer locomotionLayer = new AkytheraAnimationLayer(this);
-            locomotionLayer.updatePose();
             avatarAnimManager.addAnimLayer(0, locomotionLayer);
             avatarAnimationState.playerAnimLib$setAnimManager(avatarAnimManager);
         }
@@ -532,17 +531,10 @@ public final class EntityModelComponent implements Model3DViewerComponent, Anima
         }
     }
 
-    private record VanillaRenderInfo<S extends LivingEntityRenderState>(EntityModel<@NotNull S> entityModel,
-                                                                        S renderState) {
+    private record VanillaRenderInfo<S extends LivingEntityRenderState>(EntityModel<@NotNull S> entityModel, S renderState) {
         public void updatePose(Pose pose) {
             if (renderState instanceof LivingEntityRenderStateAccessor livingEntityRenderStateAccessor) {
                 livingEntityRenderStateAccessor.akythera$setPose(pose);
-            }
-
-            if (renderState instanceof IAvatarAnimationState avatarAnimationState) {
-                // No type and null checks, since `renderState` is initialized in ModelPreviewer
-                AkytheraAnimationLayer locomotionLayer = (AkytheraAnimationLayer) avatarAnimationState.playerAnimLib$getAnimManager().getLayers().getFirst().second();
-                locomotionLayer.updatePose();
             }
 
             entityModel.setupAnim(renderState);

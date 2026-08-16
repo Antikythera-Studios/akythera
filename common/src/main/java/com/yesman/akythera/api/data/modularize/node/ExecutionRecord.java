@@ -10,7 +10,7 @@ import java.util.List;
 /// holds the finished tree as soon as `execute` returns.
 ///
 /// There is one root per statement the run entered at the top level — a chained
-/// [FlowFunctionNode#nextNode] closes the frame before it, so a chain is a run of roots rather than a
+/// [FlowFunctionNode#nextNode()] closes the frame before it, so a chain is a run of roots rather than a
 /// nest.
 public final class ExecutionRecord {
     private final List<CallStack> roots = new ArrayList<>();

@@ -1,5 +1,6 @@
 package com.yesman.akythera.api.animation.animator;
 
+import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.component.impl.RootMotionComponent;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.Akythera;
@@ -128,7 +129,10 @@ public interface Animator {
     @ApiStatus.Internal
     void tick();
 
-    /// Gets the final pose of the animator by partial tick
+    /// Gets the final updated pose by each frame.
+    ///
+    /// Access poses using [ArmatureComponent#getCachedPose()]
+    @ApiStatus.Internal
     Pose getPose();
 
     /// Returns the owner of this component

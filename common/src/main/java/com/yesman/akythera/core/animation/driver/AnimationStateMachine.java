@@ -108,6 +108,7 @@ public final class AnimationStateMachine<T extends EntityPatch<Entity>>
     public void start() {
         if (getState() == AkytheraAnimationState.EXIT) {
             setState(AkytheraAnimationState.ENTRY);
+            getStateModel().getStateInstance(getState()).animDriver.start();
         }
     }
 
@@ -116,6 +117,7 @@ public final class AnimationStateMachine<T extends EntityPatch<Entity>>
     public void terminate() {
         if (getState() != AkytheraAnimationState.EXIT) {
             getStateModel().getStateInstance(getState()).animDriver.terminate();
+            setState(AkytheraAnimationState.EXIT);
         }
     }
 

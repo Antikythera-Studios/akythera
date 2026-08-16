@@ -3,6 +3,7 @@ package com.yesman.akythera.api.data.modularize.node.animgraph;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.data.modularize.node.PureNode;
+import com.yesman.akythera.api.data.modularize.node.ScriptNode;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.animation.animator.BlendingAnimator;
 import com.yesman.akythera.core.animation.driver.AnimationDriver;
@@ -29,13 +30,20 @@ public record AnimationStateMachineNode(
     List<StateEntry> states
 ) implements PureNode {
 
-    /// A transition to `to` gated by `condition`; the `from` is the owning state (or Entry).
-    public record TransitionEntry(FSMAnimationState to, PureNode condition) {
+    /// A transition to `to` gated by `condition`; the `from` is the owning state (or Entry). `canvas`
+    /// is the editor canvas `condition` was compiled from, which is what identifies its rows.
+    public record TransitionEntry(FSMAnimationState to, PureNode condition, String canvas) {
+        /// A transition with no editor canvas behind it — any hand-assembled machine.
+        public TransitionEntry(final FSMAnimationState to, final PureNode condition) {
+            this(to, condition, ScriptNode.NO_CANVAS);
+        }
+
         public static final Codec<TransitionEntry> CODEC = RecordCodecBuilder.create(
             instance ->
                 instance.group(
                     FSMAnimationState.ENUM_MANAGER.getNameCodec().fieldOf("to").forGetter(TransitionEntry::to),
-                    PureNode.CODEC.fieldOf("condition").forGetter(TransitionEntry::condition)
+                    PureNode.CODEC.fieldOf("condition").forGetter(TransitionEntry::condition),
+                    Codec.STRING.optionalFieldOf("canvas", ScriptNode.NO_CANVAS).forGetter(TransitionEntry::canvas)
                 ).apply(instance, TransitionEntry::new)
         );
     }
@@ -69,7 +77,7 @@ public record AnimationStateMachineNode(
 
         // Entry transitions attach to the entry state (the builder cursor starts there).
         for (TransitionEntry t : entryTransitions) {
-            builder.transitTo(t.to(), check(script, t.condition()));
+            builder.transitTo(t.to(), check(script, t));
         }
 
         for (StateEntry s : states) {
@@ -77,18 +85,20 @@ public record AnimationStateMachineNode(
             builder.addState(s.state(), AnimationStateMachine.stateInstanceBuilder(s.state(), driver));
 
             for (TransitionEntry t : s.transitions()) {
-                builder.transitTo(t.to(), check(script, t.condition()));
+                builder.transitTo(t.to(), check(script, t));
             }
         }
 
         return (T) new AnimationStateMachine(owner, builder);
     }
 
-    /// A live transition check that evaluates `condition` against the script's current variables. An
-    /// empty / non-boolean condition (nothing wired) reads as an unconditional (always-true) transition.
-    private static Transition.TransitionCheck<?, ?> check(final DataDrivenScript<?, ?> script, final PureNode condition) {
+    /// A live transition check that evaluates `entry`'s condition against the script's current
+    /// variables. An empty / non-boolean condition (nothing wired) reads as an unconditional
+    /// (always-true) transition.
+    private static Transition.TransitionCheck<?, ?> check(final DataDrivenScript<?, ?> script, final TransitionEntry entry) {
         return (_, _) -> {
-            Object value = condition.execute(script, new ExecutionContext(script.getScriptVariable()));
+            Object value = entry.condition().execute(script, new ExecutionContext(script.getScriptVariable()));
+
             return !(value instanceof Boolean bool) || bool;
         };
     }

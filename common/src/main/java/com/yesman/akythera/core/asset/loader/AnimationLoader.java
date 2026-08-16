@@ -1,6 +1,7 @@
 package com.yesman.akythera.core.asset.loader;
 
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.asset.AssetAccessor;
 import com.yesman.akythera.api.asset.animation.AnimationManager;
@@ -110,7 +111,9 @@ public interface AnimationLoader extends AssetLoader {
     }
 
     record Metadata(ImportType importType, @Nullable AssetAccessor<AnimationClip> refPoseProvider, float refPoseTimeStamp) {
-        public static final Codec<Metadata> CODEC = RecordCodecBuilder.create(
+        /// The fields as they sit at the root of a sidecar, so a reader that carries fields of its
+        /// own can place them alongside instead of under a section.
+        public static final MapCodec<Metadata> MAP_CODEC = RecordCodecBuilder.mapCodec(
             instance ->
                 instance.group(
                     ImportType.CODEC.fieldOf("import_type").forGetter(Metadata::importType),
@@ -118,6 +121,8 @@ public interface AnimationLoader extends AssetLoader {
                     Codec.FLOAT.fieldOf("ref_pose_timestamp").forGetter(Metadata::refPoseTimeStamp)
                 ).apply(instance, Metadata::new)
         );
+
+        public static final Codec<Metadata> CODEC = MAP_CODEC.codec();
 
         /// What an asset without a sidecar file is read with.
         public static final Metadata DEFAULT = new Metadata(ImportType.COMMON, (AssetAccessor<AnimationClip>)null, 0.0F);

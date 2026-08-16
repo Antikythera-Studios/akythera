@@ -85,7 +85,7 @@ public final class PatchModelRenderer {
             RenderableComponent<?> component = submit.component();
 
             if (component.stateType().isInstance(state)) {
-                ((RenderableComponent<LivingEntityRenderState>) component).extract(patch, state, partialTick);
+                ((RenderableComponent<LivingEntityRenderState>)component).extract(patch, state, partialTick);
             }
         }
     }

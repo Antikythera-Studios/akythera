@@ -44,7 +44,7 @@ public abstract class MixinLivingEntityRenderer<T extends LivingEntity, S extend
 
         AkytheraPatches.getEntityPatchOptional(entity).ifPresent(entityPatch -> {
             if (entityPatch.getArmatureComponent() != null) {
-                stateAccessor.akythera$setPose(entityPatch.getArmatureComponent().getAnimator().getPose());
+                stateAccessor.akythera$setPose(entityPatch.getArmatureComponent().getCachedPose());
                 stateAccessor.akythera$setArmature(entityPatch.getArmatureComponent().getArmature());
             }
 
