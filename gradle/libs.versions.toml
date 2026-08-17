@@ -1,5 +1,5 @@
 [versions]
-mod = "0.2.0-SNAPSHOT"
+mod = "0.2.0-SNAPSHOT.1"
 java = "25"
 
 # Minecraft
@@ -42,7 +42,7 @@ iris = "1.8.12+1.21.1-neoforge"
 
 # Helper Gradle-plugins
 mcSafeResources = "0.0.2"
-modPublish = "1.1.0"
+modPublish = "2.2.0"
 mavenPublish = "0.37.0"
 
 [libraries]
