@@ -44,6 +44,7 @@ public final class AnimationPlayer implements AnimationDriver {
     public void start() {
         fadingInOrOut = true;
         isFinished = false;
+        fadeTime = 0.0F;
         elapsedTime = 0.0F;
         lastUpdatedTime = 0.0F;
     }
@@ -108,6 +109,19 @@ public final class AnimationPlayer implements AnimationDriver {
     @Override
     public boolean fadingInOrOut() {
         return fadingInOrOut;
+    }
+
+    @Override
+    public float getFadeTime() {
+        return fadeTime;
+    }
+
+    @Override
+    public void syncDriverTo(@NonNull AnimationDriver source) {
+        fadeTime = source.getFadeTime();
+        elapsedTime = source.getTime();
+        lastUpdatedTime = source.getTime();
+        isFinished = source.isFinished();
     }
 
     @Override

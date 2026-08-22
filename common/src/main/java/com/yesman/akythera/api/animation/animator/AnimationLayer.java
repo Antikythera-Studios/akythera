@@ -5,6 +5,7 @@ import com.yesman.akythera.core.animation.driver.AnimationDriver;
 import com.yesman.akythera.core.animation.driver.AnimationMontagePlayer;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.reflection.ScriptFunction;
+import com.yesman.akythera.core.util.helper.PoseOperators;
 import net.minecraft.world.entity.Entity;
 
 /// Each animation layer has independent playing sequence and
@@ -49,6 +50,6 @@ public final class AnimationLayer {
     @ScriptFunction(label = "Get Pose", desc = "Get the animation layer's current pose")
     public Pose getPose() {
         // base layer pose is weighted by (1 - w), as montage pose by (w)
-        return Pose.blendPoses(animDriver.getPose(), 1.0F - montagePlayer.getWeight(), montagePlayer.getPose(), montagePlayer.getWeight());
+        return PoseOperators.blendPoses(animDriver.getPose(), 1.0F - montagePlayer.getWeight(), montagePlayer.getPose(), montagePlayer.getWeight());
     }
 }

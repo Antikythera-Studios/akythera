@@ -12,7 +12,7 @@ import com.yesman.akythera.api.data.modularize.node.ScriptNode;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.animation.animator.BlendingAnimator;
 import com.yesman.akythera.core.animation.driver.AnimationDriver;
-import com.yesman.akythera.core.animation.driver.AnimationLayerSignature;
+import com.yesman.akythera.core.animation.AnimationLayerSignature;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.reflection.DataDrivenScript;
 import com.yesman.akythera.core.registry.AkytheraRegistries;

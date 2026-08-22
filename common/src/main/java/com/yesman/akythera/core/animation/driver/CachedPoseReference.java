@@ -5,6 +5,7 @@ import com.yesman.akythera.core.animation.animator.BlendingAnimator;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import net.minecraft.world.entity.Entity;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 public final class CachedPoseReference implements AnimationDriver {
@@ -13,11 +14,20 @@ public final class CachedPoseReference implements AnimationDriver {
 
     private final BlendingAnimator blendingAnimator;
 
+    private final boolean controlReferenceDriver;
+
     private float recordedAdvanceTime;
 
     public CachedPoseReference(final String cacheName, final BlendingAnimator blendingAnimator) {
+        this(cacheName, blendingAnimator, false);
+    }
+
+    public CachedPoseReference(
+        final String cacheName, final BlendingAnimator blendingAnimator, final boolean controlReferenceDriver
+    ) {
         this.cacheName = cacheName;
         this.blendingAnimator = blendingAnimator;
+        this.controlReferenceDriver = controlReferenceDriver;
     }
 
     @Override
@@ -59,17 +69,17 @@ public final class CachedPoseReference implements AnimationDriver {
 
     @Override
     public void start() {
-        ref().start();
+        if (controlReferenceDriver) ref().start();
     }
 
     @Override
     public void terminate() {
-        ref().terminate();
+        if (controlReferenceDriver) ref().terminate();
     }
 
     @Override
     public float getWeight() {
-        return ref().getWeight();
+        return ref().getWeight();//playbackControl ? ref().getWeight() : 0.0F;
     }
 
     @Override
@@ -80,6 +90,18 @@ public final class CachedPoseReference implements AnimationDriver {
     @Override
     public boolean fadingInOrOut() {
         return ref().fadingInOrOut();
+    }
+
+    @Override
+    public float getFadeTime() {
+        return ref().getFadeTime();
+    }
+
+    @Override
+    public void syncDriverTo(@NonNull AnimationDriver source) {
+        if (controlReferenceDriver) {
+            ref().syncDriverTo(source);
+        }
     }
 
     private AnimationDriver ref() {

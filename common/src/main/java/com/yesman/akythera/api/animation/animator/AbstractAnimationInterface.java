@@ -6,6 +6,7 @@ import com.yesman.akythera.core.animation.driver.AnimationDriver;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.blueprint.script.AnimatorScript;
+import com.yesman.akythera.core.util.helper.PoseOperators;
 import net.minecraft.core.Holder;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -71,7 +72,7 @@ public abstract class AbstractAnimationInterface<AD extends AnimationDriver, PA 
         boolean shouldBlend = animDriverO != null;
 
         return shouldBlend
-            ? Pose.blendPoses(animDriverO.getPose(), 1.0F - weight, animDriver.getPose(), weight)
+            ? PoseOperators.blendPoses(animDriverO.getPose(), 1.0F - weight, animDriver.getPose(), weight)
             : animDriver.getPose();
     }
 
@@ -124,5 +125,15 @@ public abstract class AbstractAnimationInterface<AD extends AnimationDriver, PA 
     @Override
     public final boolean fadingInOrOut() {
         return animDriver.fadingInOrOut();
+    }
+
+    @Override
+    public float getFadeTime() {
+        return animDriver.getFadeTime();
+    }
+
+    @Override
+    public void syncDriverTo(@NonNull AnimationDriver source) {
+        animDriver.syncDriverTo(source);
     }
 }

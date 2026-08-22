@@ -1,42 +1,41 @@
 package com.yesman.akythera.core.animation.driver;
 
-import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.api.animation.impl.AkytheraAnimationState;
+import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.core.animation.FSMAnimationState;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.math.model.FiniteStateMachine;
 import com.yesman.akythera.core.math.model.StateInstance;
 import com.yesman.akythera.core.math.model.StateModel;
-import com.yesman.akythera.core.math.model.Transition;
 import net.minecraft.world.entity.Entity;
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 
 /// A state machine that runs on the [#owner]'s lifecycle to play its locomotion.
-public final class AnimationStateMachine<T extends EntityPatch<Entity>>
-    implements FiniteStateMachine<T, FSMAnimationState, AnimationStateMachine<T>.AnimationStateInstance>, AnimationDriver
+public final class AnimationStateMachine<O extends EntityPatch<Entity>>
+    implements FiniteStateMachine<O, FSMAnimationState, AnimationStateMachine<O>.AnimationStateInstance, AnimationStateTransition<O>>, AnimationDriver
 {
-    private final T owner;
-    private final StateModel<FSMAnimationState, AnimationStateMachine<T>.AnimationStateInstance, AnimationStateMachine<T>> stateModel;
+    private final O owner;
+    private final StateModel<FSMAnimationState, AnimationStateMachine<O>.AnimationStateInstance, AnimationStateTransition<O>, AnimationStateMachine<O>> stateModel;
+
     private FSMAnimationState state = AkytheraAnimationState.ENTRY;
 
-    private boolean firstCome;
+    @NonNull
+    private AnimationDriver currentDriver;
 
-    @NotNull
-    private AnimationDriver lastDriver;
-
-    public AnimationStateMachine(T owner, StateModel.StateModelBuilder<T, FSMAnimationState, AnimationStateMachine<T>.AnimationStateInstance, AnimationStateMachine<T>> stateModelBuilder) {
+    public AnimationStateMachine(O owner, StateModel.StateModelBuilder<O, FSMAnimationState, AnimationStateMachine<O>.AnimationStateInstance, AnimationStateTransition<O>, AnimationStateMachine<O>> stateModelBuilder) {
         this.owner = owner;
 
         stateModel = stateModelBuilder.build(this);
 
         // Initialize with entry driver, an empty driver
-        lastDriver = stateModel.getStateInstance(state).animDriver;
+        currentDriver = stateModel.getStateInstance(state).animDriver;
     }
 
-    private AnimationStateInstance createInstance(List<Transition<?, ?, ?>> transitions, FSMAnimationState state, AnimationDriver animDriver) {
+    private AnimationStateInstance createInstance(List<AnimationStateTransition<O>> transitions, FSMAnimationState state, AnimationDriver animDriver) {
         return new AnimationStateInstance(transitions, state, animDriver);
     }
 
@@ -46,12 +45,12 @@ public final class AnimationStateMachine<T extends EntityPatch<Entity>>
     }
 
     @Override
-    public StateModel<FSMAnimationState, AnimationStateMachine<T>.AnimationStateInstance, AnimationStateMachine<T>> getStateModel() {
+    public StateModel<FSMAnimationState, AnimationStateMachine<O>.AnimationStateInstance, AnimationStateTransition<O>, AnimationStateMachine<O>> getStateModel() {
         return stateModel;
     }
 
     @Override
-    public T getOwner() {
+    public O getOwner() {
         return owner;
     }
 
@@ -72,8 +71,7 @@ public final class AnimationStateMachine<T extends EntityPatch<Entity>>
 
     @Override
     public Pose getPose() {
-        AnimationDriver animDriver = getCurrentStateDriver();
-        return Pose.blendPoses(lastDriver.getPose(), lastDriver.getWeight(), animDriver.getPose(), animDriver.getWeight());
+        return currentDriver.getPose();
     }
 
     @Override
@@ -84,12 +82,7 @@ public final class AnimationStateMachine<T extends EntityPatch<Entity>>
     /// Updates animation time of each state's animation driver.
     @Override
     public void update(final float frameTime) {
-        // Updates the previous driver when fading is progressing
-        if (0.0F < lastDriver.getWeight()) {
-            lastDriver.update(frameTime);
-        }
-
-        getCurrentStateDriver().update(frameTime);
+        currentDriver.update(frameTime);
     }
 
     /// Implementation of [AnimationDriver]: tick the machine as driver
@@ -125,18 +118,7 @@ public final class AnimationStateMachine<T extends EntityPatch<Entity>>
     /// 1.0 when state transition occurs.
     @Override
     public float getWeight() {
-        // Judges whether it's a first played driver by a stateful variable. The entry
-        // state is removed as soon as the machine starts.
-        if (firstCome) {
-            return getCurrentStateDriver().getWeight();
-        }
-
-        // Gets weight from last recorded anim driver when the state is exited
-        if (getState() == AkytheraAnimationState.EXIT) {
-            return lastDriver.getWeight();
-        }
-
-        return 1.0F;
+        return getCurrentStateDriver().getWeight();
     }
 
     @Override
@@ -149,14 +131,32 @@ public final class AnimationStateMachine<T extends EntityPatch<Entity>>
         return getCurrentStateDriver().fadingInOrOut();
     }
 
+    @Override
+    public float getFadeTime() {
+        return getCurrentStateDriver().getFadeTime();
+    }
+
+    @Override
+    public void syncDriverTo(@NonNull AnimationDriver source) {
+        getCurrentStateDriver().syncDriverTo(source);
+    }
+
     private AnimationDriver getCurrentStateDriver() {
         return stateModel.getStateInstance(getState()).animDriver;
     }
 
-    public static <T extends EntityPatch<Entity>> StateModel.StateModelBuilder<T, FSMAnimationState, AnimationStateMachine<T>.AnimationStateInstance, AnimationStateMachine<T>> stateModelBuilder() {
+    /// The [AnimationDriver] `stateInstance` plays. Empty for a state instance this machine did not
+    /// build -- a transition check is typed against [StateInstance], not this machine's own instance.
+    public static AnimationDriver driverOf(final StateInstance<?, ?> stateInstance) {
+        return stateInstance instanceof AnimationStateMachine<?>.AnimationStateInstance instance
+            ? instance.animDriver
+            : EmptyAnimationDriver.INSTANCE;
+    }
+
+    public static <O extends EntityPatch<Entity>> StateModel.StateModelBuilder<O, FSMAnimationState, AnimationStateMachine<O>.AnimationStateInstance, AnimationStateTransition<O>, AnimationStateMachine<O>> stateModelBuilder() {
         return StateModel.builder(
-            new AnimationInstanceStateBuilder<>(AkytheraAnimationState.ENTRY, new EmptyAnimationDriver()),
-            new AnimationInstanceStateBuilder<>(AkytheraAnimationState.EXIT, new EmptyAnimationDriver())
+            new AnimationInstanceStateBuilder<>(AkytheraAnimationState.ENTRY, EmptyAnimationDriver.INSTANCE),
+            new AnimationInstanceStateBuilder<>(AkytheraAnimationState.EXIT, EmptyAnimationDriver.INSTANCE)
         );
     }
 
@@ -164,14 +164,30 @@ public final class AnimationStateMachine<T extends EntityPatch<Entity>>
         return new AnimationInstanceStateBuilder<>(state, animDriver);
     }
 
-    public class AnimationStateInstance extends StateInstance<FSMAnimationState> {
+    // Called by `AnimationStateTransition`.
+    void transferDriver(final AnimationStateMachine<O>.AnimationStateInstance nextState, final float blendTime, final boolean transferElapsedTime) {
+        if (transferElapsedTime) {
+            nextState.animDriver.syncDriverTo(currentDriver);
+        }
+
+        if (currentDriver instanceof DriverTransfer) {
+            // If a transition is already on going, only capture the pose and blend the pose
+            // with next anim driver, preventing nested drivers when state changes quickly.
+            Pose currentPose = currentDriver.getPose();
+            currentDriver = new PoseToDriverTransfer(currentPose, nextState.animDriver, blendTime, () -> currentDriver = nextState.animDriver);
+        } else {
+            currentDriver = new DriverToDriverTransfer(currentDriver, nextState.animDriver, blendTime, () -> currentDriver = nextState.animDriver);
+        }
+    }
+
+    public class AnimationStateInstance extends StateInstance<FSMAnimationState, AnimationStateTransition<O>> {
         private final FSMAnimationState state;
 
         /// Null for entry, exit states
         private final AnimationDriver animDriver;
 
         private AnimationStateInstance(
-            final List<Transition<?, ?, ?>> transitions,
+            final List<AnimationStateTransition<O>> transitions,
             final FSMAnimationState state,
             final AnimationDriver animDriver
         ) {
@@ -183,19 +199,14 @@ public final class AnimationStateMachine<T extends EntityPatch<Entity>>
 
         /// State started by transition, reset the fade-in timer
         @Override
-        public void onStart() {
+        protected void onStart() {
             animDriver.start();
         }
 
         /// Set the last pose to fade out. If a new state is set by transition, fade time will be reset to 0 by [#onStart]
         @Override
-        public void onStop() {
-            // When entry state stops (i.e. when the machine starts) record "first come" true.
-            firstCome = state == AkytheraAnimationState.ENTRY;
+        protected void onStop() {
             animDriver.terminate();
-
-            // Record the last driver
-            lastDriver = animDriver;
         }
 
         /// Do nothing in here, poses are updated by [AnimationStateMachine#update]
@@ -203,7 +214,6 @@ public final class AnimationStateMachine<T extends EntityPatch<Entity>>
         protected boolean tick() {
             // Update the machine-in-machine
             animDriver.tick(owner);
-
             return true;
         }
 
@@ -211,10 +221,14 @@ public final class AnimationStateMachine<T extends EntityPatch<Entity>>
         public FSMAnimationState toSignature() {
             return state;
         }
+
+        public AnimationStateMachine<O> getMachine() {
+            return AnimationStateMachine.this;
+        }
     }
 
-    public static final class AnimationInstanceStateBuilder<T extends EntityPatch<Entity>>
-        extends StateModel.StateInstanceBuilder<FSMAnimationState, AnimationStateMachine<T>.AnimationStateInstance, AnimationStateMachine<T>>
+    public static final class AnimationInstanceStateBuilder<O extends EntityPatch<Entity>>
+        extends StateModel.StateInstanceBuilder<FSMAnimationState, AnimationStateMachine<O>.AnimationStateInstance, AnimationStateTransition<O>, AnimationStateMachine<O>>
     {
         private final FSMAnimationState state;
         private final AnimationDriver animDriver;
@@ -225,7 +239,7 @@ public final class AnimationStateMachine<T extends EntityPatch<Entity>>
         }
 
         @Override
-        protected AnimationStateMachine<T>.AnimationStateInstance makeInstance(AnimationStateMachine<T> owner) {
+        protected AnimationStateMachine<O>.AnimationStateInstance makeInstance(AnimationStateMachine<O> owner) {
             return owner.createInstance(transitions, state, animDriver);
         }
     }

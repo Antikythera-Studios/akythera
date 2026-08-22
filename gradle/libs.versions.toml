@@ -1,5 +1,5 @@
 [versions]
-mod = "0.2.0-SNAPSHOT.1"
+mod = "0.2.0-SNAPSHOT.2"
 java = "25"
 
 # Minecraft
@@ -29,11 +29,11 @@ asm = "9.7"
 # Modrinth API can't distinguish the same version with different Minecraft version.
 # It always returns PAL 1.2.5+26.1 so we inevitably used unique identifiers.
 
-player_animation_library = "OQqtEQC6"
-# player_animation_library = "1.2.5"
+player_animation_library = "Hq1CwB9w"
+# player_animation_library = "1.2.6"
 
-bendable_cuboids = "beAwFUUC"
-# bendable_cuboids = "2.0.2"
+bendable_cuboids = "giI64d4E"
+# bendable_cuboids = "2.0.3"
 
 forgeconfigapiport = "26.2.1"
 

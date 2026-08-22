@@ -1,9 +1,6 @@
 package com.yesman.akythera.neoforged.core;
 
-import com.yesman.akythera.api.animation.animator.AnimationInterfaceKey;
 import com.yesman.akythera.core.Akythera;
-import com.yesman.akythera.core.animation.driver.AnimationLayerSignature;
-import com.yesman.akythera.core.animation.driver.FSMAnimationState;
 import com.yesman.akythera.core.networking.NetworkingHelper;
 import com.yesman.akythera.neoforged.core.networking.NeoForgedNetworkingHelper;
 import com.yesman.akythera.platform.ModPlatformProvider;

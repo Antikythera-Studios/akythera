@@ -6,8 +6,10 @@ import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.notify.AnimationNotifyTrack;
 import com.yesman.akythera.core.animation.playable.AnimationMontage;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
+import com.yesman.akythera.core.animation.playable.SectionInfo;
 import com.yesman.akythera.core.math.TimeWindow;
 import com.yesman.akythera.core.util.helper.MathUtils;
+import com.yesman.akythera.core.util.helper.PoseOperators;
 import net.minecraft.core.Holder;
 import net.minecraft.world.entity.Entity;
 import org.jetbrains.annotations.ApiStatus;
@@ -146,19 +148,19 @@ public final class AnimationMontagePlayer implements AnimationDriver {
         if (currentPlaying == null) {
             elapsedTime = 0.0F;
         } else {
-            boolean fadingProgressing;
+            boolean isFading;
 
             if (fadingInOrOut) {
                 float fadeInTime = currentPlaying.value().fadeInTime();
                 boolean wasFadingIn = fadeTime < fadeInTime;
                 fadeTime = Math.clamp(fadeTime + frameTime, 0.0F, fadeInTime);
-                fadingProgressing = fadeTime < fadeInTime;
+                isFading = fadeTime < fadeInTime;
 
                 // fading-in has just completed.
-                if (wasFadingIn && !fadingProgressing) montageCallbackHandle.triggerBegin();
+                if (wasFadingIn && !isFading) montageCallbackHandle.triggerBegin();
             } else {
                 fadeTime = Math.clamp(fadeTime - frameTime, 0.0F, currentPlaying.value().fadeOutTime());
-                fadingProgressing = fadeTime > 0.0F;
+                isFading = fadeTime > 0.0F;
 
                 // Empty the player when the fade time ends
                 if (fadeTime <= 0.0F) {
@@ -171,25 +173,25 @@ public final class AnimationMontagePlayer implements AnimationDriver {
             }
 
             // Update elapse time if not in the fading stage
-            if (!fadingProgressing) {
+            if (!isFading) {
                 SectionInfo sectionInfo = currentPlaying.value().sectionInfo();
                 String currentSectionName = sectionInfo.getSectionAt(elapsedTime);
-                TimeWindow currentSectionTime = sectionInfo.getSectionTimeWindow(currentSectionName);
+                TimeWindow currentSectionWindow = sectionInfo.getSectionTimeWindow(currentSectionName);
 
                 // Exceeds the section & animation total time bound by increment
-                if (currentSectionName != null && !currentSectionTime.isIn(elapsedTime + frameTime) || elapsedTime + frameTime > currentPlaying.value().getTotalFrameTime()) {
+                if (currentSectionWindow != null && !currentSectionWindow.isIn(elapsedTime + frameTime) || elapsedTime + frameTime > currentPlaying.value().getTotalFrameTime()) {
                     String nextSectionName = sectionInfo.getNextSection(currentSectionName);
 
                     if (nextSectionName == null) {
                         // No transition defined → pause at the section end and hold the pose. Stay active
                         // so the caller can jumpToSection (play another sequence) or terminate() explicitly.
-                        float end = Math.min(currentSectionTime.to(), currentPlaying.value().getTotalFrameTime());
+                        float end = Math.min(currentSectionWindow.to(), currentPlaying.value().getTotalFrameTime());
                         elapsedTime = end;
                         lastUpdatedTime = end; // so notifies between here and `end` don't re-fire each tick
                     } else {
                         // Set elapsed times to the next section
-                        float deltaMinus = currentSectionTime.to() - elapsedTime;
-                        float deltaPlus = elapsedTime + frameTime - currentSectionTime.to();
+                        float deltaMinus = currentSectionWindow.to() - elapsedTime;
+                        float deltaPlus = elapsedTime + frameTime - currentSectionWindow.to();
                         TimeWindow nextSectionTime = sectionInfo.getSectionTimeWindow(nextSectionName);
                         lastUpdatedTime = nextSectionTime.from() - deltaMinus;
                         elapsedTime = nextSectionTime.from() + deltaPlus;
@@ -213,7 +215,7 @@ public final class AnimationMontagePlayer implements AnimationDriver {
             // When fading mode is set to "fade-in", and the time haven't reached the total
             // fade in time, blend the cached last pose to animation pose to start
             if (fadeTime < currentPlaying.value().fadeInTime()) {
-                return Pose.blendPoses(cachedLastMontagePose, 1.0F - getWeight(), currentPlaying.value().getPose(elapsedTime), getWeight());
+                return PoseOperators.blendPoses(cachedLastMontagePose, 1.0F - getWeight(), currentPlaying.value().getPose(elapsedTime), getWeight());
             }
         } else {
             // When fading mode is set to "fade-out", and the time hasn't reached the total
@@ -259,13 +261,31 @@ public final class AnimationMontagePlayer implements AnimationDriver {
     }
 
     @Override
+    public float getFadeTime() {
+        return fadeTime;
+    }
+
+    @Override
+    public void syncDriverTo(@NonNull AnimationDriver source) {
+        // Montage player only synced to the driver that runs the same animation montage.
+        if (source instanceof AnimationMontagePlayer montagePlayerSource
+            && currentPlaying == montagePlayerSource.currentPlaying)
+        {
+            lastUpdatedTime = montagePlayerSource.lastUpdatedTime;
+            elapsedTime = montagePlayerSource.elapsedTime;
+            fadeTime = montagePlayerSource.fadeTime;
+            sectionIndex = montagePlayerSource.sectionIndex;
+            isFinished = montagePlayerSource.isFinished;
+            fadingInOrOut = montagePlayerSource.fadingInOrOut;
+        }
+    }
+
+    @Override
     public String toString() {
         return currentPlaying + " " + elapsedTime;
     }
 
     /// A disposable montage playback callback handler
-    ///
-    /// Never memorize
     public static final class MontageCallbackHandle {
         private final Holder<AnimationMontage> targetMontage;
         private final List<MontageBeginCallback> onMontageBegin = new ArrayList<>();

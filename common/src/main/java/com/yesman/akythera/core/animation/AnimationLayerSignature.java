@@ -1,4 +1,4 @@
-package com.yesman.akythera.core.animation.driver;
+package com.yesman.akythera.core.animation;
 
 import com.mojang.serialization.MapCodec;
 import com.yesman.akythera.core.util.EnumerableDataBlock;

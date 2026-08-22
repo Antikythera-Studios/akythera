@@ -3,6 +3,7 @@ package com.yesman.akythera.api.data.modularize.node;
 import com.mojang.serialization.Codec;
 import com.yesman.akythera.api.data.modularize.node.animgraph.AnimationStateMachineNode;
 import com.yesman.akythera.api.data.modularize.node.animgraph.CachedPoseReferenceNode;
+import com.yesman.akythera.api.data.modularize.node.animgraph.SourceDriverNode;
 
 /// Nodes that are used for getting parameters of another
 public interface PureNode extends ScriptNode {
@@ -21,6 +22,7 @@ public interface PureNode extends ScriptNode {
                 case LogicalOperationNode _      -> "logical_operation";
                 case CachedPoseReferenceNode _   -> "cached_pose_reference";
                 case AnimationStateMachineNode _ -> "anim_state_machine";
+                case SourceDriverNode _          -> "source_driver";
                 case TypeConvertNode _           -> "type_converter";
                 case MeshAccessorNode _          -> "mesh_accessor";
                 default -> throw new IllegalArgumentException(
@@ -40,6 +42,7 @@ public interface PureNode extends ScriptNode {
                 case "logical_operation"     -> LogicalOperationNode.CODEC.fieldOf("logical_operation");
                 case "cached_pose_reference" -> CachedPoseReferenceNode.CODEC.fieldOf("cached_pose_reference");
                 case "anim_state_machine"    -> AnimationStateMachineNode.CODEC.fieldOf("anim_state_machine");
+                case "source_driver"         -> SourceDriverNode.CODEC.fieldOf("source_driver");
                 case "type_converter"        -> TypeConvertNode.CODEC.fieldOf("type_converter");
                 case "mesh_accessor"         -> MeshAccessorNode.CODEC.fieldOf("mesh_accessor");
                 default -> throw new IllegalArgumentException(

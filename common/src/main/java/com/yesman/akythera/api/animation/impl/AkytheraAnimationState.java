@@ -1,6 +1,6 @@
 package com.yesman.akythera.api.animation.impl;
 
-import com.yesman.akythera.core.animation.driver.FSMAnimationState;
+import com.yesman.akythera.core.animation.FSMAnimationState;
 
 public enum AkytheraAnimationState implements FSMAnimationState {
     // A common state sign to represent a machine is ready to tart. Don't implement custom entry enum.

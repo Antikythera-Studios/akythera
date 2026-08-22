@@ -6,7 +6,7 @@ import com.yesman.akythera.api.animation.animator.AnimationSequenceInterface;
 import com.yesman.akythera.api.animation.animator.BlendSpace2DInterface;
 import com.yesman.akythera.core.animation.animator.BlendingAnimator;
 import com.yesman.akythera.core.animation.driver.AnimationDriver;
-import com.yesman.akythera.core.animation.driver.AnimationLayerSignature;
+import com.yesman.akythera.core.animation.AnimationLayerSignature;
 import com.yesman.akythera.core.animation.driver.AnimationPlayer;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.playable.AnimationSequence;

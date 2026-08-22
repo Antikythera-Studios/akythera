@@ -1,5 +1,6 @@
 package com.yesman.akythera.api.animation.animator;
 
+import com.yesman.akythera.api.asset.AssetAccessor;
 import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.component.impl.RootMotionComponent;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
@@ -8,6 +9,7 @@ import com.yesman.akythera.core.animation.driver.AnimationMontagePlayer;
 import com.yesman.akythera.core.animation.keyframe.AnimationClip;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.playable.AnimationMontage;
+import com.yesman.akythera.core.asset.armature.Armature;
 import com.yesman.akythera.core.asset.loader.ArmatureLoader;
 import com.yesman.akythera.core.networking.NetworkingHelper;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayAnimMontage;
@@ -24,19 +26,24 @@ import org.jspecify.annotations.Nullable;
 public interface Animator {
     /// Plays an [AnimationMontage].
     /// Ensure synchronization if it's called in a server side
-    default AnimationMontagePlayer.MontageCallbackHandle playAnimMontage(@NonNull final ResourceKey<@NonNull AnimationMontage> animMontageKey) {
+    default AnimationMontagePlayer.MontageCallbackHandle playAnimMontage(
+        @NonNull final ResourceKey<@NonNull AnimationMontage> animMontageKey
+    ) {
         return playAnimMontage(animMontageKey, AnimationMontage.GENERIC_SECTION_NAME);
     }
 
     /// Plays an [AnimationMontage] starting in a specific section
     /// Ensure synchronization if it's called in a server side
-    default AnimationMontagePlayer.@Nullable MontageCallbackHandle playAnimMontage(@NonNull final ResourceKey<@NonNull AnimationMontage> animMontageKey, String section) {
+    default AnimationMontagePlayer.@Nullable MontageCallbackHandle playAnimMontage(
+        @NonNull final ResourceKey<@NonNull AnimationMontage> animMontageKey, String section
+    ) {
         // Can't play montage for non-entity object.
         var montageOptional = getOwner().getLevel().registryAccess().get(animMontageKey);
 
         if (montageOptional.isPresent()) {
             Holder.Reference<AnimationMontage> animMontage = montageOptional.get();
-            AnimationMontagePlayer.MontageCallbackHandle callbackHandle = getMontagePlayer(animMontageKey).playAnimation(animMontage, section);
+            AnimationMontagePlayer.MontageCallbackHandle callbackHandle = getMontagePlayer(animMontageKey)
+                .playAnimation(animMontage, section);
 
             // Montage authority is on server side, so if it's played in client side manual networking is required.
             if (!getOwner().isLogicalClient()) {
@@ -52,7 +59,9 @@ public interface Animator {
                 // Important: used merged clip, the `getPose` method will remove root motion.
                 AnimationClip montageClip = animMontage.value().getMergedAnimClip();
 
-                if (rootMotionComponent != null && rootMotionComponent.isEnabled() && montageClip.hasBoneTransform(ArmatureLoader.ROOT_BONE)) {
+                if (rootMotionComponent != null && rootMotionComponent.isEnabled()
+                    && montageClip.hasBoneTransform(ArmatureLoader.ROOT_BONE)
+                ) {
                     rootMotionComponent.setSource(
                         montageClip.getBoneTransform(ArmatureLoader.ROOT_BONE)::getTransformAt,
                         getMontagePlayer(animMontageKey)::getTime
@@ -138,4 +147,10 @@ public interface Animator {
     /// Returns the owner of this component
     @ScriptFunction(pure = true, label = "Get Owner Entity")
     EntityPatch<Entity> getOwner();
+
+    /// Returns the owner of this component
+    @ScriptFunction(pure = true, label = "Get Armature")
+    default AssetAccessor<? extends Armature> getArmature() {
+        return getOwner().getArmatureComponent().getArmature();
+    }
 }

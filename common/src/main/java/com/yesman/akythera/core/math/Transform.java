@@ -142,6 +142,11 @@ public record Transform(
     }
 
     /// Apply scaling
+    public Transform scale(final double scale) {
+        return new Transform(loc(), rot(), sca().scale(scale));
+    }
+
+    /// Apply scaling
     public Transform scale(final Vec3 scale) {
         return new Transform(loc(), rot(), sca().multiply(scale));
     }
@@ -157,12 +162,12 @@ public record Transform(
     }
 
     /// Multiplies to a vector
-    public Vec3 mul(Vec3 vector) {
+    public Vec3 mul(final Vec3 vector) {
         return VectorUtils.rotateByQuaternion(rot(), vector.multiply(sca())).add(loc());
     }
 
     /// Multiplies to a direction vector, without applying the translation
-    public Vec3 mulDirection(Vec3 vector) {
+    public Vec3 mulDirection(final Vec3 vector) {
         return VectorUtils.rotateByQuaternion(rot(), vector.multiply(sca()));
     }
 
@@ -198,6 +203,24 @@ public record Transform(
                 MathUtils.divideOrZero(sca().x(), base.sca().x()),
                 MathUtils.divideOrZero(sca().y(), base.sca().y()),
                 MathUtils.divideOrZero(sca().z(), base.sca().z())
+            )
+        );
+    }
+
+    /// This transform with the additive delta `additive` laid on top of it, scaled by `weight`: the
+    /// inverse of [#relativeTo], where a weight of 0 yields this transform unchanged and 1 yields the
+    /// transform the delta was taken from. The delta is scaled toward its neutral element per
+    /// component—a zero translation, the identity rotation and a unit scale.
+    ///
+    /// @param weight in [0, 1]
+    public Transform applyAdditive(final Transform additive, final float weight) {
+        return new Transform(
+            loc().add(additive.loc().scale(weight)),
+            new Quaterniond().slerp(additive.rot(), weight).mul(rot()).normalize(),
+            new Vec3(
+                sca().x() * Mth.lerp(weight, 1.0D, additive.sca().x()),
+                sca().y() * Mth.lerp(weight, 1.0D, additive.sca().y()),
+                sca().z() * Mth.lerp(weight, 1.0D, additive.sca().z())
             )
         );
     }

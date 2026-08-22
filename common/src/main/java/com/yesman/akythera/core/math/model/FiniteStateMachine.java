@@ -1,7 +1,7 @@
 package com.yesman.akythera.core.math.model;
 
-/// @param <T> owner type of the state machine
-public interface FiniteStateMachine<T, S extends FSMState, I extends StateInstance<S>> {
+/// @param <O> owner type of the state machine
+public interface FiniteStateMachine<O, S extends FSMState, I extends StateInstance<S, T>, T extends Transition<I, I, S>> {
     /// Returns a current "state", an extensible enum object.
     S getState();
 
@@ -9,10 +9,10 @@ public interface FiniteStateMachine<T, S extends FSMState, I extends StateInstan
     void setState(S state);
 
     /// Returns a state model, wildcard for last parameter since you're calling in the state machine itself.
-    StateModel<S, I, ?> getStateModel();
+    StateModel<S, I, T, ?> getStateModel();
 
     /// Returns an owner of this machine
-    T getOwner();
+    O getOwner();
 
     /// Default state process logic
     default void tick() {
@@ -31,33 +31,31 @@ public interface FiniteStateMachine<T, S extends FSMState, I extends StateInstan
     /// @return whether it transits to another state
     default boolean checkAndTransitToNextState() {
         S currentState = getState();
-        StateInstance<S> stateInstance = getStateModel().getStateInstance(currentState);
+        I stateInstance = getStateModel().getStateInstance(currentState);
 
-        for (Transition<?, ?, ?> transition : stateInstance.transitions()) {
+        for (T transition : stateInstance.transitions()) {
             // skip if the transition delayed
             if (stateInstance.isDelayed(transition)) {
                 continue;
             }
 
-            @SuppressWarnings("unchecked")
-            Transition<StateInstance<S>, StateInstance<S>, S> casted = (Transition<StateInstance<S>, StateInstance<S>, S>)transition;
-            S nextState = casted.nextState();
-            StateInstance<S> nextInstance = getStateModel().getStateInstance(nextState);
+            S nextState = transition.nextState();
+            I nextInstance = getStateModel().getStateInstance(nextState);
 
             // test the transition condition
-            if (casted.when().check(stateInstance, nextInstance)) {
+            if (transition.canTransit(stateInstance, nextInstance)) {
                 stateInstance.onStop();
                 setState(nextState);
 
-                // do the transition task, stateInstance is now the old state
-                if (casted.onTransit() != null) casted.onTransit().doJob(stateInstance, nextInstance);
+                // do the transition task, stateInstance is now an old state
+                transition.onTransit(stateInstance, nextInstance);
                 nextInstance.onStart();
 
                 // finish the loop
                 return true;
             } else {
                 // apply the check delay
-                if (transition.checkingDelay() > 0) stateInstance.setDelayed(transition);
+                if (transition.checkLatency() > 0) stateInstance.setDelayed(transition);
             }
         }
 

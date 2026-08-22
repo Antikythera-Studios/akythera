@@ -10,9 +10,11 @@ import com.yesman.akythera.core.math.Transform;
 import com.yesman.akythera.core.math.algorithm.DelaunayTriangulation;
 import com.yesman.akythera.core.math.algorithm.DelaunayTriangulation.Triangle;
 import com.yesman.akythera.core.util.helper.MathUtils;
+import com.yesman.akythera.core.util.helper.PoseOperators;
 import net.minecraft.core.Holder;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
+import org.jspecify.annotations.NonNull;
 
 import java.util.function.Supplier;
 
@@ -110,7 +112,7 @@ public final class BlendSpace2DDriver implements AnimationDriver {
             t1 = t2 = t3 = elapsedTime;
         }
 
-        return Pose.blendPoses(
+        return PoseOperators.blendPoses(
             Pair.of(cachedAnim1.getPose(t1), cachedWeight1),
             Pair.of(cachedAnim2.getPose(t2), cachedWeight2),
             Pair.of(cachedAnim3.getPose(t3), cachedWeight3)
@@ -299,5 +301,17 @@ public final class BlendSpace2DDriver implements AnimationDriver {
     @Override
     public boolean fadingInOrOut() {
         return fadingInOrOut;
+    }
+
+    @Override
+    public float getFadeTime() {
+        return fadeTime;
+    }
+
+    @Override
+    public void syncDriverTo(@NonNull AnimationDriver source) {
+        elapsedTime = source.getTime();
+        lastUpdatedTime = source.getTime();
+        isFinished = source.isFinished();
     }
 }

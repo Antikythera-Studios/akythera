@@ -146,34 +146,46 @@ public final class EnumerableDataBlockManager<T extends EnumerableDataBlock> {
     /// to avoid inconsistent ID assignment among the terminals (local client, remote clients, and server)
     @ApiStatus.Internal
     public int assign(final T value, @Nullable Identifier dynamicIdentifier, final boolean hardcoded) {
-        int enumOrdinal = lastOrdinal;
-        Identifier enumIdentifier;
+        Identifier enumIdentifier = hardcoded
+            ? Identifier.fromNamespaceAndPath(ownerModId(value), ParseUtils.toLowerCase(((Enum<?>)value).name()))
+            : dynamicIdentifier;
 
-        if (hardcoded) {
-            String enumModId = null;
+        return register(value, enumIdentifier, hardcoded);
+    }
 
-            for (Map.Entry<String, TreeSet<Class<? extends EnumerableDataBlock>>> entry : enumClasses.entrySet()) {
-                for (Class<? extends EnumerableDataBlock> cls : entry.getValue()) {
-                    if (value.getClass() == cls) {
-                        enumModId = entry.getKey();
-                        break;
-                    }
+    /// Convention for registering hardcoded enums
+    public int assign(final T value) {
+        return assign(value, null, true);
+    }
+
+    /// Registers a hardcoded enum under `identifierPath` instead of the [Enum#name()]-derived path,
+    /// keeping the namespace of the mod that registered the enum class.
+    ///
+    /// Generated enums use this for entries whose identifier carries a directory (`humanoid/idle`),
+    /// which an enum constant name cannot spell.
+    public int assign(final T value, final String identifierPath) {
+        return register(value, Identifier.fromNamespaceAndPath(ownerModId(value), identifierPath), true);
+    }
+
+    /// The mod id that passed `value`'s class to [#registerEnumCls]
+    private String ownerModId(final T value) {
+        for (Map.Entry<String, TreeSet<Class<? extends EnumerableDataBlock>>> entry : enumClasses.entrySet()) {
+            for (Class<? extends EnumerableDataBlock> cls : entry.getValue()) {
+                if (value.getClass() == cls) {
+                    return entry.getKey();
                 }
             }
-
-            // Skip datapack loaded enums
-            if (enumModId == null) {
-                throw new IllegalArgumentException("Can't find registered owner class: " + value.getClass().getSimpleName());
-            }
-
-            enumIdentifier = Identifier.fromNamespaceAndPath(enumModId, ParseUtils.toLowerCase(((Enum<?>)value).name()));
-        } else {
-            enumIdentifier = dynamicIdentifier;
         }
 
+        throw new IllegalArgumentException("Can't find registered owner class: " + value.getClass().getSimpleName());
+    }
+
+    private int register(final T value, final Identifier enumIdentifier, final boolean hardcoded) {
         if (enumsByIdentifier.containsKey(enumIdentifier)) {
             throw new IllegalArgumentException("Enum identifier " + enumIdentifier + " already exists in " + enumType + ". Consider another enum name.");
         }
+
+        int enumOrdinal = lastOrdinal;
 
         enumsByOrdinal.put(enumOrdinal, value);
         enumsByIdentifier.put(enumIdentifier, value);
@@ -183,20 +195,29 @@ public final class EnumerableDataBlockManager<T extends EnumerableDataBlock> {
         return enumOrdinal;
     }
 
-    /// Convention for registering hardcoded enums
-    public int assign(final T value) {
-        return assign(value, null, true);
-    }
-
+    /// Binds `entries` as this manager's data pack contents, **keeping the instance already bound to
+    /// an identifier that is still declared**.
+    ///
+    /// These blocks are stateless tokens whose identity is the binding itself ([#derefIdentifier] is
+    /// an identity lookup), and live game objects hold the instance -- an `AnimationStateMachine` keeps
+    /// the state it was built with. Rebinding a re-declared identifier to the freshly decoded stand-in
+    /// would orphan every one of those, so the stand-in is dropped and the original kept, which also
+    /// keeps its ordinal stable across reloads (ordinals travel on the wire, see [#streamCodec]).
+    ///
     /// @param entries A data block entry sorted by key
     @ApiStatus.Internal
     public void loadDataPackEntries(final Map<Identifier, T> entries) {
-        int id = enumsByOrdinal.size();
+        // Entries the last load declared and this one does not are gone; drop them and their ordinals.
+        enumsByIdentifier.entrySet().removeIf(
+            entry -> !hardcodedEnums.contains(entry.getValue()) && !entries.containsKey(entry.getKey()));
+        enumsByOrdinal.entrySet().removeIf(
+            entry -> !hardcodedEnums.contains(entry.getValue())
+                && !enumsByIdentifier.containsValue(entry.getValue()));
 
         for (Map.Entry<Identifier, T> entry : entries.entrySet()) {
-            enumsByOrdinal.put(id, entry.getValue());
-            enumsByIdentifier.put(entry.getKey(), entry.getValue());
-            id++;
+            if (enumsByIdentifier.containsKey(entry.getKey())) continue;
+
+            register(entry.getValue(), entry.getKey(), false);
         }
     }
 
@@ -231,15 +252,29 @@ public final class EnumerableDataBlockManager<T extends EnumerableDataBlock> {
         return Optional.ofNullable(enumsByIdentifier.get(name));
     }
 
+    /// The ordinal `object` is registered under.
+    ///
+    /// @throws IllegalStateException if it is not registered -- an instance that outlived its data pack
+    /// entry, which [#derefIdentifier] reports as a null identifier.
     public int derefOrdinal(final T object) {
-        return enumsByOrdinal.inverse().get(object);
+        Integer ordinal = enumsByOrdinal.inverse().get(object);
+
+        if (ordinal == null) {
+            throw new IllegalStateException("No ordinal registered in " + enumType + " for " + object.getClass().getName()
+                + ": the object is not (or no longer) a registered data block");
+        }
+
+        return ordinal;
     }
 
     /// Returns identifier of given enum object
     ///
     /// Mutual-transformable with [#get(Identifier)] and [#getOrThrow(Identifier)]
+    ///
+    /// Null when `enumObject` is not registered here -- an instance that outlived its data pack entry,
+    /// which a live game object can hold after a reload dropped the entry it was built from.
     @SuppressWarnings("unchecked")
-    public Identifier derefIdentifier(final EnumerableDataBlock enumObject) {
+    public @Nullable Identifier derefIdentifier(final EnumerableDataBlock enumObject) {
         return enumsByIdentifier.inverse().get((T)enumObject);
     }
 

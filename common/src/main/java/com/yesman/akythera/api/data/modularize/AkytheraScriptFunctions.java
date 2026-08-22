@@ -8,8 +8,11 @@ import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
 import com.yesman.akythera.api.world.patch.entity.PlayerPatch;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.animation.animator.BlendingAnimator;
+import com.yesman.akythera.core.animation.driver.AdditiveBlendDriver;
 import com.yesman.akythera.core.animation.driver.AnimationDriver;
 import com.yesman.akythera.core.animation.driver.EmptyAnimationDriver;
+import com.yesman.akythera.core.animation.driver.LayeredBlendPerBoneDriver;
+import com.yesman.akythera.core.animation.driver.PoseBlendDriver;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.blueprint.script.AnimatorScript;
 import com.yesman.akythera.core.reflection.FunctionSignature;
@@ -61,6 +64,7 @@ public final class AkytheraScriptFunctions {
             // Animation
             ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AnimationLayer.class, "Animation/Animation Layer", ScriptFunction.Usage.SCRIPT);
             ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, Animator.class, "Animation/Animator", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AnimationDriver.class, "Animation/Animation Driver", ScriptFunction.Usage.SCRIPT);
 
             // Entity & Entity patches
             ScriptModularizeHelper.scanScriptModulesAndRegister(MINECRAFT_REGISTRAR, EntityPatch.class, "World/Entity", ScriptFunction.Usage.SCRIPT);
@@ -221,7 +225,7 @@ public final class AkytheraScriptFunctions {
 
     public static final Holder<ScriptFunction> EMPTY_DRIVER = AKYTHERA_REGISTRAR.register("empty_driver", () ->
         ScriptModularizeHelper.makeCustomScript(
-            (Supplier<AnimationDriver>) EmptyAnimationDriver::new,
+            (Supplier<AnimationDriver>) () -> EmptyAnimationDriver.INSTANCE,
             FunctionSignature.create(AnimationDriver.class, List.of()),
             "Empty Pose",
             "Animation/Pose",
@@ -259,6 +263,45 @@ public final class AkytheraScriptFunctions {
             "Blend Space 2D Animation Interface",
             "Animation/Pose",
             "Plays a replaceable 2D blendspace registered under an animation interface key",
+            true,
+            ScriptFunction.Usage.ANIM_GRAPH
+        )
+    );
+
+    public static final Holder<ScriptFunction> BLEND_TWO_POSES = AKYTHERA_REGISTRAR.register("blend_two_poses", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (ScriptFunction.TriFunction<AnimationDriver, AnimationDriver, Supplier, AnimationDriver>) (a, b, alpha) ->
+                new PoseBlendDriver(a, b, (Supplier<Float>)alpha),
+            FunctionSignature.create(AnimationDriver.class, List.of("a", "b", "alpha"), AnimationDriver.class, AnimationDriver.class, Supplier.class),
+            "Blend",
+            "Animation/Pose",
+            "Interpolates between two poses, alpha 0 being A and 1 being B",
+            true,
+            ScriptFunction.Usage.ANIM_GRAPH
+        )
+    );
+
+    public static final Holder<ScriptFunction> APPLY_ADDITIVE = AKYTHERA_REGISTRAR.register("apply_additive", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (ScriptFunction.TriFunction<AnimationDriver, AnimationDriver, Supplier, AnimationDriver>) (base, additive, alpha) ->
+                new AdditiveBlendDriver(base, additive, (Supplier<Float>)alpha),
+            FunctionSignature.create(AnimationDriver.class, List.of("base", "additive", "alpha"), AnimationDriver.class, AnimationDriver.class, Supplier.class),
+            "Apply Additive",
+            "Animation/Pose",
+            "Lays an additive pose over a base pose by an alpha",
+            true,
+            ScriptFunction.Usage.ANIM_GRAPH
+        )
+    );
+
+    public static final Holder<ScriptFunction> LAYERED_BLEND_PER_BONE = AKYTHERA_REGISTRAR.register("layered_blend_per_bone", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (ScriptFunction.QuintFunction<BlendingAnimator, AnimationDriver, AnimationDriver, String, Integer, AnimationDriver>)
+                LayeredBlendPerBoneDriver::new,
+            FunctionSignature.create(AnimationDriver.class, List.of("animator", "base", "layered", "boneName", "depth"), BlendingAnimator.class, AnimationDriver.class, AnimationDriver.class, String.class, Integer.class),
+            "Layered Blend per Bone",
+            "Animation/Pose",
+            "Hands the skeleton branch below a bone over to a second pose",
             true,
             ScriptFunction.Usage.ANIM_GRAPH
         )

@@ -6,6 +6,7 @@ import com.yesman.akythera.core.animation.driver.AnimationDriver;
 import com.yesman.akythera.core.animation.keyframe.AnimationClip;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import net.minecraft.world.entity.Entity;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.TreeMap;
@@ -103,6 +104,16 @@ public final class BlendSpace1D implements PlayableAnimation {
         @Override
         public boolean fadingInOrOut() {
             return false;
+        }
+
+        @Override
+        public float getFadeTime() {
+            return 0;
+        }
+
+        @Override
+        public void syncDriverTo(@NonNull AnimationDriver source) {
+
         }
     }
 

@@ -82,6 +82,13 @@ public final class VectorUtils {
         return Math.toDegrees(angle);
     }
 
+    @ScriptFunction(pure = true, label = "Get Angle Between Vectors in XZ Plane", desc = """
+        Returns an angle between two vectors in degree
+    """)
+    public static double getHorizontalAngleBetween(final Vec3 a, final Vec3 b, final int precision) {
+        return getAngleBetween(a.subtract(0, a.y(), 0), b.subtract(0, b.y(), 0), Vec3.Y_AXIS, precision);
+    }
+
     public static Vec3 getRoundedVector(final Vec3 v, final int precision) {
         return new Vec3(
             MathUtils.roundAt(v.x(), precision),

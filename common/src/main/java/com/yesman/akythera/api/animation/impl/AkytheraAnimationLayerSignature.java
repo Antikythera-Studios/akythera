@@ -1,6 +1,6 @@
 package com.yesman.akythera.api.animation.impl;
 
-import com.yesman.akythera.core.animation.driver.AnimationLayerSignature;
+import com.yesman.akythera.core.animation.AnimationLayerSignature;
 
 public enum AkytheraAnimationLayerSignature implements AnimationLayerSignature {
     // Base layer covers all bones

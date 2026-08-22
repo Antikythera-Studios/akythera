@@ -103,7 +103,7 @@ public record ArmatureComponentBlueprint(
 
         @Override
         public AnimatorScript instantiate(final Animator blueprintOwner) {
-            if (AnimatorScript.class.isAssignableFrom(animatorType.type())) {
+            if (!AnimatorScript.class.isAssignableFrom(animatorType.type())) {
                 throw new IllegalArgumentException(animatorType.type().getSimpleName() +
                     " is not a subclass of " + AnimatorScript.class.getSimpleName());
             }

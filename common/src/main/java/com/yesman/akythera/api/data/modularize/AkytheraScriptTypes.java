@@ -8,7 +8,8 @@ import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
 import com.yesman.akythera.api.world.patch.entity.PlayerPatch;
 import com.yesman.akythera.core.Akythera;
-import com.yesman.akythera.core.animation.driver.AnimationLayerSignature;
+import com.yesman.akythera.core.animation.AnimationLayerSignature;
+import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.platform.ModPlatform;
 import com.yesman.akythera.platform.ModPlatformProvider;
@@ -95,6 +96,8 @@ public final class AkytheraScriptTypes {
         () -> new ScriptType(AnimationLayer.class));
     public static final Holder<ScriptType> ANIM_INTERFACE_KEY = AKYTHERA_REGISTRAR.register("anim_interface_key",
         () -> new ScriptType(AnimationInterfaceKey.class, AnimationInterfaceKey.ENUM_MANAGER.getNameCodec(), Map.of(), false));
+    public static final Holder<ScriptType> POSE = AKYTHERA_REGISTRAR.register("pose",
+        () -> new ScriptType(Pose.class));
 
     // Entity Patch
 
