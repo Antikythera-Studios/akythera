@@ -68,4 +68,14 @@ public interface AssetLoader {
             return orElse;
         }
     }
+
+    /// Reads an asset's sidecar metadata. [AssetLoader#readMetadata] is the shape a loader uses when
+    /// its caller names none.
+    ///
+    /// `codec` is the one the asset's own loader would have read the file with; an implementation
+    /// whose fields must decode against something other than the game's packs substitutes its own.
+    @FunctionalInterface
+    interface MetadataLoader<T> {
+        T load(final Identifier assetPath, final ResourceManager resourceManager, final Codec<T> codec, final T orElse);
+    }
 }

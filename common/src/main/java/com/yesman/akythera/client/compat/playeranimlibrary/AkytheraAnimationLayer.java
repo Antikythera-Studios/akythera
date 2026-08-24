@@ -43,7 +43,7 @@ public final class AkytheraAnimationLayer implements IAnimation {
             INamedModelPart namedModelPart = ((INamedModelPart)(Object)modelPart);
             Bone bone = armature.getBoneByName(namedModelPart.akythera$getName());
 
-            if (bone != null && armatureComponent.getBoundTransforms() != null) { // `armatureComponent.getBoundTransforms()` is usually a null in first frame
+            if (bone != null && armatureComponent.getBoundTransforms() != null) { // `armatureComponent.getBoundTransforms()` is null in the first frame
                 Bone bendBone = armature.getBoneByName(namedModelPart.akythera$getName() + "_bend");
                 PlayerAnimationLibraryPlugin.mapAnimation(bone, bendBone, armatureComponent.getCachedPose(), armatureComponent.getBoundTransforms()[bone.getId()], playerAnimBone, modelPart);
             }

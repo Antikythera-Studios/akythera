@@ -72,7 +72,7 @@ public final class BinaryAnimationLoader implements AnimationLoader, BinaryAsset
             }
 
             return animClipBuilder.build();
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new ResourceLoadingFailureException(resourcePath, e);
         }
     }

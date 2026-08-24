@@ -64,7 +64,7 @@ public final class JsonArmatureLoader implements ArmatureLoader, JsonAssetLoader
             bone.initOriginTransform(new Matrix4f());
 
             return armatureConstructor.construct(bone, bones.size(), bones);
-        } catch (JsonSyntaxException e) {
+        } catch (Exception e) {
             throw new ResourceLoadingFailureException(resourcePath, e);
         }
     }

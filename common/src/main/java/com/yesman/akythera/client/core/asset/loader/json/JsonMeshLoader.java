@@ -86,7 +86,7 @@ public final class JsonMeshLoader implements MeshLoader, JsonAssetLoader {
             staticMeshBuilder.metadata(metadata);
 
             return meshConstructor.construct(staticMeshBuilder);
-        } catch (JsonSyntaxException e) {
+        } catch (Exception e) {
             throw new ResourceLoadingFailureException(resourcePath, e);
         }
     }
@@ -155,7 +155,7 @@ public final class JsonMeshLoader implements MeshLoader, JsonAssetLoader {
             skeletalMeshBuilder.metadata(metadata);
 
             return meshConstructor.construct(skeletalMeshBuilder);
-        } catch (JsonSyntaxException e) {
+        } catch (Exception e) {
             throw new ResourceLoadingFailureException(resourcePath, e);
         }
     }

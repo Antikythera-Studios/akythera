@@ -28,10 +28,10 @@ import java.util.function.Function;
 public abstract class MixinModel implements ManagedModel, IBoneUpdater {
     /// Saves model parts by names, to map EF animation based on [ModelPart#getInitialPose]
     @Unique
-    private Map<String, ModelPart> akythera$modelPartsByName = new HashMap<>();
+    private final Map<String, ModelPart> akythera$modelPartsByName = new HashMap<>();
 
     @Unique
-    private Map<ModelPart, PlayerAnimBone> akythera$animBones = new HashMap<>();
+    private final Map<ModelPart, PlayerAnimBone> akythera$animBones = new HashMap<>();
 
     @Override @Unique
     public ModelPart akythera$getModelPartByName(String partName) {

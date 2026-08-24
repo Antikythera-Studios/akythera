@@ -187,5 +187,10 @@ public interface BinaryAssetLoader {
             this.typeId = typeId;
             TYPE_ID_MAP.put(typeId, this);
         }
+
+        /// The integer this type is written as in a block header.
+        public int typeId() {
+            return typeId;
+        }
     }
 }

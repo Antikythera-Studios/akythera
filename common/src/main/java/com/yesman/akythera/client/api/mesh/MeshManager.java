@@ -9,6 +9,7 @@ import com.yesman.akythera.client.core.asset.loader.MeshLoader;
 import com.yesman.akythera.client.core.asset.mesh.Mesh;
 import com.yesman.akythera.client.core.asset.mesh.SkeletalMesh;
 import com.yesman.akythera.client.core.asset.mesh.StaticMesh;
+import com.yesman.akythera.core.asset.loader.AssetLoader;
 import com.yesman.akythera.core.asset.loader.ResourceLoadingFailureException;
 import net.minecraft.resources.Identifier;
 import org.jspecify.annotations.NonNull;
@@ -104,11 +105,13 @@ public final class MeshManager extends DynamicAssetManager<@NonNull Mesh<?>> {
 
                 try {
                     // Tries to load as skeletal mesh first, as it's subset of static mesh
-                    mesh = MeshLoader.getLoader(id, ComponentsFactory.getImpl().getResourceManager()).loadSkeletalMesh(SkeletalMesh::new);
+                    mesh = MeshLoader.getLoader(id, ComponentsFactory.getImpl().getResourceManager(), AssetLoader::readMetadata)
+                        .loadSkeletalMesh(SkeletalMesh::new);
                     type = Type.SKELETAL_MESH;
                 } catch (ResourceLoadingFailureException e) {
                     try {
-                        mesh = MeshLoader.getLoader(id, ComponentsFactory.getImpl().getResourceManager()).loadStaticMesh(StaticMesh::new);
+                        mesh = MeshLoader.getLoader(id, ComponentsFactory.getImpl().getResourceManager(), AssetLoader::readMetadata)
+                            .loadStaticMesh(StaticMesh::new);
                     } catch (ResourceLoadingFailureException _) {
                     }
                 }
@@ -137,7 +140,7 @@ public final class MeshManager extends DynamicAssetManager<@NonNull Mesh<?>> {
         public T get() {
             try {
                 return (T)INSTANCE.loadedObjectsRegistry.computeIfAbsent(identifier, id ->
-                    MeshLoader.getLoader(id, ComponentsFactory.getImpl().getResourceManager())
+                    MeshLoader.getLoader(id, ComponentsFactory.getImpl().getResourceManager(), AssetLoader::readMetadata)
                         .loadStaticMesh(meshConstructor)
                 );
             } catch (ResourceLoadingFailureException e) {
@@ -187,7 +190,7 @@ public final class MeshManager extends DynamicAssetManager<@NonNull Mesh<?>> {
             try {
                 return (T)INSTANCE.loadedObjectsRegistry.computeIfAbsent(
                     identifier,
-                    id -> MeshLoader.getLoader(id, ComponentsFactory.getImpl().getResourceManager())
+                    id -> MeshLoader.getLoader(id, ComponentsFactory.getImpl().getResourceManager(), AssetLoader::readMetadata)
                         .loadSkeletalMesh(meshConstructor)
                 );
             } catch (ResourceLoadingFailureException e) {

@@ -7,6 +7,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.AddressMode;
 import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuSampler;
+import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.*;
 import com.yesman.akythera.api.asset.AssetAccessor;
@@ -187,6 +188,18 @@ public final class Model3DViewer extends AbstractWidget
         }
 
         return null;
+    }
+
+    /// Clears the preview target's depth, so what is drawn next reads over the scene already in it.
+    /// Depth clears to the far plane, which reversed-Z puts at 0.
+    public void clearDepth() {
+        if (previewTarget == null) return;
+
+        GpuTexture depthTexture = previewTarget.getDepthTexture();
+
+        if (depthTexture == null) return;
+
+        RenderSystem.getDevice().createCommandEncoder().clearDepthTexture(depthTexture, 0.0);
     }
 
     /// Adds a widget floating over the 3D view. Owned by the caller, which removes it again.

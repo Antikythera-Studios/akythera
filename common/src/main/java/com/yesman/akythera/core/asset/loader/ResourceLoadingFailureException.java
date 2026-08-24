@@ -6,7 +6,7 @@ import net.minecraft.resources.Identifier;
 /// both for json and binary file extensions.
 public class ResourceLoadingFailureException extends RuntimeException {
     public ResourceLoadingFailureException(Identifier resourcePath, Exception e) {
-        super("Failed at loading resource: " + resourcePath, e);
+        super("Failed at loading resource: " + resourcePath + ": " + e.getMessage(), e);
     }
 
     public ResourceLoadingFailureException(Identifier resourcePath, String message) {

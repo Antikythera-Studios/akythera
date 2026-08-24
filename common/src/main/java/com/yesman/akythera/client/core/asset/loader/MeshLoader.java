@@ -45,10 +45,14 @@ public interface MeshLoader extends AssetLoader {
     /// Returns a matching asset loader depending on the file extension (`.akasset` or `.json`)
     ///
     /// If both binary and json files exist, binary file has higher priority to load
-    static MeshLoader getLoader(Identifier resourcePath, ResourceManager resourceManager)
-        throws ResourceLoadingFailureException
-    {
-        Metadata metadata = AssetLoader.readMetadata(resourcePath, resourceManager, Metadata.CODEC, Metadata.DEFAULT);
+    ///
+    /// `metadataLoader` reads the asset's sidecar; [AssetLoader#readMetadata] is the plain read.
+    static MeshLoader getLoader(
+        Identifier resourcePath,
+        ResourceManager resourceManager,
+        AssetLoader.MetadataLoader<Metadata> metadataLoader
+    ) throws ResourceLoadingFailureException {
+        Metadata metadata = metadataLoader.load(resourcePath, resourceManager, Metadata.CODEC, Metadata.DEFAULT);
         Identifier asBinary = Identifier.fromNamespaceAndPath(resourcePath.getNamespace(), resourcePath.getPath() + "." + AssetLoader.BINARY_EXTENSION);
         Optional<Resource> binaryResource = resourceManager.getResource(asBinary);
 

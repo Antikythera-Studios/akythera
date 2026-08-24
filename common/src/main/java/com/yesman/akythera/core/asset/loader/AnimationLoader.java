@@ -85,10 +85,15 @@ public interface AnimationLoader extends AssetLoader {
     /// Returns a matching asset loader depending on the file extension (`.akasset` or `.json`)
     ///
     /// If both binary and json files exist, binary file has higher priority to load (beware no fallback load for .json)
-    static AnimationLoader getLoader(Identifier resourcePath, ResourceManager resourceManager)
-        throws ResourceLoadingFailureException
-    {
-        Metadata metadata = AssetLoader.readMetadata(resourcePath, resourceManager, Metadata.CODEC, Metadata.DEFAULT);
+    ///
+    /// `metadataLoader` reads the asset's sidecar. A caller that resolves [Metadata#refPoseProvider]
+    /// outside the game's packs supplies its own; [AssetLoader#readMetadata] is the plain read.
+    static AnimationLoader getLoader(
+        Identifier resourcePath,
+        ResourceManager resourceManager,
+        AssetLoader.MetadataLoader<Metadata> metadataLoader
+    ) throws ResourceLoadingFailureException {
+        Metadata metadata = metadataLoader.load(resourcePath, resourceManager, Metadata.CODEC, Metadata.DEFAULT);
         Identifier asBinary = Identifier.fromNamespaceAndPath(resourcePath.getNamespace(), resourcePath.getPath() + "." + AssetLoader.BINARY_EXTENSION);
         Optional<Resource> binaryResource = resourceManager.getResource(asBinary);
 

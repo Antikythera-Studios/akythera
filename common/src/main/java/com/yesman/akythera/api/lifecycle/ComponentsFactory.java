@@ -137,7 +137,9 @@ public abstract class ComponentsFactory {
     }
 
     /// Returns an armature by entity type.
-    public @Nullable AssetAccessor<? extends Armature> getExternalArmatureMappingFor(EntityType<?> entityType) throws NoSuchElementException {
+    public @Nullable AssetAccessor<? extends Armature> getExternalArmatureMappingFor(EntityType<?> entityType)
+        throws NoSuchElementException
+    {
         return entityArmatures.get(entityType);
     }
 

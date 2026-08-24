@@ -104,7 +104,7 @@ public final class BinaryArmatureLoader implements ArmatureLoader, BinaryAssetLo
             rootBone.initOriginTransform(new Matrix4f());
 
             return armatureConstructor.construct(rootBone, bonesByName.size(), bonesByName);
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new ResourceLoadingFailureException(resourcePath, e);
         }
     }

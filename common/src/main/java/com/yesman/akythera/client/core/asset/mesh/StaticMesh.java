@@ -16,6 +16,7 @@ import org.joml.Vector4f;
 
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 
 /// A classic mesh component with no deformation
 ///
@@ -38,6 +39,18 @@ public class StaticMesh implements Mesh<StaticMesh.StaticMeshPart> {
     protected final MeshLoader.Metadata metadata;
 
     public StaticMesh(CommonMeshBuilder<StaticMeshPart> meshBuilder) {
+        if (meshBuilder.positions == null) {
+            throw new NoSuchElementException("No position array is declared in mesh file!");
+        }
+
+        if (meshBuilder.normals == null) {
+            throw new NoSuchElementException("No normals array is declared in mesh file!");
+        }
+
+        if (meshBuilder.uvs == null) {
+            throw new NoSuchElementException("No uv array is declared in mesh file!");
+        }
+
         metadata = meshBuilder.metadata;
 
         // Declare as direct buffers since memory alloc/dealloc is not frequent,

@@ -11,6 +11,7 @@ import com.yesman.akythera.core.asset.armature.Armature;
 import com.yesman.akythera.core.animation.keyframe.AnimationClip;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.asset.loader.AnimationLoader;
+import com.yesman.akythera.core.asset.loader.AssetLoader;
 import com.yesman.akythera.core.asset.loader.ResourceLoadingFailureException;
 import net.minecraft.resources.Identifier;
 import org.jetbrains.annotations.NotNull;
@@ -117,7 +118,7 @@ public final class AnimationManager extends DynamicAssetManager<@NotNull Animati
 
             try {
                 AnimationClip clip = AnimationLoader
-                    .getLoader(identifier, ComponentsFactory.getImpl().getResourceManager())
+                    .getLoader(identifier, ComponentsFactory.getImpl().getResourceManager(), AssetLoader::readMetadata)
                     .loadAnimationClip(armature);
 
                 INSTANCE.loadedObjectsRegistry.put(identifier, clip);

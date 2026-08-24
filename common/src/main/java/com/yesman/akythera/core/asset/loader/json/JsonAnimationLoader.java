@@ -5,11 +5,11 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
 import com.yesman.akythera.api.asset.AssetAccessor;
+import com.yesman.akythera.core.animation.keyframe.AnimationClip;
+import com.yesman.akythera.core.animation.keyframe.BoneAnimationTrack;
+import com.yesman.akythera.core.animation.keyframe.Keyframe;
 import com.yesman.akythera.core.asset.armature.Armature;
 import com.yesman.akythera.core.asset.armature.Bone;
-import com.yesman.akythera.core.animation.keyframe.AnimationClip;
-import com.yesman.akythera.core.animation.keyframe.Keyframe;
-import com.yesman.akythera.core.animation.keyframe.BoneAnimationTrack;
 import com.yesman.akythera.core.asset.loader.AnimationLoader;
 import com.yesman.akythera.core.asset.loader.ResourceLoadingFailureException;
 import com.yesman.akythera.core.asset.loader.binary.BinaryAnimationLoader;
@@ -87,7 +87,7 @@ public final class JsonAnimationLoader implements AnimationLoader, JsonAssetLoad
             }
 
             return clipBuilder.build();
-        } catch (JsonSyntaxException e) {
+        } catch (Exception e) {
             throw new ResourceLoadingFailureException(resourcePath, e);
         }
     }

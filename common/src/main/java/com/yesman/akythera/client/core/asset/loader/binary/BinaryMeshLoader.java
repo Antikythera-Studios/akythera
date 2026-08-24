@@ -70,7 +70,7 @@ public final class BinaryMeshLoader implements MeshLoader, BinaryAssetLoader {
                             payloadBlock.bodyOffset(),
                             payloadBlock.payloadSize() / 4
                         );
-                        staticMeshBuilder.normals(uvs);
+                        staticMeshBuilder.uvs(uvs);
                     }
                     case MESH_NORMALS -> {
                         float[] normals = BinaryAssetLoader.readFloatArray(
@@ -100,7 +100,7 @@ public final class BinaryMeshLoader implements MeshLoader, BinaryAssetLoader {
             staticMeshBuilder.metadata(metadata);
 
             return meshConstructor.construct(staticMeshBuilder);
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new ResourceLoadingFailureException(resourcePath, e);
         }
     }
@@ -213,7 +213,7 @@ public final class BinaryMeshLoader implements MeshLoader, BinaryAssetLoader {
             skeletalMeshBuilder.metadata(metadata);
 
             return meshConstructor.construct(skeletalMeshBuilder);
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new ResourceLoadingFailureException(resourcePath, e);
         }
     }
