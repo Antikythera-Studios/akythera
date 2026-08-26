@@ -21,6 +21,9 @@ public class CheckBox extends AbstractWidget implements AnchoredWidget, DataBoun
     private final boolean showMessage;
     private boolean checked;
 
+    /// Tint of the checked mark and the label, as packed ARGB.
+    private int color = 0xFFFFFFFF;
+
     public CheckBox(
         final Font font,
         final Unit x1,
@@ -102,10 +105,10 @@ public class CheckBox extends AbstractWidget implements AnchoredWidget, DataBoun
         guiGraphics.fill(getX() + 1, getY() + 1, getX() + rectangleLength - 1, getY() + rectangleLength - 1, -16777216);
 
         if (checked) {
-            guiGraphics.fill(getX() + 2, getY() + 2, getX() + rectangleLength - 2, getY() + rectangleLength - 2, -1);
+            guiGraphics.fill(getX() + 2, getY() + 2, getX() + rectangleLength - 2, getY() + rectangleLength - 2, color);
         }
 
-        int fontColor = isActive() ? 16777215 : 4210752;
+        int fontColor = isActive() ? color : 0xFF404040;
 
         if (showMessage) {
             guiGraphics.text(font, getMessage(), getX() + rectangleLength + 4, getY() + height / 2 - font.lineHeight / 2 + 1, fontColor, false);
@@ -115,6 +118,11 @@ public class CheckBox extends AbstractWidget implements AnchoredWidget, DataBoun
     @Override
     protected void updateWidgetNarration(@NonNull NarrationElementOutput narrationElementOutput) {
         defaultButtonNarrationText(narrationElementOutput);
+    }
+
+    /// Tints the checked mark and the label. Takes packed ARGB, unlike [Static#setColor].
+    public void setColor(int color) {
+        this.color = color;
     }
 
     /// Returns the state whether the widget is checked, not a bound data value

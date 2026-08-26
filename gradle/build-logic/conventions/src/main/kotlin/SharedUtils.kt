@@ -209,7 +209,7 @@ fun Project.configureModPublish(
         val fullVersion = project.getFullModVersion(modLoader.conventionalName);
         displayName.set("$modDisplayName+$fullVersion")
         version.set(project.getCompactModVersion(modLoader.conventionalName))
-        type.set(STABLE)
+        type.set(ALPHA) // TODO: change publish type: ALPHA, BETA, STABLE
         file.set(jarFile())
         additionalFiles.from(sourcesJar)
 
