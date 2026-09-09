@@ -1,11 +1,8 @@
 package com.yesman.akythera.core.animation.driver;
 
+import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.animation.keyframe.Pose;
-import com.yesman.akythera.core.animation.playable.PlayableAnimation;
-import com.yesman.akythera.core.util.helper.PoseOperators;
-import org.jspecify.annotations.Nullable;
-
-import java.util.function.Consumer;
+import net.minecraft.world.entity.Entity;
 
 /// Transit from a [AnimationDriver] to another [AnimationDriver]
 ///
@@ -32,5 +29,10 @@ public final class DriverToDriverTransfer extends DriverTransfer {
         from.update(frameTime);
 
         super.update(frameTime);
+    }
+
+    /// Drives the notify track of the animation this transfer is blending out of.
+    public void tickFrom(final EntityPatch<Entity> owner) {
+        from.tick(owner);
     }
 }

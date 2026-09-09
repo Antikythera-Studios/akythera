@@ -634,9 +634,9 @@ public final class Model3DViewer extends AbstractWidget
         }
     }
 
-    /// ***************************************************************
-    /// [AnchoredWidget] implementations                              *
-    /// ***************************************************************
+    // ***************************************************************
+    // `AnchoredWidget` implementations                              *
+    // ***************************************************************
     private Unit x1;
     private Unit x2;
     private Unit y1;

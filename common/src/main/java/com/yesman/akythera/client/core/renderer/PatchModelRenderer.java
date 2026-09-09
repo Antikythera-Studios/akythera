@@ -39,8 +39,9 @@ import java.util.Optional;
 ///
 /// The two halves run in different phases. The tree walk is stateless and runs inside
 /// `LivingEntityRenderer`; the skinned draws queue up there and flush later, when
-/// `FeatureRenderDispatcher.PreparedFrame` drives [#renderSolid], [#renderTranslucent], [#clear]
-/// and [#endFrame].
+/// `FeatureRenderDispatcher.PreparedFrame` drives [#renderSolid], [#renderTranslucent] and
+/// [#clear]. [#endFrame] runs on the frame boundary instead, which is the latency the ring behind
+/// [#frameStorage] is sized for.
 ///
 /// [#drawSkinnedMeshImmediate] is the way in for callers that reach neither phase.
 public final class PatchModelRenderer {

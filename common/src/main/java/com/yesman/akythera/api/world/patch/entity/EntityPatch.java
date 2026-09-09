@@ -268,6 +268,7 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
 	}
 
     /// Returns a level that an owner is belonged to
+    @ScriptFunction(pure = true, label = "Get Level")
 	public final Level getLevel() {
 		return original.level();
 	}
@@ -394,6 +395,66 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
     @ScriptFunction(pure = true, label = "Is Controlled by Player", desc = "Returns whether the entity is controlled by users. If false, the entity is controlled by AI.")
     public boolean isControlledByPlayer() {
         return false;
+    }
+
+    @ScriptFunction(pure = true, label = "Get Delta Movement", desc = "Movement applied this tick, in blocks.")
+    public Vec3 getDeltaMovement() {
+        return getOriginal().getDeltaMovement();
+    }
+
+    @ScriptFunction(pure = true, label = "Get Tick Count", desc = "Ticks the entity has existed for.")
+    public int getTickCount() {
+        return getOriginal().tickCount;
+    }
+
+    @ScriptFunction(pure = true, label = "Is Alive")
+    public boolean isAlive() {
+        return getOriginal().isAlive();
+    }
+
+    @ScriptFunction(pure = true, label = "Is In Water")
+    public boolean isInWater() {
+        return getOriginal().isInWater();
+    }
+
+    @ScriptFunction(pure = true, label = "Is Sprinting")
+    public boolean isSprinting() {
+        return getOriginal().isSprinting();
+    }
+
+    @ScriptFunction(pure = true, label = "Is Crouching", desc = "Returns whether the entity holds the crouch pose.")
+    public boolean isCrouching() {
+        return getOriginal().isCrouching();
+    }
+
+    @ScriptFunction(pure = true, label = "Is Shift Key Down", desc = "Returns whether the sneak key is held. A crouching entity may have released it already.")
+    public boolean isShiftKeyDown() {
+        return getOriginal().isShiftKeyDown();
+    }
+
+    @ScriptFunction(pure = true, label = "Is Passenger", desc = "Returns whether the entity rides another one.")
+    public boolean isPassenger() {
+        return getOriginal().isPassenger();
+    }
+
+    @ScriptFunction(pure = true, label = "Is Vehicle", desc = "Returns whether another entity rides this one.")
+    public boolean isVehicle() {
+        return getOriginal().isVehicle();
+    }
+
+    @ScriptFunction(pure = true, label = "Get Eye Height", desc = "Eye height above the entity's feet, in blocks.")
+    public float getEyeHeight() {
+        return getOriginal().getEyeHeight();
+    }
+
+    @ScriptFunction(pure = true, label = "Get Hitbox Width", desc = "Bounding box width, in blocks.")
+    public float getBbWidth() {
+        return getOriginal().getBbWidth();
+    }
+
+    @ScriptFunction(pure = true, label = "Get Hitbox Height", desc = "Bounding box height, in blocks.")
+    public float getBbHeight() {
+        return getOriginal().getBbHeight();
     }
 
 /*

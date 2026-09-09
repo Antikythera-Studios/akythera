@@ -9,17 +9,29 @@ import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
-import com.yesman.akythera.client.gui.widget.common.DataBoundWidget;
+import com.yesman.akythera.client.gui.widget.common.PlaceholderExpressionWidget;
 import com.yesman.akythera.client.gui.widget.common.PressableWidget;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.concurrent.Callable;
 import java.util.function.Consumer;
 
-public class CheckBox extends AbstractWidget implements AnchoredWidget, DataBoundWidget<Boolean>, PressableWidget {
+public class CheckBox extends AbstractWidget implements AnchoredWidget, PlaceholderExpressionWidget<Boolean>, PressableWidget {
+    /// Tint of the mark and the label while the box draws [#placeholderValue].
+    private static final int PLACEHOLDER_COLOR = 0xFF888888;
+
     private final Font font;
     private final boolean showMessage;
-    private boolean checked;
+
+    /// The bound value, or null while it is unset — where [#placeholderValue] takes over. `false` is
+    /// a value of its own, so the unset state needs a slot of its own.
+    @Nullable
+    private Boolean value;
+
+    /// Drawn greyed while [#value] is unset. Null = no placeholder.
+    @Nullable
+    private Boolean placeholderValue;
 
     /// Tint of the checked mark and the label, as packed ARGB.
     private int color = 0xFFFFFFFF;
@@ -92,23 +104,26 @@ public class CheckBox extends AbstractWidget implements AnchoredWidget, DataBoun
 
     @Override
     public void onPressed() {
-        checked = !checked;
-        onWidgetChanged.accept(checked);
+        // A placeholder box carries no value of its own: the press claims one, starting from the
+        // opposite of what was drawn.
+        value = !getWidgetValue();
+        onWidgetChanged.accept(value);
     }
 
     @Override
     public void extractWidgetRenderState(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partialTicks) {
         int rectangleLength = Math.min(getWidth(), getHeight());
         int outlineColor = isFocused() ? -1 : isActive() ? -6250336 : -12566463;
+        int markColor = hasPlaceholderValue() ? PLACEHOLDER_COLOR : color;
 
         guiGraphics.fill(getX(), getY(), getX() + rectangleLength, getY() + rectangleLength, outlineColor);
         guiGraphics.fill(getX() + 1, getY() + 1, getX() + rectangleLength - 1, getY() + rectangleLength - 1, -16777216);
 
-        if (checked) {
-            guiGraphics.fill(getX() + 2, getY() + 2, getX() + rectangleLength - 2, getY() + rectangleLength - 2, color);
+        if (getWidgetValue()) {
+            guiGraphics.fill(getX() + 2, getY() + 2, getX() + rectangleLength - 2, getY() + rectangleLength - 2, markColor);
         }
 
-        int fontColor = isActive() ? color : 0xFF404040;
+        int fontColor = isActive() ? markColor : 0xFF404040;
 
         if (showMessage) {
             guiGraphics.text(font, getMessage(), getX() + rectangleLength + 4, getY() + height / 2 - font.lineHeight / 2 + 1, fontColor, false);
@@ -127,7 +142,25 @@ public class CheckBox extends AbstractWidget implements AnchoredWidget, DataBoun
 
     /// Returns the state whether the widget is checked, not a bound data value
     public boolean getWidgetValue() {
-        return checked;
+        return Boolean.TRUE.equals(hasPlaceholderValue() ? placeholderValue : value);
+    }
+
+    /// ***************************************************************
+    /// [PlaceholderExpressionWidget] implementations                 *
+    /// ***************************************************************
+    @Override
+    public @Nullable Boolean getPlaceholderValue() {
+        return placeholderValue;
+    }
+
+    @Override
+    public void setPlaceholderValue(@Nullable Boolean value) {
+        this.placeholderValue = value;
+    }
+
+    @Override
+    public boolean hasPlaceholderValue() {
+        return value == null && placeholderValue != null;
     }
 
     /// ***************************************************************
@@ -169,11 +202,11 @@ public class CheckBox extends AbstractWidget implements AnchoredWidget, DataBoun
 
     @Override
     public Consumer<Boolean> valueSetter() {
-        return (bool) -> checked = bool;
+        return bool -> value = bool;
     }
 
     @Override
     public void reset() {
-        checked = false;
+        value = false;
     }
 }

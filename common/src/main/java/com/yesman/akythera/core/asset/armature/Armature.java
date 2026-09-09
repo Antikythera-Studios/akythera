@@ -1,9 +1,11 @@
 package com.yesman.akythera.core.asset.armature;
 
 import com.yesman.akythera.core.animation.keyframe.Pose;
+import com.yesman.akythera.core.asset.loader.ArmatureLoader;
 import com.yesman.akythera.core.math.Transform;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+import org.jetbrains.annotations.ApiStatus;
 import org.joml.Matrix4f;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -34,6 +36,9 @@ public class Armature {
     /// A pose with identity transform matrices, DO NOT modify the pose.
     private final Pose tPose;
 
+    /// Mirror partner by bone name, entered both ways. A bone with no partner is absent.
+    private Map<String, String> mirrorBones = Map.of();
+
     public Armature(final Bone rootBone, final int boneCount, final Map<String, Bone> bonesByName) {
         this.boneCount = boneCount;
         this.rootBone = rootBone;
@@ -53,6 +58,19 @@ public class Armature {
     /// Check whether named bone exists
     public boolean hasBone(final String name) {
         return boneByName.containsKey(name);
+    }
+
+    /// Installs the sidecar-declared data on a freshly read armature.
+    ///
+    /// @see ArmatureLoader#loadArmature
+    @ApiStatus.Internal
+    public void applyMetadata(final ArmatureLoader.Metadata metadata) {
+        mirrorBones = metadata.mirrorBoneMap();
+    }
+
+    /// The bone `name` pairs with across the mirror plane, or `name` itself when it has no partner.
+    public String getMirrorBone(final String name) {
+        return mirrorBones.getOrDefault(name, name);
     }
 
     /// Returns a bone by ID. the ID are specified by vertex group order in Blender.

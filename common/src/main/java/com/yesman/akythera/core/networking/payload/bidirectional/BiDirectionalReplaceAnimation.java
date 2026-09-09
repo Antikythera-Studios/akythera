@@ -12,13 +12,13 @@ import org.jspecify.annotations.NullMarked;
 import java.util.List;
 
 @NullMarked
-public record BiDirectionalReplaceAnimation(List<ReplaceAnimations.Replace> entries, boolean reset) implements CustomPacketPayload {
+public record BiDirectionalReplaceAnimation(List<ReplaceAnimations.ReplaceEntry> entries, boolean reset) implements CustomPacketPayload {
     public static final CustomPacketPayload.Type<BiDirectionalReplaceAnimation> TYPE =
         new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(Akythera.MODID, "replace_animation"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, BiDirectionalReplaceAnimation> STREAM_CODEC =
         StreamCodec.composite(
-            ReplaceAnimations.Replace.STREAM_CODEC.apply(ByteBufCodecs.list()),
+            ReplaceAnimations.ReplaceEntry.STREAM_CODEC.apply(ByteBufCodecs.list()),
             BiDirectionalReplaceAnimation::entries,
             ByteBufCodecs.BOOL,
             BiDirectionalReplaceAnimation::reset,

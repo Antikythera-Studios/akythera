@@ -11,8 +11,8 @@ import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.joml.Quaterniond;
+import org.joml.Vector3f;
 
-import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
 
@@ -20,12 +20,14 @@ import java.util.*;
 public final class BinaryArmatureLoader implements ArmatureLoader, BinaryAssetLoader {
     private final Identifier resourcePath;
     private final Resource resource;
+    private final Metadata metadata;
 
-    public BinaryArmatureLoader(Identifier resourcePath, Resource resource)
+    public BinaryArmatureLoader(Identifier resourcePath, Resource resource, Metadata metadata)
         throws ResourceLoadingFailureException
     {
         this.resourcePath = resourcePath;
         this.resource = resource;
+        this.metadata = metadata;
     }
 
     @Override
@@ -34,7 +36,12 @@ public final class BinaryArmatureLoader implements ArmatureLoader, BinaryAssetLo
     }
 
     @Override
-    public <T extends Armature> T loadArmature(ArmatureConstructor<T> armatureConstructor)
+    public Metadata metadata() {
+        return metadata;
+    }
+
+    @Override
+    public <T extends Armature> T loadRawArmature(ArmatureConstructor<T> armatureConstructor)
         throws ResourceLoadingFailureException
     {
         try (InputStream inputStream = resource.open()) {
@@ -93,7 +100,13 @@ public final class BinaryArmatureLoader implements ArmatureLoader, BinaryAssetLo
                         }
 
                         // Creates a new root bone
-                        rootBone = new Bone(newRootBoneName, boneNamesToIds.size(), new Matrix4f());
+                        rootBone = new Bone(
+                            newRootBoneName,
+                            boneNamesToIds.size(),
+                            new Matrix4f(),
+                            new Vector3f(0.0F, GENERATED_ROOT_TAIL_HEIGHT, 0.0F)
+                        );
+
                         bonesByName.put(newRootBoneName, rootBone);
                         rootBone.addChildBones(multiRoots.toArray(new Bone[0]));
                     }
@@ -140,6 +153,7 @@ public final class BinaryArmatureLoader implements ArmatureLoader, BinaryAssetLo
         float[] locArr = BinaryAssetLoader.readFloatArray(bytes, offset, 3);
         float[] rotArr = BinaryAssetLoader.readFloatArray(bytes, offset + 12, 4);
         float[] scaArr = BinaryAssetLoader.readFloatArray(bytes, offset + 28, 3);
+        float[] tailArr = BinaryAssetLoader.readFloatArray(bytes, offset + 40, 3);
         Transform boneLocalTransform =
             new Transform(
                 new Vec3(locArr[0], locArr[1], locArr[2]),
@@ -153,11 +167,20 @@ public final class BinaryArmatureLoader implements ArmatureLoader, BinaryAssetLo
             BLENDER_TO_MINECRAFT_COORD_SYSTEM.mul(boneLocalMatrix, boneLocalMatrix);
         }
 
-        Bone bone = new Bone(boneName, boneNamesToIds.get(boneName), boneLocalMatrix);
+        if (!boneNamesToIds.containsKey(boneName)) {
+            throw new NoSuchElementException("No bone named " + boneName + " in an id map.");
+        }
+
+        Bone bone = new Bone(
+            boneName,
+            boneNamesToIds.get(boneName),
+            boneLocalMatrix,
+            new Vector3f(tailArr[0], tailArr[1], tailArr[2])
+        );
         bones.put(boneName, bone);
 
-        int childCount = BinaryAssetLoader.readInt(bytes, offset + 40);
-        offset += 44;
+        int childCount = BinaryAssetLoader.readInt(bytes, offset + 52);
+        offset += 56;
 
         for (int i = 0; i < childCount; i++) {
             Pair<Integer, Bone> boneResult = readIdBonePair(bytes, offset, boneNamesToIds, bones, false);

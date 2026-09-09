@@ -4,63 +4,69 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.animation.animator.AnimationInterfaceKey;
-import com.yesman.akythera.api.component.PatchComponent;
-import com.yesman.akythera.core.animation.animator.BlendingAnimator;
-import com.yesman.akythera.core.animation.playable.AnimationSequence;
+import com.yesman.akythera.api.component.UniqueComponent;
+import com.yesman.akythera.api.world.patch.item.ItemPatch;
+import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.blueprint.ComponentBlueprint;
-import com.yesman.akythera.core.registry.AkytheraRegistries;
-import net.minecraft.core.RegistryAccess;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.ResourceKey;
+import org.jspecify.annotations.NonNull;
 
 import java.util.List;
 
-public record ReplaceAnimations(List<Replace> animationsToReplace, boolean resetAnimations)
-    implements PatchComponent, ComponentBlueprint<ReplaceAnimations, Void>
-{
+/// The animation interface replacements an item imposes while it is equipped.
+///
+/// [#resetAnimations] declares the block the whole truth: every interface it does not name rolls back
+/// to its default animation. [#mirrorAnimations] plays every animation the block names through its
+/// mirrored twin, see [PlayableAnimation#mirrored].
+public record ReplaceAnimations(
+    List<ReplaceEntry> animationsToReplace,
+    boolean resetAnimations,
+    boolean mirrorAnimations
+) implements UniqueComponent, ComponentBlueprint<ReplaceAnimations, ItemPatch> {
     public static final MapCodec<ReplaceAnimations> CODEC = RecordCodecBuilder.mapCodec(
         instance ->
             instance.group(
-                Replace.CODEC.listOf().fieldOf("animationsToReplace").forGetter(ReplaceAnimations::animationsToReplace),
-                Codec.BOOL.fieldOf("reset_animations").forGetter(ReplaceAnimations::resetAnimations)
+                ReplaceEntry.CODEC.listOf().fieldOf("animations_to_replace").forGetter(ReplaceAnimations::animationsToReplace),
+                Codec.BOOL.fieldOf("reset_animations").forGetter(ReplaceAnimations::resetAnimations),
+                Codec.BOOL.optionalFieldOf("mirror_animations", false).forGetter(ReplaceAnimations::mirrorAnimations)
             )
             .apply(instance, ReplaceAnimations::new)
     );
 
-    public void replaceAnimations(final BlendingAnimator animator) {
-        if (resetAnimations) animator.resetAllInterfaces();
-        animator.replaceAnimation(animationsToReplace);
-    }
-
     @Override
-    public ReplaceAnimations instantiate(final Void blueprintOwner) {
+    public ReplaceAnimations instantiate(final ItemPatch blueprintOwner) {
         return this;
     }
 
     @Override
-    public MapCodec<? extends ComponentBlueprint<ReplaceAnimations, Void>> mapCodec() {
+    public MapCodec<? extends ComponentBlueprint<ReplaceAnimations, ItemPatch>> mapCodec() {
         return CODEC;
     }
 
-    public record Replace(AnimationInterfaceKey interfaceKey, ResourceKey<AnimationSequence> animResourceKey) {
-        public static final Codec<Replace> CODEC = RecordCodecBuilder.create(
+    /// An interface key and the animation to play there. The key addresses any [PlayableAnimation]
+    /// registry.
+    public record ReplaceEntry(
+        AnimationInterfaceKey interfaceKey,
+        ResourceKey<? extends @NonNull PlayableAnimation> animResourceKey
+    ) {
+        public static final Codec<ReplaceEntry> CODEC = RecordCodecBuilder.create(
             instance ->
                 instance.group(
                     AnimationInterfaceKey.ENUM_MANAGER.getNameCodec()
-                        .fieldOf("anim_interface").forGetter(Replace::interfaceKey),
-                    ResourceKey.codec(AkytheraRegistries.DataPack.ANIM_SEQUENCE_KEY)
-                        .fieldOf("animation").forGetter(Replace::animResourceKey)
+                        .fieldOf("anim_interface").forGetter(ReplaceEntry::interfaceKey),
+                    PlayableAnimation.KEY_CODEC.fieldOf("animation").forGetter(ReplaceEntry::animResourceKey)
                 )
-                .apply(instance, Replace::new)
+                .apply(instance, ReplaceEntry::new)
         );
 
-        public static final StreamCodec<RegistryFriendlyByteBuf, Replace> STREAM_CODEC = StreamCodec.composite(
+        public static final StreamCodec<RegistryFriendlyByteBuf, ReplaceEntry> STREAM_CODEC = StreamCodec.composite(
             AnimationInterfaceKey.ENUM_MANAGER.getStreamCodec(),
-            Replace::interfaceKey,
-            ResourceKey.streamCodec(AkytheraRegistries.DataPack.ANIM_SEQUENCE_KEY),
-            Replace::animResourceKey,
-            Replace::new
+            ReplaceEntry::interfaceKey,
+            PlayableAnimation.KEY_STREAM_CODEC,
+            ReplaceEntry::animResourceKey,
+            ReplaceEntry::new
         );
     }
 }

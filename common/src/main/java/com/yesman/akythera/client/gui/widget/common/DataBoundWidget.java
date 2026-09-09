@@ -7,7 +7,7 @@ import java.util.concurrent.Callable;
 import java.util.function.Consumer;
 
 /// A utility interface to ease the data binding process when initializing,
-/// and the widget state is changed, which is generally fragmented in minecraft's
+/// and the widget state is changed, which is generally fragmented in Minecraft's
 /// widget classes in 1.20.1
 public interface DataBoundWidget<T> {
     /// Returns the provider of original data that the widget holds

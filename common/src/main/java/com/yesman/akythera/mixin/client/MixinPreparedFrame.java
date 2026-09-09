@@ -23,8 +23,7 @@ public abstract class MixinPreparedFrame {
     }
 
     @Inject(at = @At("TAIL"), method = "close()V")
-    private void akythera$endSkinnedMeshFrame(CallbackInfo callbackInfo) {
+    private void akythera$clearSkinnedMeshSubmits(CallbackInfo callbackInfo) {
         PatchModelRenderer.getInstance().clear();
-        PatchModelRenderer.getInstance().endFrame();
     }
 }

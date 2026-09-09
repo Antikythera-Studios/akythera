@@ -5,14 +5,16 @@ import com.yesman.akythera.api.component.DynamicPatchComponent;
 import com.yesman.akythera.api.component.PatchComponent;
 import com.yesman.akythera.api.component.UniqueComponent;
 import com.yesman.akythera.api.world.patch.AkytheraPatches;
+import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
+import com.yesman.akythera.api.world.patch.item.component.WeaponStanceVariationAdapter;
 import com.yesman.akythera.core.blueprint.ItemPatchBlueprint;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.ApiStatus;
+import org.jspecify.annotations.Nullable;
 
-import java.text.MessageFormat;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
 
 /// An item plugin for extra data used by Epic Fight
@@ -37,29 +39,14 @@ public final class ItemPatch implements ComponentAttachable {
 
     /// Instantiated only by [ItemPatchBlueprint#instantiate]
     @ApiStatus.Internal
-    public ItemPatch(final Item original, final Map<String, ? extends PatchComponent> components) {
+    public ItemPatch(final Item original, final ItemPatchBlueprint blueprint) {
         this.original = original;
-        this.components = Collections.unmodifiableMap(components);
-
-        Map<Class<? extends UniqueComponent>, UniqueComponent> uniqueComponentMap = new HashMap<>();
-
-        for (Map.Entry<String, ? extends PatchComponent> entry : components.entrySet()) {
-            if (entry.getValue() instanceof UniqueComponent uc) {
-                if (uniqueComponentMap.containsKey(uc.getClass())) {
-                    throw new IllegalStateException(
-                        MessageFormat.format("""
-                            Detected more than one component of {0}, {0} is UniqueComponent that does not allow duplicated types of components. {1} must be removed to properly launch the game.
-                        """, uc.getClass(), entry.getKey())
-                    );
-                }
-
-                uniqueComponentMap.put(uc.getClass(), uc);
-            }
-        }
-
-        uniqueComponents = Collections.unmodifiableMap(uniqueComponentMap);
+        this.components = Collections.unmodifiableMap(ItemPatchBlueprint.assembleComponents(blueprint, this));
+        this.uniqueComponents = ComponentAttachable.indexUnique(components);
     }
 
+    /// The patch's components, in the order the blueprint hierarchy declared them. A consumer that
+    /// picks the **first** matching component reads this order as priority order.
     @Override
     public Map<String, ? extends PatchComponent> getComponents() {
         return components;
@@ -68,6 +55,19 @@ public final class ItemPatch implements ComponentAttachable {
     @SuppressWarnings("unchecked") @Override
     public <C extends UniqueComponent> C getComponent(final Class<C> type) {
         return (C)uniqueComponents.get(type);
+    }
+
+    /// The [WeaponStanceVariationAdapter] whose condition `equipper` establishes while holding this
+    /// item in `slot` — the first one [#getComponents] lists that matches, so component order is
+    /// stance priority order. Null when none does.
+    public @Nullable WeaponStanceVariationAdapter getStanceAdapter(final LivingEntityPatch<?> equipper, final EquipmentSlot slot) {
+        for (PatchComponent component : components.values()) {
+            if (component instanceof WeaponStanceVariationAdapter adapter && adapter.matches(equipper, slot)) {
+                return adapter;
+            }
+        }
+
+        return null;
     }
 
     public Item getOriginal() {

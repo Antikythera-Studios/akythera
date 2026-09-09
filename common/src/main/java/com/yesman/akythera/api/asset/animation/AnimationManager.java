@@ -9,6 +9,7 @@ import com.yesman.akythera.api.lifecycle.ComponentsFactory;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.asset.armature.Armature;
 import com.yesman.akythera.core.animation.keyframe.AnimationClip;
+import com.yesman.akythera.core.animation.keyframe.AnimationMirror;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.asset.loader.AnimationLoader;
 import com.yesman.akythera.core.asset.loader.AssetLoader;
@@ -33,11 +34,7 @@ public final class AnimationManager extends DynamicAssetManager<@NotNull Animati
     public static final Codec<AssetAccessor<AnimationClip>> CODEC =
         Identifier.CODEC.xmap(
             AnimationManager::accessor,
-            accessor ->
-                Identifier.fromNamespaceAndPath(
-                    accessor.identifier().getNamespace(),
-                    accessor.identifier().getPath().replace(DIRECTORY, "") // trim asset directory
-                )
+            accessor -> trimDirectory(accessor.identifier())
         );
 
     public static final AnimationManager INSTANCE = new AnimationManager();
@@ -51,6 +48,57 @@ public final class AnimationManager extends DynamicAssetManager<@NotNull Animati
     }
 
     private AnimationManager() {}
+
+    /// An animation identifier as [DynamicAssetManager#issuedAccessor] keys it — the id with the
+    /// asset directory trimmed off.
+    public static Identifier trimDirectory(final Identifier identifier) {
+        return Identifier.fromNamespaceAndPath(identifier.getNamespace(), identifier.getPath().replace(DIRECTORY, ""));
+    }
+
+    /// The mirrored twin of `animation`, under the source identifier plus
+    /// [AnimationMirror#IDENTIFIER_SUFFIX]. Issued once and kept in
+    /// [DynamicAssetManager#issuedAccessor], so the sidecar is read on the first call only.
+    ///
+    /// An animation whose `.akmeta` leaves `enable_mirroring` off, or names no vendor armature,
+    /// registers `animation` itself under the mirrored identifier and is handed straight back. A
+    /// mirror answers what it reflects.
+    @SuppressWarnings("unchecked")
+    public static AssetAccessor<AnimationClip> getMirrorAnimation(final AssetAccessor<AnimationClip> animation) {
+        if (animation instanceof MirrorAnimationAccessor mirrored) {
+            return mirrored.source();
+        }
+
+        Identifier sourceKey = trimDirectory(animation.identifier());
+        Identifier mirrorKey = Identifier.fromNamespaceAndPath(
+            sourceKey.getNamespace(), sourceKey.getPath() + AnimationMirror.IDENTIFIER_SUFFIX);
+        AssetAccessor<? extends AnimationClip> issued = INSTANCE.issuedAccessor.get(mirrorKey);
+
+        if (issued != null) {
+            return (AssetAccessor<AnimationClip>)issued;
+        }
+
+        AnimationMirror.Setup setup = AnimationMirror.readSetup(
+            animation.identifier(), ComponentsFactory.getImpl().getResourceManager());
+
+        if (!setup.isMirroring()) {
+            INSTANCE.issuedAccessor.put(mirrorKey, animation);
+
+            return animation;
+        }
+
+        AssetAccessor<AnimationClip> mirror = new MirrorAnimationAccessor(
+            Identifier.fromNamespaceAndPath(
+                animation.identifier().getNamespace(),
+                animation.identifier().getPath() + AnimationMirror.IDENTIFIER_SUFFIX
+            ),
+            animation,
+            setup.vendor()
+        );
+
+        INSTANCE.issuedAccessor.put(mirrorKey, mirror);
+
+        return mirror;
+    }
 
     /// Returns an animation accessor by animation location
     @SuppressWarnings("unchecked")
@@ -136,6 +184,57 @@ public final class AnimationManager extends DynamicAssetManager<@NotNull Animati
         @Override
         public Type type() {
             return Type.ANIMATION;
+        }
+
+        @Override
+        public @NonNull String toString() {
+            return identifier.toString();
+        }
+
+        @Override
+        public int hashCode() {
+            return identifier.hashCode();
+        }
+
+        @SuppressWarnings("rawtypes")
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            } else if (obj instanceof AssetAccessor other) {
+                return identifier.equals(other.identifier());
+            } else if (obj instanceof Identifier rl) {
+                return identifier.equals(rl);
+            } else if (obj instanceof String name) {
+                return identifier.toString().equals(name);
+            } else {
+                return false;
+            }
+        }
+    }
+
+    /// Accessor for the mirrored twin of another animation. The clip is baked on the first
+    /// reference into [DynamicAssetManager#loadedObjectsRegistry], so a resource reload drops it
+    /// like any other asset and the next reference re-bakes it.
+    private record MirrorAnimationAccessor(
+        Identifier identifier,
+        AssetAccessor<AnimationClip> source,
+        AssetAccessor<? extends Armature> vendor
+    ) implements AssetAccessor<AnimationClip> {
+        @Override
+        public AnimationClip get() {
+            return INSTANCE.loadedObjectsRegistry.computeIfAbsent(
+                identifier, _ -> AnimationMirror.mirror(source.get(), vendor.get()));
+        }
+
+        @Override
+        public Type type() {
+            return Type.ANIMATION;
+        }
+
+        @Override
+        public boolean isResourcePresent() {
+            return source.isResourcePresent();
         }
 
         @Override

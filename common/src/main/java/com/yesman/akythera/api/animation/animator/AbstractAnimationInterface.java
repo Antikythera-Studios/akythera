@@ -1,5 +1,6 @@
 package com.yesman.akythera.api.animation.animator;
 
+import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.animation.animator.BlendingAnimator;
 import com.yesman.akythera.core.animation.driver.AnimationDriver;
@@ -8,6 +9,7 @@ import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.blueprint.script.AnimatorScript;
 import com.yesman.akythera.core.util.helper.PoseOperators;
 import net.minecraft.core.Holder;
+import net.minecraft.world.entity.Entity;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -17,43 +19,49 @@ import org.jspecify.annotations.Nullable;
 /// Practical uses would be a weapon specific animationsToReplace
 /// like holding greatsword, spear, which you can't replace
 /// just by default locomotion.
-public abstract class AbstractAnimationInterface<AD extends AnimationDriver, PA extends PlayableAnimation> implements AnimationDriver {
+///
+/// What an interface accepts is decided by [#instantiate] on the incoming animation, so it may play
+/// an animation of a different kind than its default.
+public abstract class AbstractAnimationInterface implements AnimationDriver {
     /// Default animation of the interface. Switches back on [#reset] is called
-    private final Holder.@NonNull Reference<PA> defaultAnimation;
+    private final Holder<? extends @NonNull PlayableAnimation> defaultAnimation;
 
     /// An animation driver that was played before a transition occurs. Lifecycle
     /// sustains until the weight becomes 0.0 and becomes `null` after then.
-    private @Nullable AD animDriverO;
+    private @Nullable AnimationDriver animDriverO;
 
     /// Current animation driver. Null until [#replace] is called since constructed.
-    private AD animDriver;
+    private AnimationDriver animDriver;
 
     public AbstractAnimationInterface(
-        final Holder.@NonNull Reference<PA> defaultAnimation
+        final Holder<? extends @NonNull PlayableAnimation> defaultAnimation
     ) {
         this.defaultAnimation = defaultAnimation;
     }
 
-    /// Instantiate animation player
-    protected abstract AD instantiate(final Holder.Reference<PA> animation);
+    /// The driver that plays `animation` on this interface, or null when this interface cannot drive
+    /// its type.
+    protected abstract @Nullable AnimationDriver instantiate(final Holder<? extends @NonNull PlayableAnimation> animation);
 
     /// Replace the animation into `animationToReplace` with transition time.
-    @SuppressWarnings("unchecked")
-    public final void replace(final Holder.Reference<? extends PlayableAnimation> animationToReplace) {
-        try {
-            AD newDriver = instantiate((Holder.Reference<PA>)animationToReplace);
+    ///
+    /// An animation this interface cannot drive leaves the current one playing.
+    public final void replace(final Holder<? extends @NonNull PlayableAnimation> animationToReplace) {
+        AnimationDriver newDriver = instantiate(animationToReplace);
 
-            if (animDriver != null) {
-                animDriverO = animDriver;
-                animDriverO.terminate();
-            }
-
-            animDriver = newDriver;
-            animDriver.start();
-        } catch (ClassCastException e) {
+        if (newDriver == null) {
             Akythera.LOGGER.error("Can't play {} on animation interface {}. The types are mismatches.",
-                animationToReplace.key(), getClass().getSimpleName());
+                animationToReplace, getClass().getSimpleName());
+            return;
         }
+
+        if (animDriver != null) {
+            animDriverO = animDriver;
+            animDriverO.terminate();
+        }
+
+        animDriver = newDriver;
+        animDriver.start();
     }
 
     /// Roll back to default animation
@@ -90,6 +98,17 @@ public abstract class AbstractAnimationInterface<AD extends AnimationDriver, PA 
         }
 
         animDriver.update(frameTime);
+    }
+
+    /// Drives the notify tracks of whatever this interface is playing, the outgoing animation included
+    /// while it still has weight.
+    @Override
+    public final void tick(final EntityPatch<Entity> owner) {
+        if (animDriverO != null) {
+            animDriverO.tick(owner);
+        }
+
+        animDriver.tick(owner);
     }
 
     @Override

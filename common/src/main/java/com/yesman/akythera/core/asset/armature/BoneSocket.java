@@ -3,12 +3,13 @@ package com.yesman.akythera.core.asset.armature;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import com.yesman.akythera.api.component.UniqueComponent;
-import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.api.component.PatchComponent;
+import com.yesman.akythera.api.component.UniqueComponent;
+import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.core.blueprint.ComponentBlueprint;
 import com.yesman.akythera.core.math.Transform;
+import com.yesman.akythera.core.registry.AkytheraRegistries;
 import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
@@ -29,7 +30,7 @@ public final class BoneSocket implements PatchComponent, ComponentBlueprint<Bone
                 instance.group(
                     Transform.CODEC.fieldOf("transform").forGetter(BoneSocket::getLocalTransform),
                     Codec.STRING.fieldOf("bone_name").forGetter(BoneSocket::getBoneName),
-                    ComponentBlueprint.componentMapCodec()
+                    ComponentBlueprint.componentMapCodec(() -> AkytheraRegistries.Frozen.ENTITY_PATCH_COMPONENT_TYPES)
                         .optionalFieldOf("components", Map.of()).forGetter(BoneSocket::getChildBlueprints)
                 )
                 .apply(instance, BoneSocket::new)
@@ -112,7 +113,7 @@ public final class BoneSocket implements PatchComponent, ComponentBlueprint<Bone
         socket.armature = host;
 
         childBlueprints.forEach((name, blueprint) ->
-            socket.components.put(name, ((ComponentBlueprint<?, Object>)blueprint).instantiate(socket))
+            socket.components.put(name, ((ComponentBlueprint<?, Object>)blueprint).instantiate(host.getOwner()))
         );
 
         return socket;

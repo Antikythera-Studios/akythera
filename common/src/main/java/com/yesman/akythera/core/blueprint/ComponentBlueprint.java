@@ -4,31 +4,29 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.api.component.PatchComponent;
-import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
-import net.minecraft.tags.TagKey;
+import net.minecraft.core.Registry;
 
 import java.util.Map;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 public interface ComponentBlueprint<T extends PatchComponent, O> extends Blueprint<T, O> {
-    TagKey<MapCodec<? extends ComponentBlueprint<?, ?>>> ENTITY_PATCH_COMPONENT_TAG =
-        TagKey.create(AkytheraRegistries.Frozen.COMPONENT_BLUEPRINT_TYPES_KEY, Akythera.identifier("entity_patch"));
-
-    TagKey<MapCodec<? extends ComponentBlueprint<?, ?>>> ITEM_PATCH_COMPONENT_TAG =
-        TagKey.create(AkytheraRegistries.Frozen.COMPONENT_BLUEPRINT_TYPES_KEY, Akythera.identifier("item_patch"));
-
     /// A host's children: the name each one is attached under
     /// ([ComponentAttachable#getComponents]) mapped to its blueprint, dispatched on the component
     /// type id.
     ///
-    /// Lazily initialized — a host's own codec is an entry of the registry it dispatches through.
-    static Codec<Map<String, ComponentBlueprint<?, ?>>> componentMapCodec() {
+    /// `types` is the patch kind's component registry —
+    /// [AkytheraRegistries.Frozen#ENTITY_PATCH_COMPONENT_TYPES] or
+    /// [AkytheraRegistries.Frozen#ITEM_PATCH_COMPONENT_TYPES]. It arrives as a supplier and the codec
+    /// is lazily initialized: a host's own codec is an entry of the registry it dispatches through.
+    static Codec<Map<String, ComponentBlueprint<?, ?>>> componentMapCodec(
+        Supplier<Registry<MapCodec<? extends ComponentBlueprint<?, ?>>>> types
+    ) {
         return Codec.lazyInitialized(() ->
             Codec.unboundedMap(
                 Codec.STRING,
-                AkytheraRegistries.Frozen.COMPONENT_BLUEPRINT_TYPES.byNameCodec()
-                    .<ComponentBlueprint<?, ?>>dispatch(ComponentBlueprint::mapCodec, Function.identity())
+                types.get().byNameCodec().dispatch(ComponentBlueprint::mapCodec, Function.identity())
             )
         );
     }

@@ -100,6 +100,11 @@ public class Static extends AbstractWidget implements AnchoredWidget {
         fontColor = 0xFF000000 | (r << 16) | (g << 8) | b;
     }
 
+    /// The text color, ARGB.
+    public void setColor(int argb) {
+        fontColor = argb;
+    }
+
     /// ***************************************************************
     /// [AnchoredWidget] implementations                              *
     /// ***************************************************************

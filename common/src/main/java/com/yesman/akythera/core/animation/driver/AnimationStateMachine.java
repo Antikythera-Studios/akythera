@@ -89,6 +89,11 @@ public final class AnimationStateMachine<O extends EntityPatch<Entity>>
     @Override
     public void tick(final EntityPatch<Entity> owner) {
         tick();
+
+        // The driver a transition blends out of is owned by no state, so no state ticks it.
+        if (currentDriver instanceof DriverToDriverTransfer transfer) {
+            transfer.tickFrom(owner);
+        }
     }
 
     @Override

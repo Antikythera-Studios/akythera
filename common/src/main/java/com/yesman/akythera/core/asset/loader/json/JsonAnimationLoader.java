@@ -20,6 +20,7 @@ import net.minecraft.util.GsonHelper;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.joml.Quaterniond;
+import org.joml.Vector3f;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -77,7 +78,7 @@ public final class JsonAnimationLoader implements AnimationLoader, JsonAssetLoad
                         continue;
                     } else {
                         // Add a fake bone to load old root motion bone
-                        bone = new Bone(LEGACY_ROOT_BONE_NAME, 0, new Matrix4f());
+                        bone = new Bone(LEGACY_ROOT_BONE_NAME, 0, new Matrix4f(), new Vector3f());
                     }
                 }
 

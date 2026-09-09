@@ -33,11 +33,11 @@ public record TypeConvertNode(ScriptType from, ScriptType to, PureNode input, in
     public <T> T execute(DataDrivenScript<?, ?> script, ExecutionContext context) {
         context.enter(this);
 
-        if (!from.explicitCastableTypes().containsKey(to.type())) {
+        if (!from.implicitlyCastableTypes().containsKey(to.type())) {
             throw new IllegalStateException("Can't convert from " + from.type().getSimpleName() + " to " + to.type().getSimpleName());
         }
 
-        return context.returnVal(from.explicitCastableTypes().get(to.type()).apply(input.execute(script, context)));
+        return context.returnVal(from.implicitlyCastableTypes().get(to.type()).apply(input.execute(script, context)));
     }
 
     @Override

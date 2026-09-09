@@ -102,6 +102,22 @@ public final class BlendSpace2D implements PlayableAnimation {
         return loops;
     }
 
+    /// This blend space over the mirrored twins of its nodes' animations, see
+    /// [PlayableAnimation#mirrored]. Node coordinates and space bounds are unchanged, and the
+    /// triangulation is rebuilt.
+    @Override
+    public BlendSpace2D mirrored() {
+        List<AnimationNode> mirroredNodes = getNodes().stream()
+            .map(node -> new AnimationNode(node.x(), node.y(), Holder.direct(node.animation().value().mirrored())))
+            .toList();
+
+        return new BlendSpace2D(
+            fadeInTime, fadeOutTime, smoothX, smoothY,
+            blendSpaceMinX(), blendSpaceMinY(), blendSpaceMaxX(), blendSpaceMaxY(),
+            loops, mirroredNodes
+        );
+    }
+
     @Override
     public void tick(EntityPatch<Entity> owner, float prevElapsedTime, float currentElapsedTime) {
     }
@@ -145,7 +161,7 @@ public final class BlendSpace2D implements PlayableAnimation {
         return StaticRegistryAccess.getRegisteredName(AkytheraRegistries.DataPack.BLEND_SPACE_2D_KEY, this);
     }
 
-    public static BlendSpace2DDriver instantiate(Holder.Reference<@NonNull BlendSpace2D> holder, final Supplier<Float> xUpdater, final Supplier<Float> yUpdater) {
+    public static BlendSpace2DDriver instantiate(Holder<@NonNull BlendSpace2D> holder, final Supplier<Float> xUpdater, final Supplier<Float> yUpdater) {
         return new BlendSpace2DDriver(holder, xUpdater, yUpdater);
     }
 

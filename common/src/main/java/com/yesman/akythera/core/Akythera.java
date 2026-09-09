@@ -2,6 +2,7 @@ package com.yesman.akythera.core;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.yesman.akythera.api.animation.animator.AnimationInterfaceKey;
+import com.yesman.akythera.api.world.patch.item.WeaponStance;
 import com.yesman.akythera.api.asset.animation.AnimationManager;
 import com.yesman.akythera.api.asset.armature.ArmatureManager;
 import com.yesman.akythera.api.data.modularize.AkytheraScriptFunctions;
@@ -66,7 +67,8 @@ public final class Akythera {
 
             AkytheraAnimNotifyTypes.REGISTRAR.notifyPresence();
             AkytheraAnimNotifyStateTypes.REGISTRAR.notifyPresence();
-            AkytheraComponentBlueprints.REGISTRAR.notifyPresence();
+            AkytheraComponentBlueprints.ENTITY_PATCH_REGISTRAR.notifyPresence();
+            AkytheraComponentBlueprints.ITEM_PATCH_REGISTRAR.notifyPresence();
             AkytheraScriptFunctions.AKYTHERA_REGISTRAR.notifyPresence();
             AkytheraScriptFunctions.MINECRAFT_REGISTRAR.notifyPresence();
             AkytheraScriptTypes.AKYTHERA_REGISTRAR.notifyPresence();
@@ -78,8 +80,10 @@ public final class Akythera {
         // Register level load & unload events to cache registry access for the helper class
         StaticRegistryAccess.registerEvents();
         AkytheraPatches.registerEvents();
+        EnumerableDataBlockSync.addSyncedDataBlock(AnimationInterfaceKey.ENUM_MANAGER);
         EnumerableDataBlockSync.addSyncedDataBlock(FSMAnimationState.ENUM_MANAGER);
         EnumerableDataBlockSync.addSyncedDataBlock(AnimationLayerSignature.ENUM_MANAGER);
+        EnumerableDataBlockSync.addSyncedDataBlock(WeaponStance.ENUM_MANAGER);
         EnumerableDataBlockSync.registerEvents();
     }
 
@@ -104,6 +108,7 @@ public final class Akythera {
         FSMAnimationState.ENUM_MANAGER.loadEnum();
         AnimationLayerSignature.ENUM_MANAGER.loadEnum();
         ColliderType.ENUM_MANAGER.loadEnum();
+        WeaponStance.ENUM_MANAGER.loadEnum();
 
         // Pair logics reference the collider type constants, so they bind after the enum loads.
         CollisionDetectionLogics.registerBuiltInLogics();

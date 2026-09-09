@@ -55,6 +55,14 @@ public record AnimationSequence(
         this(AnimationNotifyTrack.EMPTY, animClip, DEFAULT_FADE_TIME, DEFAULT_FADE_TIME, loops, rootMotion);
     }
 
+    /// This sequence over the mirrored twin of its clip, see [AnimationManager#getMirrorAnimation].
+    /// A clip whose `.akmeta` leaves mirroring off answers itself, so the twin equals this sequence.
+    @Override
+    public AnimationSequence mirrored() {
+        return new AnimationSequence(
+            notifyTrack, AnimationManager.getMirrorAnimation(animClip), fadeInTime, fadeOutTime, loops, rootMotion);
+    }
+
     @Override
     public void tick(final EntityPatch<Entity> owner, final float prevElapsedTime, final float currentElapsedTime) {
         notifyTrack.tick(this, owner, prevElapsedTime, currentElapsedTime);

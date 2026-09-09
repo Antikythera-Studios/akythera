@@ -36,7 +36,7 @@ public final class BlendSpace2DDriver implements AnimationDriver {
     /// Represents that, "no triangle cached yet"
     private static final int NO_TRIANGLE = -1;
 
-    private final Holder.Reference<BlendSpace2D> blendSpace2D;
+    private final Holder<BlendSpace2D> blendSpace2D;
     private final Supplier<Float> xUpdater;
     private final Supplier<Float> yUpdater;
 
@@ -76,7 +76,7 @@ public final class BlendSpace2DDriver implements AnimationDriver {
     private int winnerDot;
 
     public BlendSpace2DDriver(
-        final Holder.Reference<BlendSpace2D> holder,
+        final Holder<BlendSpace2D> holder,
         final Supplier<Float> xUpdater,
         final Supplier<Float> yUpdater
     ) {

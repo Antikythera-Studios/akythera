@@ -7,7 +7,6 @@ import com.yesman.akythera.api.animation.animator.Animator;
 import com.yesman.akythera.api.event.BuiltInEventHooks;
 import com.yesman.akythera.api.event.entity.animation.InitBlendingAnimatorEvent;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
-import com.yesman.akythera.api.world.patch.item.component.ReplaceAnimations;
 import com.yesman.akythera.core.animation.AnimationLayerSignature;
 import com.yesman.akythera.core.animation.driver.*;
 import com.yesman.akythera.core.animation.keyframe.Pose;
@@ -16,7 +15,6 @@ import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.blueprint.script.AnimatorScript;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
 import net.minecraft.core.Holder;
-import net.minecraft.core.RegistryAccess;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.Entity;
 import org.jetbrains.annotations.ApiStatus;
@@ -24,8 +22,8 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 /// An animator consists of multiple [AnimationPlayer], allowing blending
@@ -44,7 +42,7 @@ public final class BlendingAnimator implements Animator {
 
     /// Anim interfaces belonged to this animator. Do not manually modify the entries
     @ApiStatus.Internal
-    private final Map<AnimationInterfaceKey, AbstractAnimationInterface<?, ?>> animInterfaces = new HashMap<>();
+    private final Map<AnimationInterfaceKey, AbstractAnimationInterface> animInterfaces = new HashMap<>();
 
     /// Animation layer map. Do not manually modify the entries
     @ApiStatus.Internal
@@ -75,7 +73,7 @@ public final class BlendingAnimator implements Animator {
     ///
     /// [AbstractAnimationInterface] holds initial animation which is set as default. They can be modified by
     /// [#replaceAnimation], and rolled back by either [#resetAnimInterface] or [#resetAllInterfaces]
-    public void addAnimInterface(final AnimationInterfaceKey key, final AbstractAnimationInterface<?, ?> animInterface) {
+    public void addAnimInterface(final AnimationInterfaceKey key, final AbstractAnimationInterface animInterface) {
         // In case add-ons declare the same key twice, it needs to be fixed.
         if (animInterfaces.containsKey(key))
             throw new IllegalStateException("Animation Interface key `" + key + "` is already in use");
@@ -87,17 +85,8 @@ public final class BlendingAnimator implements Animator {
     /// so it can be rolled back to default animation anytime.
     ///
     /// This function has no effect if no key exists.
-    public void replaceAnimation(final AnimationInterfaceKey key, final Holder.Reference<? extends PlayableAnimation> animation) {
+    public void replaceAnimation(final AnimationInterfaceKey key, final Holder<? extends PlayableAnimation> animation) {
         if (animInterfaces.containsKey(key)) animInterfaces.get(key).replace(animation);
-    }
-
-    /// Unpack the animation interface replacement data
-    public void replaceAnimation(final List<ReplaceAnimations.Replace> animationsToReplace) {
-        for (ReplaceAnimations.Replace replace : animationsToReplace) {
-            RegistryAccess registryAccess = getOwner().getOriginal().level().registryAccess();
-            Holder.Reference<? extends PlayableAnimation> animation = registryAccess.getOrThrow(replace.animResourceKey());
-            replaceAnimation(replace.interfaceKey(), animation);
-        }
     }
 
     /// Reset animation interfaces to [AbstractAnimationInterface#reset]
@@ -108,6 +97,13 @@ public final class BlendingAnimator implements Animator {
     /// Reset every interface to default one
     public void resetAllInterfaces() {
         animInterfaces.values().forEach(AbstractAnimationInterface::reset);
+    }
+
+    /// Rolls every interface but the ones `keep` names back to its default animation.
+    public void resetInterfacesExcept(final Set<AnimationInterfaceKey> keep) {
+        animInterfaces.forEach((key, animInterface) -> {
+            if (!keep.contains(key)) animInterface.reset();
+        });
     }
 
     @Override

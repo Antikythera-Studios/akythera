@@ -115,7 +115,10 @@ public interface AnimationLoader extends AssetLoader {
         throw new ResourceLoadingFailureException(resourcePath, "Found neither binary(.akasset) nor json(.json) asset file");
     }
 
-    record Metadata(ImportType importType, @Nullable AssetAccessor<AnimationClip> refPoseProvider, float refPoseTimeStamp) {
+    record Metadata(
+        ImportType importType,
+        @Nullable AssetAccessor<AnimationClip> refPoseProvider, float refPoseTimeStamp // Additive animation properties
+    ) {
         /// The fields as they sit at the root of a sidecar, so a reader that carries fields of its
         /// own can place them alongside instead of under a section.
         public static final MapCodec<Metadata> MAP_CODEC = RecordCodecBuilder.mapCodec(

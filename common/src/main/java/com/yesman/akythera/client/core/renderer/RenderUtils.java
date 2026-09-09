@@ -16,12 +16,16 @@ import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
+import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.client.renderer.rendertype.PreparedRenderType;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Optional;
@@ -130,5 +134,24 @@ public final class RenderUtils {
         EntityRenderer<?, ?> renderer = rendererOf(BuiltInRegistries.ENTITY_TYPE.getValue(entityTypeId));
 
         return renderer == null ? null : renderer.createRenderState().getClass();
+    }
+
+    /// The entity class an entity type is built from, or [Entity] when nothing narrower shows.
+    ///
+    /// Read off the renderer because vanilla exposes no `EntityType -> Class`: `EntityType#getBaseClass`
+    /// answers [Entity] for every type, and `EntityType#create` returns null for `minecraft:player`.
+    /// [AvatarRenderState] is built only for avatars and [LivingEntityRenderState] only for living
+    /// entities, so the state class the renderer makes names the tier.
+    ///
+    /// A mannequin is an `Avatar` without being a [Player] and renders as one, so it reads one tier
+    /// wider than it is.
+    public static Class<? extends Entity> entityClassOf(final Identifier entityTypeId) {
+        Class<? extends EntityRenderState> renderState = renderStateOf(entityTypeId);
+
+        if (renderState == null) return Entity.class;
+        if (AvatarRenderState.class.isAssignableFrom(renderState)) return Player.class;
+        if (LivingEntityRenderState.class.isAssignableFrom(renderState)) return LivingEntity.class;
+
+        return Entity.class;
     }
 }

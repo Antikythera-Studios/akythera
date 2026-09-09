@@ -31,10 +31,10 @@ public final class AnimationPlayer implements AnimationDriver {
     /// Custom control of animation looping, has higher priority of [PlayableAnimation#loops]
     private final @Nullable Boolean loops;
 
-    private final Holder.Reference<? extends @NonNull PlayableAnimation> playableAnimation;
+    private final Holder<? extends @NonNull PlayableAnimation> playableAnimation;
 
     /// Use the static constructor [#createInstance]
-    private AnimationPlayer(Holder.Reference<? extends @NonNull PlayableAnimation> playableAnimation, @Nullable Boolean loops) {
+    private AnimationPlayer(Holder<? extends @NonNull PlayableAnimation> playableAnimation, @Nullable Boolean loops) {
         this.playableAnimation = playableAnimation;
         this.loops = loops;
     }
@@ -139,11 +139,11 @@ public final class AnimationPlayer implements AnimationDriver {
         return playableAnimation + " " + elapsedTime;
     }
 
-    public static AnimationPlayer createInstance(Holder.Reference<? extends @NonNull PlayableAnimation> holder) {
+    public static AnimationPlayer createInstance(Holder<? extends @NonNull PlayableAnimation> holder) {
         return new AnimationPlayer(holder, null);
     }
 
-    public static AnimationPlayer createInstance(Holder.Reference<? extends @NonNull PlayableAnimation> holder, boolean loops) {
+    public static AnimationPlayer createInstance(Holder<? extends @NonNull PlayableAnimation> holder, boolean loops) {
         return new AnimationPlayer(holder, loops);
     }
 }

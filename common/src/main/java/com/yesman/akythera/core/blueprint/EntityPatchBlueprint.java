@@ -29,7 +29,7 @@ public record EntityPatchBlueprint(
     public static final MapCodec<EntityPatchBlueprint> MAP_CODEC = RecordCodecBuilder.mapCodec(
         instance ->
             instance.group(
-                ComponentBlueprint.componentMapCodec()
+                ComponentBlueprint.componentMapCodec(() -> AkytheraRegistries.Frozen.ENTITY_PATCH_COMPONENT_TYPES)
                     .fieldOf("components").forGetter(EntityPatchBlueprint::components),
                 AkytheraRegistries.Frozen.SCRIPT_FUNCTION.byNameCodec().fieldOf("parent").forGetter(EntityPatchBlueprint::ctor),
                 FlowNode.CODEC.fieldOf("on_construct").forGetter(EntityPatchBlueprint::onConstruct),

@@ -1,6 +1,7 @@
 package com.yesman.akythera.core.registry;
 
 import com.mojang.serialization.MapCodec;
+import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.blueprint.script.DataDrivenAnimatorScript;
 import com.yesman.akythera.api.animation.notify.AnimationNotify;
 import com.yesman.akythera.api.animation.notify.AnimationNotifyState;
@@ -16,6 +17,8 @@ import com.yesman.akythera.core.blueprint.ComponentBlueprint;
 import com.yesman.akythera.platform.ModPlatformProvider;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.item.Item;
 import org.jspecify.annotations.NullMarked;
 
 @NullMarked
@@ -57,13 +60,19 @@ public final class AkytheraRegistries {
         public static final ResourceKey<Registry<MapCodec<? extends AnimationNotifyState<?>>>> ANIM_NOTIFY_STATE_TYPE_KEY = createRegistryKey("anim_notify_state_type");
         public static final ResourceKey<Registry<ScriptFunction>> SCRIPT_FUNCTION_KEY = createRegistryKey("script_function");
         public static final ResourceKey<Registry<ScriptType>> SCRIPT_TYPE_KEY = createRegistryKey("script_type");
-        public static final ResourceKey<Registry<MapCodec<? extends ComponentBlueprint<?, ?>>>> COMPONENT_BLUEPRINT_TYPES_KEY = createRegistryKey("component_blueprint_key");
+        public static final ResourceKey<Registry<MapCodec<? extends ComponentBlueprint<?, ?>>>> ENTITY_PATCH_COMPONENT_TYPES_KEY = createRegistryKey("entity_patch_component_type");
+        public static final ResourceKey<Registry<MapCodec<? extends ComponentBlueprint<?, ?>>>> ITEM_PATCH_COMPONENT_TYPES_KEY = createRegistryKey("item_patch_component_type");
 
         // Registries
         public static final Registry<MapCodec<? extends AnimationNotify<?>>> ANIM_NOTIFY_TYPES = ModPlatformProvider.get().createRegistry(ANIM_NOTIFY_TYPE_KEY);
         public static final Registry<MapCodec<? extends AnimationNotifyState<?>>> ANIM_NOTIFY_STATE_TYPES = ModPlatformProvider.get().createRegistry(ANIM_NOTIFY_STATE_TYPE_KEY);
         public static final Registry<ScriptFunction> SCRIPT_FUNCTION = ModPlatformProvider.get().createRegistry(SCRIPT_FUNCTION_KEY);
         public static final Registry<ScriptType> SCRIPT_TYPE = ModPlatformProvider.get().createRegistry(SCRIPT_TYPE_KEY);
-        public static final Registry<MapCodec<? extends ComponentBlueprint<?, ?>>> COMPONENT_BLUEPRINT_TYPES = ModPlatformProvider.get().createRegistry(COMPONENT_BLUEPRINT_TYPES_KEY);
+
+        /// Component types an [EntityPatchBlueprint] and its hosts may attach.
+        public static final Registry<MapCodec<? extends ComponentBlueprint<?, ?>>> ENTITY_PATCH_COMPONENT_TYPES = ModPlatformProvider.get().createRegistry(ENTITY_PATCH_COMPONENT_TYPES_KEY);
+
+        /// Component types an [ItemPatchBlueprint] and its hosts may attach.
+        public static final Registry<MapCodec<? extends ComponentBlueprint<?, ?>>> ITEM_PATCH_COMPONENT_TYPES = ModPlatformProvider.get().createRegistry(ITEM_PATCH_COMPONENT_TYPES_KEY);
     }
 }

@@ -2,6 +2,7 @@ package com.yesman.akythera.core.asset.armature;
 
 import org.jetbrains.annotations.ApiStatus;
 import org.joml.Matrix4f;
+import org.joml.Vector3f;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -19,15 +20,19 @@ public final class Bone {
     /// Local transform relative to a parent bone
     private final Matrix4f localTransform;
 
+    /// Where the bone's tip sits, in the bone's own space
+    private final Vector3f toTail;
+
     /// Transform matrix to origin(0, 0, 0). Used in calculating local animation transform
     private final Matrix4f inverseTransformToOrigin = new Matrix4f();
 
     private final List<Bone> childBones = new ArrayList<> ();
 
-    public Bone(final String name, final int boneId, final Matrix4f localTransform) {
+    public Bone(final String name, final int boneId, final Matrix4f localTransform, final Vector3f toTail) {
         this.boneId = boneId;
         this.boneName = name;
         this.localTransform = localTransform;
+        this.toTail = toTail;
     }
 
     public void addChildBones(final Bone... bones) {
@@ -76,6 +81,12 @@ public final class Bone {
 
     public Matrix4f getLocalTransform() {
         return localTransform;
+    }
+
+    /// The bone's tip in the bone's own space, so the bone's model transform maps it to the tail the
+    /// same way it maps the origin to the head.
+    public Vector3f getToTail() {
+        return toTail;
     }
 
     public Matrix4f getInverseTransformToOrigin() {

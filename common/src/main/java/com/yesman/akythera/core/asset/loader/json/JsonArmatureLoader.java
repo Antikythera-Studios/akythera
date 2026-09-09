@@ -17,6 +17,7 @@ import net.minecraft.util.GsonHelper;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.joml.Quaterniond;
+import org.joml.Vector3f;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -26,14 +27,19 @@ import java.util.Map;
 /// @Deprecated Use [BinaryArmatureLoader] with binary assets to accelerate asset loading process
 @Deprecated
 public final class JsonArmatureLoader implements ArmatureLoader, JsonAssetLoader {
+    /// How far up the tail of a bone stands when the model predates `to_tail`, in armature units.
+    private static final float LEGACY_TAIL_HEIGHT = 0.05F;
+
     private final Identifier resourcePath;
     private final JsonObject jsonObject;
+    private final Metadata metadata;
 
-    public JsonArmatureLoader(Identifier resourcePath, Resource resource)
+    public JsonArmatureLoader(Identifier resourcePath, Resource resource, Metadata metadata)
         throws ResourceLoadingFailureException
     {
         this.resourcePath = resourcePath;
         jsonObject = readJsonObject(resource);
+        this.metadata = metadata;
     }
 
     @Override
@@ -42,7 +48,12 @@ public final class JsonArmatureLoader implements ArmatureLoader, JsonAssetLoader
     }
 
     @Override
-    public <T extends Armature> T loadArmature(ArmatureConstructor<T> armatureConstructor)
+    public Metadata metadata() {
+        return metadata;
+    }
+
+    @Override
+    public <T extends Armature> T loadRawArmature(ArmatureConstructor<T> armatureConstructor)
         throws ResourceLoadingFailureException
     {
         try {
@@ -131,7 +142,14 @@ public final class JsonArmatureLoader implements ArmatureLoader, JsonAssetLoader
             }
         }
 
-        Bone bone = new Bone(name, boneNamesToIds.get(name), localMatrix);
+        Vector3f toTail = new Vector3f(0.0F, LEGACY_TAIL_HEIGHT, 0.0F);
+
+        if (object.has("to_tail")) {
+            float[] tail = ParseUtils.jsonArrayToPrimitiveFloat(GsonHelper.getAsJsonArray(object, "to_tail"));
+            toTail.set(tail[0], tail[1], tail[2]);
+        }
+
+        Bone bone = new Bone(name, boneNamesToIds.get(name), localMatrix, toTail);
         boneNameToBone.put(name, bone);
 
         if (object.has("children")) {

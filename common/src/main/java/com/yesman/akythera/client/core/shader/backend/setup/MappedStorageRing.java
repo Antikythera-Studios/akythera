@@ -18,6 +18,9 @@ public final class MappedStorageRing implements AutoCloseable {
 
     private int current;
 
+    /// Whether [#currentBuffer] handed out the current slot since the last [#rotate].
+    private boolean written;
+
     public MappedStorageRing(final String label, final int size) {
         for (int i = 0; i < SLOT_COUNT; i++) {
             int slot = i;
@@ -35,17 +38,23 @@ public final class MappedStorageRing implements AutoCloseable {
             fences[current] = null;
         }
 
+        written = true;
+
         return buffers[current];
     }
 
-    /// Fences the slot just written and moves onto the next.
+    /// Fences the slot just written and moves onto the next. A slot nothing wrote stays current,
+    /// having nothing for a fence to guard.
     public void rotate() {
+        if (!written) return;
+
         if (fences[current] != null) {
             fences[current].close();
         }
 
         fences[current] = RenderSystem.getDevice().createCommandEncoder().createFence();
         current = (current + 1) % SLOT_COUNT;
+        written = false;
     }
 
     @Override

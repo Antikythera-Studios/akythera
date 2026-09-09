@@ -27,7 +27,7 @@ public record MeshComponentBlueprint(@Nullable PureNode meshGetter)
 
     @Override
     public MeshComponent instantiate(final ComponentAttachable host) {
-        return new MeshComponent(new MeshGetter(meshGetter, ownerOf(host)));
+        return new MeshComponent(meshGetter, ownerOf(host));
     }
 
     /// The patch `host` belongs to: the patch itself, or the owner of the armature a socket rides.

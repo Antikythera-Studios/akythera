@@ -1,7 +1,7 @@
 package com.yesman.akythera.client.gui.widget;
 
 import com.yesman.akythera.client.gui.widget.common.AnchoredWidget;
-import com.yesman.akythera.client.gui.widget.common.DataBoundWidget;
+import com.yesman.akythera.client.gui.widget.common.PlaceholderExpressionWidget;
 import com.yesman.akythera.core.util.helper.ParseUtils;
 import net.minecraft.client.gui.ComponentPath;
 import net.minecraft.client.gui.Font;
@@ -31,7 +31,7 @@ import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-public class ClampedNumberBox<T extends Number> extends AbstractContainerWidget implements AnchoredWidget, DataBoundWidget<T> {
+public class ClampedNumberBox<T extends Number> extends AbstractContainerWidget implements AnchoredWidget, PlaceholderExpressionWidget<T> {
     private static final int PADDING = 2;
     private static final int ELEMENTS_HEIGHT = 15;
 
@@ -55,6 +55,11 @@ public class ClampedNumberBox<T extends Number> extends AbstractContainerWidget 
     private T preEditValue;
     @Nullable
     private BiConsumer<T, T> onCommitted;
+
+    /// Drawn as the [EditBox] hint — grey, and only while the text is empty and unfocused — while the
+    /// bound value is unset. Null = no placeholder.
+    @Nullable
+    private T placeholderValue;
 
     private int focusIndex;
 
@@ -187,7 +192,14 @@ public class ClampedNumberBox<T extends Number> extends AbstractContainerWidget 
         return textParser.apply(editBox.getValue());
     }
 
-    public void setValue(T value) {
+    /// Pushes a bound value in. Null is the unset state, where the box empties and
+    /// [#placeholderValue] takes over.
+    public void setValue(@Nullable T value) {
+        if (value == null) {
+            editBox.setValue("");
+            return;
+        }
+
         String text = toString.apply(value);
 
         if (ParseUtils.isParsable(text, textParser)) {
@@ -444,6 +456,30 @@ public class ClampedNumberBox<T extends Number> extends AbstractContainerWidget 
         editBox.setHeight(getHeight());
         editBox.moveCursorToStart(false);
     }
+
+    /// ***************************************************************
+    /// [PlaceholderExpressionWidget] implementations                 *
+    /// ***************************************************************
+    @Override
+    public @Nullable T getPlaceholderValue() {
+        return placeholderValue;
+    }
+
+    /// [EditBox#setHint] reads the component's style and takes no null, so an empty component is
+    /// what clears the hint.
+    @Override
+    public void setPlaceholderValue(@Nullable T value) {
+        this.placeholderValue = value;
+        editBox.setHint(value == null ? Component.empty() : Component.literal(toString.apply(value)));
+    }
+
+    /// Empty text is the unset state here — the box keeps no value of its own. [EditBox] adds the
+    /// focus condition itself before the hint reaches the screen.
+    @Override
+    public boolean hasPlaceholderValue() {
+        return placeholderValue != null && editBox.getValue().isEmpty();
+    }
+
 
     /*******************************************************************
      * {@link DataBoundWidget} implementations                         *
