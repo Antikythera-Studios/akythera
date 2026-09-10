@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.yesman.akythera.api.world.patch.AkytheraPatches;
 import com.yesman.akythera.client.api.component.impl.EntityModelComponent;
 import com.yesman.akythera.client.core.renderer.PatchModelRenderer;
+import com.yesman.akythera.client.core.renderer.collider.ColliderDebugRenderer;
 import com.yesman.akythera.mixinaccessor.client.LivingEntityRenderStateAccessor;
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.model.Model;
@@ -38,8 +39,10 @@ public abstract class MixinLivingEntityRenderer<T extends LivingEntity, S extend
     private void extractRenderState(final T entity, final S state, final float partialTick, CallbackInfo callbackInfo) {
         LivingEntityRenderStateAccessor stateAccessor = (LivingEntityRenderStateAccessor) state;
         List<PatchModelRenderer.RenderableSubmit> renderables = stateAccessor.akythera$getRenderables();
+        List<ColliderDebugRenderer.ColliderSubmit> colliders = stateAccessor.akythera$getColliders();
 
         renderables.clear();
+        colliders.clear();
         stateAccessor.akythera$setModelSubmit(null);
 
         AkytheraPatches.getEntityPatchOptional(entity).ifPresent(entityPatch -> {
@@ -50,6 +53,10 @@ public abstract class MixinLivingEntityRenderer<T extends LivingEntity, S extend
 
             PatchModelRenderer.collect(entityPatch, null, renderables);
             PatchModelRenderer.extract(renderables, entityPatch, state, partialTick);
+
+            if (ColliderDebugRenderer.isEnabled()) {
+                ColliderDebugRenderer.collect(entityPatch, colliders);
+            }
         });
     }
 
@@ -92,6 +99,7 @@ public abstract class MixinLivingEntityRenderer<T extends LivingEntity, S extend
                 }
 
                 PatchModelRenderer.submit(renderables, poseStack, collector, lightCoords, livingState);
+                ColliderDebugRenderer.submit(stateAccessor.akythera$getColliders(), poseStack, collector);
 
                 return;
             }

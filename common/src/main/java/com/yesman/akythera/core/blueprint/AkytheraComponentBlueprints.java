@@ -46,6 +46,10 @@ public final class AkytheraComponentBlueprints {
     public static final Holder<MapCodec<? extends ComponentBlueprint<?, ?>>> EQUIPMENT =
         ENTITY_PATCH_REGISTRAR.register("equipment", () -> EquipmentComponent.CODEC);
 
+    /// One entry for every shape — [Collider#MAP_CODEC] dispatches on `shape` inside it.
+    public static final Holder<MapCodec<? extends ComponentBlueprint<?, ?>>> ITEM_COLLIDER =
+        ITEM_PATCH_REGISTRAR.register("collider", () -> Collider.MAP_CODEC);
+
     public static final Holder<MapCodec<? extends ComponentBlueprint<?, ?>>> ATTRIBUTE_MODIFIERS =
         ITEM_PATCH_REGISTRAR.register("attribute_modifiers", () -> AttributeModifiersComponent.CODEC);
 

@@ -3,6 +3,7 @@ package com.yesman.akythera.mixin.client;
 import com.yesman.akythera.api.asset.AssetAccessor;
 import com.yesman.akythera.client.api.component.impl.EntityModelComponent;
 import com.yesman.akythera.client.core.renderer.PatchModelRenderer;
+import com.yesman.akythera.client.core.renderer.collider.ColliderDebugRenderer;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.asset.armature.Armature;
 import com.yesman.akythera.mixinaccessor.client.LivingEntityRenderStateAccessor;
@@ -29,6 +30,9 @@ public abstract class MixinLivingEntityRenderState implements LivingEntityRender
 
     @Unique
     private final List<PatchModelRenderer.RenderableSubmit> epicfight$renderables = new ArrayList<>();
+
+    @Unique
+    private final List<ColliderDebugRenderer.ColliderSubmit> akythera$colliders = new ArrayList<>();
 
     @Unique
     private EntityModelComponent.@Nullable ModelSubmit epicfight$modelSubmit;
@@ -60,6 +64,11 @@ public abstract class MixinLivingEntityRenderState implements LivingEntityRender
     @Unique @Override
     public List<PatchModelRenderer.RenderableSubmit> akythera$getRenderables() {
         return epicfight$renderables;
+    }
+
+    @Unique @Override
+    public List<ColliderDebugRenderer.ColliderSubmit> akythera$getColliders() {
+        return akythera$colliders;
     }
 
     @Unique @Override

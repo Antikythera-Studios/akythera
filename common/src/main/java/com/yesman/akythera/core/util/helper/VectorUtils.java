@@ -1,6 +1,7 @@
 package com.yesman.akythera.core.util.helper;
 
 import com.yesman.akythera.core.reflection.ScriptFunction;
+import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Math;
 import org.joml.Quaterniond;
@@ -95,6 +96,79 @@ public final class VectorUtils {
             MathUtils.roundAt(v.y(), precision),
             MathUtils.roundAt(v.z(), precision)
         );
+    }
+
+    /// Below this a segment is a point and its direction is meaningless.
+    private static final double DEGENERATE_SEGMENT = 1.0E-12D;
+
+    /// Squared distance from `point` to the segment `from`-`to`.
+    public static double pointToSegmentDistanceSqr(final Vec3 point, final Vec3 from, final Vec3 to) {
+        Vec3 segment = to.subtract(from);
+        double lengthSqr = segment.lengthSqr();
+
+        if (lengthSqr <= DEGENERATE_SEGMENT) return point.distanceToSqr(from);
+
+        double along = Mth.clamp(point.subtract(from).dot(segment) / lengthSqr, 0.0D, 1.0D);
+
+        return point.distanceToSqr(from.add(segment.scale(along)));
+    }
+
+    /// Squared distance between the segments `a0`-`a1` and `b0`-`b1`.
+    public static double segmentDistanceSqr(final Vec3 a0, final Vec3 a1, final Vec3 b0, final Vec3 b1) {
+        Vec3 da = a1.subtract(a0);
+        Vec3 db = b1.subtract(b0);
+        Vec3 between = a0.subtract(b0);
+        double aLengthSqr = da.lengthSqr();
+        double bLengthSqr = db.lengthSqr();
+        double bProjection = db.dot(between);
+        double alongA;
+        double alongB;
+
+        if (aLengthSqr <= DEGENERATE_SEGMENT && bLengthSqr <= DEGENERATE_SEGMENT) {
+            return between.lengthSqr();
+        }
+
+        if (aLengthSqr <= DEGENERATE_SEGMENT) {
+            alongA = 0.0D;
+            alongB = Mth.clamp(bProjection / bLengthSqr, 0.0D, 1.0D);
+        } else {
+            double aProjection = da.dot(between);
+
+            if (bLengthSqr <= DEGENERATE_SEGMENT) {
+                alongB = 0.0D;
+                alongA = Mth.clamp(-aProjection / aLengthSqr, 0.0D, 1.0D);
+            } else {
+                double skew = da.dot(db);
+                // Zero when the segments are parallel, where every point of one is equally near the
+                // other and picking a0 is as good an answer as any.
+                double denominator = aLengthSqr * bLengthSqr - skew * skew;
+
+                alongA = denominator > DEGENERATE_SEGMENT
+                    ? Mth.clamp((skew * bProjection - aProjection * bLengthSqr) / denominator, 0.0D, 1.0D)
+                    : 0.0D;
+                alongB = (skew * alongA + bProjection) / bLengthSqr;
+
+                if (alongB < 0.0D) {
+                    alongB = 0.0D;
+                    alongA = Mth.clamp(-aProjection / aLengthSqr, 0.0D, 1.0D);
+                } else if (alongB > 1.0D) {
+                    alongB = 1.0D;
+                    alongA = Mth.clamp((skew - aProjection) / aLengthSqr, 0.0D, 1.0D);
+                }
+            }
+        }
+
+        return a0.add(da.scale(alongA)).distanceToSqr(b0.add(db.scale(alongB)));
+    }
+
+    /// A unit vector perpendicular to `v`. Crossed against whichever world axis `v` leans on least, so
+    /// the product never degenerates.
+    public static Vec3 perpendicular(final Vec3 v) {
+        Vec3 leastAligned = Math.abs(v.x()) < Math.abs(v.y())
+            ? (Math.abs(v.x()) < Math.abs(v.z()) ? MathUtils.XP : MathUtils.ZP)
+            : (Math.abs(v.y()) < Math.abs(v.z()) ? MathUtils.YP : MathUtils.ZP);
+
+        return v.cross(leastAligned).normalize();
     }
 
     private VectorUtils() {}

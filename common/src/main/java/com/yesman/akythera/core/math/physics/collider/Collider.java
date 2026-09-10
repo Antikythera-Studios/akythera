@@ -8,6 +8,7 @@ import com.yesman.akythera.core.blueprint.ComponentBlueprint;
 import com.yesman.akythera.core.math.Transform;
 import com.yesman.akythera.core.math.physics.collider.component.ColliderComponent;
 import net.minecraft.world.phys.AABB;
+import org.jspecify.annotations.Nullable;
 
 /// The authored shape of a collider, and the blueprint of the [ColliderComponent] that carries it
 /// at a transform. Compatible with Minecraft's collider, [AABB].
@@ -30,19 +31,16 @@ public abstract class Collider implements ComponentBlueprint<ColliderComponent<?
     /// components are already applied by pivot transform.
     private final Transform pivotTransform;
 
-    /// Creates interpolated colliders between previous and next tick
-    private final int interpolations;
-
-    public Collider(final Transform pivotTransform, final int interpolations) {
+    public Collider(final Transform pivotTransform) {
         this.pivotTransform = pivotTransform;
-        this.interpolations = interpolations;
     }
 
     /// Builds this shape's component. `host` is unread — it exists only so any component host can
     /// attach a collider; the component starts at the identity transform and is placed by whoever
-    /// runs the collision query, through [ColliderComponent#applyTransform].
+    /// runs the collision query, through [ColliderComponent#applyTransform]. Null for a collider that
+    /// hangs off nothing, which is what a sweep builds.
     @Override
-    public abstract ColliderComponent<?> instantiate(final ComponentAttachable host);
+    public abstract ColliderComponent<?> instantiate(final @Nullable ComponentAttachable host);
 
     public abstract ColliderType type();
 
@@ -55,9 +53,5 @@ public abstract class Collider implements ComponentBlueprint<ColliderComponent<?
 
     public Transform getPivotTransform() {
         return pivotTransform;
-    }
-
-    public int getInterpolations() {
-        return interpolations;
     }
 }

@@ -1,16 +1,18 @@
 package com.yesman.akythera.core.math.physics.collider;
 
+import com.yesman.akythera.core.math.physics.collider.component.CapsuleColliderComponent;
 import com.yesman.akythera.core.math.physics.collider.component.ColliderComponent;
-import com.yesman.akythera.core.math.physics.collider.component.LineColliderComponent;
-import com.yesman.akythera.core.math.physics.collider.component.OBBColliderComponent;
+import com.yesman.akythera.core.math.physics.collider.component.SphereColliderComponent;
 
 import java.util.HashMap;
 import java.util.Map;
 
-/// The collision logic table: one entry per unordered [ColliderType] pair.
+/// The collision logic override table: one entry per unordered [ColliderType] pair.
 ///
-/// Shapes don't know how to hit each other — the pair does. An addon can therefore teach a built-in
-/// collider to hit a shape of its own, or replace a built-in pair, without touching either class.
+/// Any pair of convex shapes is already decided by [GjkIntersection] from their support functions, so
+/// a shape needs no entry here to collide with anything. An entry replaces that general answer for
+/// one pair—a closed form that is cheaper or exact, or an addon's own rule—without touching either
+/// shape class.
 public final class CollisionDetectionLogics {
     private CollisionDetectionLogics() {}
 
@@ -33,17 +35,18 @@ public final class CollisionDetectionLogics {
         );
     }
 
-    /// Whether the two colliders overlap. An unregistered shape pair never collides rather than
-    /// throwing — an addon's collider must not be able to kill a hit sweep.
+    /// Whether the two colliders overlap. A pair with no registered logic is decided by
+    /// [GjkIntersection].
     ///
     /// Both colliders are taken as already placed; the caller applies their transforms
     /// ([ColliderComponent#applyTransform]) before asking.
     public static boolean overlap(final ColliderComponent<?> collider1, final ColliderComponent<?> collider2) {
-        Entry entry = LOGICS.get(TypePair.of(collider1.type(), collider2.type()));
-
-        if (entry == null) return false;
         // Cheap reject: the exact test only runs for pairs whose outer boxes already touch.
         if (!collider1.getOuterAABB().intersects(collider2.getOuterAABB())) return false;
+
+        Entry entry = LOGICS.get(TypePair.of(collider1.type(), collider2.type()));
+
+        if (entry == null) return GjkIntersection.overlap(collider1, collider2);
 
         return entry.first() == collider1.type()
             ? entry.logic().checkCollision(collider1, collider2)
@@ -53,12 +56,16 @@ public final class CollisionDetectionLogics {
     /// Built-in shape pairs. Called once the collider types are loaded.
     public static void registerBuiltInLogics() {
         registerCollisionLogic(
-            AkytheraColliderType.ORIENTATED_BOUNDING_BOX, AkytheraColliderType.ORIENTATED_BOUNDING_BOX,
-            OBBColliderComponent::checkCollisionWithOBB
+            AkytheraColliderType.SPHERE, AkytheraColliderType.SPHERE,
+            SphereColliderComponent::checkCollisionWithSphere
         );
         registerCollisionLogic(
-            AkytheraColliderType.LINE, AkytheraColliderType.ORIENTATED_BOUNDING_BOX,
-            LineColliderComponent::checkCollisionWithOBB
+            AkytheraColliderType.SPHERE, AkytheraColliderType.CAPSULE,
+            SphereColliderComponent::checkCollisionWithCapsule
+        );
+        registerCollisionLogic(
+            AkytheraColliderType.CAPSULE, AkytheraColliderType.CAPSULE,
+            CapsuleColliderComponent::checkCollisionWithCapsule
         );
     }
 
@@ -72,6 +79,6 @@ public final class CollisionDetectionLogics {
     }
 
     /// A registered logic and the type it takes as its **first** argument, so an asymmetric check
-    /// (line against box) is always called with its arguments the way it was written.
+    /// (sphere against capsule) is always called with its arguments the way it was written.
     private record Entry(ColliderType first, CollisionCheck<ColliderComponent<?>, ColliderComponent<?>> logic) {}
 }

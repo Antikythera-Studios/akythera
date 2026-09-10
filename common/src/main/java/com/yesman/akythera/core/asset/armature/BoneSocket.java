@@ -96,6 +96,13 @@ public final class BoneSocket implements PatchComponent, ComponentBlueprint<Bone
             : armature.getBoneModelTransform(boneName).mul(localTransform);
     }
 
+    /// [#getBoundTransform] one tick back—the far end of a sweep.
+    public Transform getPreviousBoundTransform() {
+        return armature == null
+            ? localTransform
+            : armature.getPreviousBoneModelTransform(boneName).mul(localTransform);
+    }
+
     @Override
     public Map<String, PatchComponent> getComponents() {
         return components;

@@ -2,6 +2,7 @@ package com.yesman.akythera.client.core;
 
 import com.yesman.akythera.client.api.lifecycle.ClientComponentsFactory;
 import com.yesman.akythera.client.compat.IClientModPlugin;
+import com.yesman.akythera.client.core.renderer.collider.ColliderRenderers;
 import com.yesman.akythera.client.core.shader.backend.ComputeBackends;
 import com.yesman.akythera.client.core.shader.backend.impl.gl.GlComputeBackend;
 import com.yesman.akythera.client.core.shader.backend.impl.vulkan.VulkanComputeBackend;
@@ -51,6 +52,9 @@ public final class AkytheraClient {
 
         //InputAction.ENUM_MANAGER.loadEnum();
         WidgetTheme.ENUM_MANAGER.loadEnum();
+
+        // Renderers key off the collider type constants, so they bind after the enum loads.
+        ColliderRenderers.registerBuiltInRenderers();
     }
 
     /// Called once the gpu device is created and the OpenGL context is current.

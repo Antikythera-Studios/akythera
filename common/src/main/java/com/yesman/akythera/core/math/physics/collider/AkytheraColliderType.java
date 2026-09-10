@@ -3,7 +3,10 @@ package com.yesman.akythera.core.math.physics.collider;
 import com.mojang.serialization.MapCodec;
 
 public enum AkytheraColliderType implements ColliderType {
-    LINE(LineCollider.CODEC), ORIENTATED_BOUNDING_BOX(OBBCollider.CODEC);
+    ORIENTED_BOX(OrientedBoxCollider.CODEC),
+    SPHERE(SphereCollider.CODEC),
+    CONE(ConeCollider.CODEC),
+    CAPSULE(CapsuleCollider.CODEC);
 
     final MapCodec<? extends Collider> codec;
     final int id;

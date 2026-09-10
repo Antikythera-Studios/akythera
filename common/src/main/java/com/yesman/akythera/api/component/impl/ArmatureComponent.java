@@ -26,6 +26,9 @@ import java.util.Map;
 public class ArmatureComponent
     implements DynamicPatchComponent<EntityPatch<Entity>>, TickableDynamicComponent<EntityPatch<Entity>>, ComponentAttachable, UniqueComponent
 {
+    /// One server tick, in seconds. The client passes real frame time instead.
+    private static final float SERVER_FRAME_TIME = 0.05F;
+
     private final AssetAccessor<? extends Armature> armature;
     private final Animator animator;
     private final @Nullable RootMotionComponent rootMotionComponent;
@@ -43,6 +46,15 @@ public class ArmatureComponent
     /// The forward-bound skeleton at the pose [#updateBoundTransforms] last wrote. Sized on the
     /// first update: a preview armature has no armature yet when its constructor runs.
     private Matrix4f @Nullable [] boundTransforms;
+
+    /// The skeleton [#boundTransforms] held before the last server pose, swapped with it rather than
+    /// copied. Null on a client, which poses per frame and never needs a second one.
+    private Matrix4f @Nullable [] previousBoundTransforms;
+
+    /// Game tick [#boundTransforms] was built for, and the tick [#previousBoundTransforms] was built
+    /// for. Server-side only; both stay [Long#MIN_VALUE] on a client.
+    private long poseTick = Long.MIN_VALUE;
+    private long previousPoseTick = Long.MIN_VALUE;
 
     public ArmatureComponent(
         final EntityPatch<Entity> owner,
@@ -71,6 +83,17 @@ public class ArmatureComponent
 
     @Override
     public void tick() {
+        EntityPatch<Entity> owner = getOwner();
+
+        // The client advances animation time in [#frameUpdate], once per frame. A server has no frame,
+        // so its tick does it—before [Animator#tick], whose notify window is
+        // [lastUpdatedTime, elapsedTime] and so has to see the time this tick moved to.
+        //
+        // Time only. The skeleton itself is built on demand, in [#ensureServerPose].
+        if (owner != null && !owner.isLogicalClient()) {
+            getAnimator().update(SERVER_FRAME_TIME, 1.0F);
+        }
+
         getAnimator().tick();
         if (rootMotionComponent != null) rootMotionComponent.tick();
     }
@@ -98,6 +121,32 @@ public class ArmatureComponent
         cachedPose.getForwardBoundTransforms(accessor, boundTransforms);
     }
 
+    /// Builds this armature's skeleton for the current server tick, unless this tick already built it.
+    /// Does nothing on a client, where [#frameUpdate] poses every frame for rendering.
+    ///
+    /// Server posing is on demand because most entities are never asked: the cost lands only on the
+    /// ones a collision query actually reads, on the ticks it reads them.
+    private void ensureServerPose() {
+        EntityPatch<Entity> owner = getOwner();
+
+        if (owner == null || owner.isLogicalClient()) return;
+
+        long tick = owner.getLevel().getGameTime();
+
+        if (tick == poseTick) return;
+
+        previousPoseTick = poseTick;
+        poseTick = tick;
+
+        // The array being retired becomes the scratch the new pose is written into. Null on the first
+        // pose, which [#updateBoundTransforms] allocates for.
+        Matrix4f[] retired = previousBoundTransforms;
+        previousBoundTransforms = boundTransforms;
+        boundTransforms = retired;
+
+        updateBoundTransforms();
+    }
+
     public Animator getAnimator() {
         return animator;
     }
@@ -112,6 +161,10 @@ public class ArmatureComponent
 
     public Matrix4f[] getBoundTransforms() {
         return boundTransforms;
+    }
+
+    public Matrix4f @Nullable [] getPreviousBoundTransforms() {
+        return previousBoundTransforms;
     }
 
     // The call site must be in-game time. Crashed when try to use this component in preview model.
@@ -147,6 +200,8 @@ public class ArmatureComponent
     /// A bone's transform in this armature's model space, at the pose [#updateBoundTransforms] last
     /// wrote. Identity before the first update.
     public Transform getBoneModelTransform(final String boneName) {
+        ensureServerPose();
+
         AssetAccessor<? extends Armature> accessor = getArmature();
         Armature resolved = accessor == null ? null : accessor.get();
 
@@ -157,6 +212,28 @@ public class ArmatureComponent
         if (bone == null || bone.getId() >= boundTransforms.length) return Transform.identity();
 
         return Transform.fromMatrix(boundTransforms[bone.getId()]);
+    }
+
+    /// A bone's transform in this armature's model space one tick back—the far end of a sweep.
+    ///
+    /// The current transform whenever there is no such tick: on a client, before a second pose, and
+    /// after a gap in which nothing asked this armature for anything. A sweep across a gap would span
+    /// motion no query witnessed, so it collapses to a point instead.
+    public Transform getPreviousBoneModelTransform(final String boneName) {
+        ensureServerPose();
+
+        AssetAccessor<? extends Armature> accessor = getArmature();
+        Armature resolved = accessor == null ? null : accessor.get();
+
+        if (resolved == null || previousBoundTransforms == null || previousPoseTick != poseTick - 1L) {
+            return getBoneModelTransform(boneName);
+        }
+
+        Bone bone = resolved.getBoneByName(boneName);
+
+        if (bone == null || bone.getId() >= previousBoundTransforms.length) return Transform.identity();
+
+        return Transform.fromMatrix(previousBoundTransforms[bone.getId()]);
     }
 
     /// Returns a bound transform of socket by name, in this armature's model space.
