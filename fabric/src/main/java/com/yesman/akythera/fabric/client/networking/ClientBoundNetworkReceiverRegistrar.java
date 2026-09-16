@@ -37,7 +37,7 @@ public final class ClientBoundNetworkReceiverRegistrar {
             payloadChannel ->
                 ClientPlayNetworking.registerGlobalReceiver(
                     (CustomPacketPayload.Type<CustomPacketPayload>)payloadChannel.type(),
-                    mapContext((BiConsumer<CustomPacketPayload, PayloadContext>)payloadChannel.handler())
+                    mapContext((BiConsumer<CustomPacketPayload, PayloadContext>)payloadChannel.handler().get())
                 )
         );
     }

@@ -5,6 +5,12 @@ import com.yesman.akythera.api.animation.animator.AnimationLayer;
 import com.yesman.akythera.api.animation.animator.Animator;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
+import com.yesman.akythera.api.world.ability.AbilityEffectInstance;
+import com.yesman.akythera.api.world.ability.AbilityInstance;
+import com.yesman.akythera.api.world.ability.AbilitySystemComponent;
+import com.yesman.akythera.api.world.ability.AbilityTaskHandle;
+import com.yesman.akythera.api.world.ability.DataDrivenAbility;
+import com.yesman.akythera.api.world.ability.SystematicAbility;
 import com.yesman.akythera.api.world.patch.entity.PlayerPatch;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.animation.animator.BlendingAnimator;
@@ -70,6 +76,11 @@ public final class AkytheraScriptFunctions {
             ScriptModularizeHelper.scanScriptModulesAndRegister(MINECRAFT_REGISTRAR, EntityPatch.class, "World/Entity", ScriptFunction.Usage.SCRIPT);
             ScriptModularizeHelper.scanScriptModulesAndRegister(MINECRAFT_REGISTRAR, LivingEntityPatch.class, "World/Entity", ScriptFunction.Usage.SCRIPT);
             ScriptModularizeHelper.scanScriptModulesAndRegister(MINECRAFT_REGISTRAR, PlayerPatch.class, "World/Entity", ScriptFunction.Usage.SCRIPT);
+
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AbilitySystemComponent.class, "Ability", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AbilityInstance.class, "Ability", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AbilityEffectInstance.class, "Ability/Effect", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AbilityTaskHandle.class, "Ability/Task", ScriptFunction.Usage.SCRIPT);
         } catch (Throwable e) {
             throw new IllegalStateException("Failed at scanning and registering modular function", e);
         }
@@ -112,6 +123,34 @@ public final class AkytheraScriptFunctions {
             "Adds the player surface",
             true,
             ScriptFunction.Usage.ENTITY_PATCH_CTOR
+        )
+    );
+
+    // ***********************************************
+    // Ability constructors
+    // ***********************************************
+
+    public static final Holder<ScriptFunction> SYSTEMATIC_ABILITY_CONSTRUCTOR = AKYTHERA_REGISTRAR.register("systematic_ability_ctor", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (Function<Holder.Reference, SystematicAbility>)SystematicAbility::new,
+            FunctionSignature.create(SystematicAbility.class, List.of("blueprint"), Holder.Reference.class),
+            "Systematic Ability",
+            "Ability",
+            "Activation type, cost, cooldown, tags and triggers, filled in by the editor",
+            true,
+            ScriptFunction.Usage.ABILITY_CTOR
+        )
+    );
+
+    public static final Holder<ScriptFunction> DATA_DRIVEN_ABILITY_CONSTRUCTOR = AKYTHERA_REGISTRAR.register("data_driven_ability_ctor", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (Function<Holder.Reference, DataDrivenAbility>)DataDrivenAbility::new,
+            FunctionSignature.create(DataDrivenAbility.class, List.of("blueprint"), Holder.Reference.class),
+            "Data Driven Ability",
+            "Ability",
+            "Runs the blueprint's graphs instead of Java",
+            true,
+            ScriptFunction.Usage.ABILITY_CTOR
         )
     );
 

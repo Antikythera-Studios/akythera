@@ -18,6 +18,7 @@ public interface PureNode extends ScriptNode {
                 case ContextVariableAccessNode _ -> "local_variable_node";
                 case NumericOperatorNode _       -> "basic_operator";
                 case SupplierAdapterNode _       -> "supplier_adapter";
+                case CallbackAdapterNode _   -> "callback_adapter";
                 case InvertBooleanNode _         -> "invert_boolean";
                 case LogicalOperationNode _      -> "logical_operation";
                 case CachedPoseReferenceNode _   -> "cached_pose_reference";
@@ -38,6 +39,7 @@ public interface PureNode extends ScriptNode {
                 case "local_variable_node"   -> ContextVariableAccessNode.CODEC.fieldOf("local_variable_node");
                 case "basic_operator"        -> NumericOperatorNode.CODEC.fieldOf("basic_operator");
                 case "supplier_adapter"      -> SupplierAdapterNode.CODEC.fieldOf("supplier_adapter");
+                case "callback_adapter"      -> CallbackAdapterNode.CODEC.fieldOf("callback_adapter");
                 case "invert_boolean"        -> InvertBooleanNode.CODEC.fieldOf("invert_boolean");
                 case "logical_operation"     -> LogicalOperationNode.CODEC.fieldOf("logical_operation");
                 case "cached_pose_reference" -> CachedPoseReferenceNode.CODEC.fieldOf("cached_pose_reference");

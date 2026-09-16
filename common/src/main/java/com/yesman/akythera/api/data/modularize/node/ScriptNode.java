@@ -52,6 +52,12 @@ public interface ScriptNode {
         /// Frames entered but not yet closed, innermost last.
         private final Deque<CallStack> openFrames = new ArrayDeque<>();
 
+        /// Whether a [ReturnNode] has fired, which stops every flow still unwinding.
+        private boolean returning;
+
+        /// What that [ReturnNode] carried.
+        private @Nullable Object returnedValue;
+
         /// A context that runs without recording.
         public ExecutionContext(final ScriptVariables locals) {
             this(locals, null);
@@ -69,6 +75,56 @@ public interface ScriptNode {
         /// The record this context writes to, or null when it is not recording.
         public @Nullable ExecutionRecord record() {
             return record;
+        }
+
+        /// One snapshot of the locals, shared by every callback adapter in the open scope, so a task
+        /// firing several callbacks over its life accumulates state across them.
+        private @Nullable ScriptVariables callbackLocals;
+
+        /// The locals a callback in the open scope reads, snapshotted on first ask.
+        public ScriptVariables callbackLocals() {
+            if (callbackLocals == null) callbackLocals = locals.snapshot();
+
+            return callbackLocals;
+        }
+
+        /// Opens a scope whose callback adapters share one snapshot, and returns the enclosing one.
+        ///
+        /// A [FunctionNode] opens one around its parameters, so the adapters feeding one call share
+        /// a snapshot and a second call in the same flow gets its own.
+        public @Nullable ScriptVariables beginCallbackScope() {
+            ScriptVariables enclosing = callbackLocals;
+
+            callbackLocals = null;
+
+            return enclosing;
+        }
+
+        public void endCallbackScope(final @Nullable ScriptVariables enclosing) {
+            callbackLocals = enclosing;
+        }
+
+        /// Stops the flow and hands `value` to whoever ran it.
+        public void signalReturn(final @Nullable Object value) {
+            returning = true;
+            returnedValue = value;
+        }
+
+        /// Whether a [ReturnNode] has fired. Every flow node checks this before running its next
+        /// block.
+        public boolean isReturning() {
+            return returning;
+        }
+
+        /// The value a [ReturnNode] carried, clearing the signal so this context can run again.
+        @SuppressWarnings("unchecked")
+        public <T> @Nullable T takeReturnedValue() {
+            Object value = returnedValue;
+
+            returning = false;
+            returnedValue = null;
+
+            return (T) value;
         }
 
         public void enter(final ScriptNode scriptNode) {

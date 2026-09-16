@@ -1,6 +1,8 @@
 package com.yesman.akythera.api.data.modularize;
 
 import com.mojang.serialization.Codec;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.helper.ParseUtils;
 import org.jspecify.annotations.NonNull;
@@ -21,25 +23,51 @@ import java.util.function.Function;
 ///                                (e.g. float -> double) are not included here. Didn't select `ScriptType` as a key
 ///                                since **use before declaration** issue. Not a null. Provide as least an empty map.
 /// @param usedAsVariable Indicates if the script type can be used as variable in script editor
+/// @param streamCodec Null when a variable of this type cannot cross the wire, which forces every
+///                    variable declaring it to a sync direction of none
 public record ScriptType(
     Class<?> type,
     @Nullable Codec<?> codec,
     @NonNull Map<Class<?>, Function<?, ?>> implicitlyCastableTypes,
-    boolean usedAsVariable
+    boolean usedAsVariable,
+    @Nullable StreamCodec<? super RegistryFriendlyByteBuf, ?> streamCodec
 ) {
     // Expose the type only to engine. Won't be used in AkytheraLabs
     public ScriptType(Class<?> type) {
-        this(type, null, Map.of(), false);
+        this(type, null, Map.of(), false, null);
     }
 
     // Expose the type to both in engine and editor. Used for script variables that doesn't support explicit type conversion.
     public ScriptType(Class<?> type, @Nullable Codec<?> codec) {
-        this(type, codec, Map.of(), true);
+        this(type, codec, Map.of(), true, null);
+    }
+
+    /// A variable type that crosses the wire.
+    public ScriptType(
+        Class<?> type,
+        @Nullable Codec<?> codec,
+        @Nullable StreamCodec<? super RegistryFriendlyByteBuf, ?> streamCodec
+    ) {
+        this(type, codec, Map.of(), true, streamCodec);
     }
 
     // Expose the type to both in engine and editor. Used for script variables
     public ScriptType(Class<?> type, @Nullable Codec<?> codec, @NonNull Map<Class<?>, Function<?, ?>> implicitlyCastableTypes) {
-        this(type, codec, implicitlyCastableTypes, true);
+        this(type, codec, implicitlyCastableTypes, true, null);
+    }
+
+    public ScriptType(
+        Class<?> type,
+        @Nullable Codec<?> codec,
+        @NonNull Map<Class<?>, Function<?, ?>> implicitlyCastableTypes,
+        boolean usedAsVariable
+    ) {
+        this(type, codec, implicitlyCastableTypes, usedAsVariable, null);
+    }
+
+    /// Whether a variable of this type may be synced at all.
+    public boolean isSyncable() {
+        return streamCodec != null;
     }
 
     /// The registered [ScriptType] for `type` (boxing-aware), or null when it isn't registered.

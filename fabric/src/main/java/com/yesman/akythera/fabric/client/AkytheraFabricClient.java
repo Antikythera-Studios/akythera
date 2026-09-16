@@ -4,11 +4,14 @@ import com.yesman.akythera.api.asset.animation.AnimationManager;
 import com.yesman.akythera.api.asset.armature.ArmatureManager;
 import com.yesman.akythera.client.api.mesh.MeshManager;
 import com.yesman.akythera.client.core.AkytheraClient;
+import com.yesman.akythera.client.input.AkytheraKeyMappings;
 import com.yesman.akythera.client.config.AkytheraClientConfig;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.fabric.client.networking.ClientBoundNetworkReceiverRegistrar;
+import com.yesman.akythera.fabric.networking.ClientBoundPayloadTypes;
 import fuzs.forgeconfigapiport.fabric.api.v5.ModConfigEvents;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.resource.v1.ResourceLoader;
 import net.minecraft.server.packs.PackType;
 import net.neoforged.fml.config.ModConfig;
@@ -23,8 +26,10 @@ public final class AkytheraFabricClient implements ClientModInitializer {
         AkytheraClient.onModInitialized();
 
         // Initialize networking receivers. Other components are registered via `AkytheraFabric`
-        ClientBoundNetworkReceiverRegistrar.registerTypes();
+        ClientBoundPayloadTypes.registerTypes();
         ClientBoundNetworkReceiverRegistrar.registerReceivers();
+
+        AkytheraKeyMappings.all().forEach(KeyMappingHelper::registerKeyMapping);
 
         // Register reload listeners
         ResourceLoader clientResourceLoader = ResourceLoader.get(PackType.CLIENT_RESOURCES);

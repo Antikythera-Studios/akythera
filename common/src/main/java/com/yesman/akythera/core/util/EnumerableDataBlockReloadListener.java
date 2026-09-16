@@ -37,9 +37,14 @@ public final class EnumerableDataBlockReloadListener<T extends EnumerableDataBlo
 
     @Override
     protected void apply(Map<Identifier, T> parsed, ResourceManager resourceManager, ProfilerFiller profiler) {
-        lastLoadedEntries = new TreeMap<>(parsed);
+        lastLoadedEntries = new TreeMap<>(enumManager.canonicalizeDataPackEntries(parsed));
         enumManager.loadDataPackEntries(lastLoadedEntries);
-        Akythera.LOGGER.debug("Loaded {} data pack data blocks into {}", parsed.size(), enumManager);
+
+        // The ingested count, which a path-identified type grows with the ancestors it generated.
+        Akythera.LOGGER.debug(
+            "Loaded {} data pack {} entries: {}",
+            lastLoadedEntries.size(), enumManager.getEnumType(), lastLoadedEntries.keySet()
+        );
     }
 
     public Map<Identifier, T> getLastLoadedEntries() {

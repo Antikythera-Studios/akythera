@@ -1,11 +1,13 @@
 package com.yesman.akythera.mixin.client;
 
 import com.mojang.blaze3d.platform.InputConstants;
-import com.yesman.akythera.client.input.InputActivation;
-import com.yesman.akythera.client.input.InputAction;
+import com.yesman.akythera.api.input.TriggeringState;
+import com.yesman.akythera.api.input.TriggeringType;
+import com.yesman.akythera.api.input.InputAction;
 import com.yesman.akythera.client.input.InputManager;
 import com.yesman.akythera.mixinaccessor.client.KeyMappingAccessor;
 import net.minecraft.client.KeyMapping;
+import net.minecraft.core.Holder;
 import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -14,12 +16,19 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+
 @Mixin(KeyMapping.class)
 public abstract class MixinKeyMapping implements KeyMappingAccessor {
-    /// Actions bound to this key, indexed by [InputActivation#ordinal()]. `null` until the first bind.
+    /// Actions bound to this key, grouped by [TriggeringType] and ordered by [InputAction#priority]
+    /// within each group. Null until the first bind.
     @Unique
     @Nullable
-    private InputAction[] akythera$boundActions;
+    private Map<TriggeringType, List<Holder<InputAction>>> akythera$boundActions;
 
     /// Occupied slots in [#akythera$boundActions].
     @Unique
@@ -56,37 +65,45 @@ public abstract class MixinKeyMapping implements KeyMappingAccessor {
     }
 
     @Override
-    public void akythera$bindAction(final InputAction action) {
+    public void akythera$bindAction(final Holder<InputAction> action) {
         if (akythera$boundActions == null) {
-            akythera$boundActions = new InputAction[InputActivation.values().length];
+            akythera$boundActions = new EnumMap<>(TriggeringType.class);
         }
 
-        final int slot = action.inputActivation().ordinal();
+        List<Holder<InputAction>> bound = akythera$boundActions.computeIfAbsent(
+            action.value().triggeringType(), type -> new ArrayList<>()
+        );
 
-        if (akythera$boundActions[slot] == null) {
-            akythera$boundCount++;
-        }
+        if (bound.contains(action)) return;
 
-        akythera$boundActions[slot] = action;
+        bound.add(action);
+        bound.sort(Comparator.comparingInt((Holder<InputAction> held) -> held.value().priority()).reversed());
+        akythera$boundCount++;
     }
 
     @Override
-    public boolean akythera$unbindAction(final InputAction action) {
+    public boolean akythera$unbindAction(final Holder<InputAction> action) {
         if (akythera$boundActions == null) {
             return true;
         }
 
-        final int slot = action.inputActivation().ordinal();
+        List<Holder<InputAction>> bound = akythera$boundActions.get(action.value().triggeringType());
 
-        if (akythera$boundActions[slot] == action) {
-            akythera$boundActions[slot] = null;
+        if (bound != null && bound.remove(action)) {
             akythera$boundCount--;
         }
 
-        return akythera$boundCount == 0;
+        if (akythera$boundCount > 0) return false;
+
+        // The key stops being dispatched here, so its edge state would otherwise be read again by
+        // whatever binds to it next: a held key would look like a release it never saw.
+        akythera$prevDown = false;
+        akythera$holdTicks = 0;
+
+        return true;
     }
 
-    /// Runs the [InputActivation] timing table once per client tick; driven by [MixinMinecraft].
+    /// Runs the [TriggeringType] timing table once per client tick; driven by [MixinMinecraft].
     @Unique
     @Override
     public void akythera$dispatchInputActions() {
@@ -104,76 +121,58 @@ public abstract class MixinKeyMapping implements KeyMappingAccessor {
         }
 
         if (pressEdge) {
-            akythera$fire(manager, InputActivation.PRESS);
+            akythera$fire(manager, TriggeringType.PRESS, TriggeringState.TRIGGERED);
         }
 
         if (down) {
-            akythera$fireThresholded(manager);
+            akythera$fire(manager, TriggeringType.DOWN, TriggeringState.TRIGGERED);
+            akythera$fire(manager, TriggeringType.HOLD, TriggeringState.TRIGGERED);
+            akythera$fire(manager, TriggeringType.HOLD_UNTIL, TriggeringState.TRIGGERED);
         }
 
         if (releaseEdge) {
-            akythera$fire(manager, InputActivation.RELEASE);
-            akythera$fireReleaseThresholded(manager);
+            akythera$fire(manager, TriggeringType.RELEASE, TriggeringState.TRIGGERED);
+            akythera$fire(manager, TriggeringType.HOLD, TriggeringState.COMPLETED);
+            akythera$fireHoldUntilRelease(manager);
             akythera$holdTicks = 0;
         }
 
         akythera$prevDown = down;
     }
 
-    /// Fires held-state [InputActivation] (DOWN / START / HOLD) by threshold.
+    /// A Hold Until release completes at or above its threshold and cancels below it, so each bound
+    /// action is judged against its own.
     @Unique
-    private void akythera$fireThresholded(final InputManager manager) {
-        final InputAction down = akythera$action(InputActivation.DOWN);
-        if (down != null && akythera$holdTicks <= akythera$threshold(down)) {
-            manager.runEvent(down);
-        }
+    private void akythera$fireHoldUntilRelease(final InputManager manager) {
+        List<Holder<InputAction>> bound = akythera$boundActions.get(TriggeringType.HOLD_UNTIL);
 
-        final InputAction start = akythera$action(InputActivation.START);
-        if (start != null && akythera$holdTicks == akythera$threshold(start) + 1) {
-            manager.runEvent(start);
-        }
+        if (bound == null) return;
 
-        final InputAction hold = akythera$action(InputActivation.HOLD);
-        if (hold != null && akythera$holdTicks > akythera$threshold(hold)) {
-            manager.runEvent(hold);
-        }
-    }
-
-    /// Fires release [InputActivation] (CANCEL / COMPLETE) by threshold.
-    @Unique
-    private void akythera$fireReleaseThresholded(final InputManager manager) {
         final int lastHold = akythera$holdTicks;
 
-        final InputAction cancel = akythera$action(InputActivation.CANCEL);
-        if (cancel != null && lastHold <= akythera$threshold(cancel)) {
-            manager.runEvent(cancel);
-        }
-
-        final InputAction complete = akythera$action(InputActivation.COMPLETE);
-        if (complete != null && lastHold > akythera$threshold(complete)) {
-            manager.runEvent(complete);
-        }
-    }
-
-    @Unique
-    private void akythera$fire(final InputManager manager, final InputActivation activation) {
-        final InputAction action = akythera$action(activation);
-
-        if (action != null) {
-            manager.runEvent(action);
+        for (Holder<InputAction> action : new ArrayList<>(bound)) {
+            manager.runEvent(
+                action,
+                action.value().reachedThreshold(lastHold)
+                    ? TriggeringState.COMPLETED
+                    : TriggeringState.CANCELED
+            );
         }
     }
 
     @Unique
-    private @Nullable InputAction akythera$action(final InputActivation activation) {
-        return akythera$boundActions == null ? null : akythera$boundActions[activation.ordinal()];
-    }
+    private void akythera$fire(
+        final InputManager manager,
+        final TriggeringType triggeringType,
+        final TriggeringState triggeringState
+    ) {
+        List<Holder<InputAction>> bound = akythera$boundActions.get(triggeringType);
 
-    /// `null` threshold is treated as 0 (no charge window).
-    @Unique
-    private int akythera$threshold(final InputAction action) {
-        final Integer t = action.threshold();
-        return t == null ? 0 : t;
+        if (bound == null) return;
+
+        for (Holder<InputAction> action : new ArrayList<>(bound)) {
+            manager.runEvent(action, triggeringState);
+        }
     }
 
     @Override

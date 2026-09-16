@@ -10,7 +10,16 @@ import com.yesman.akythera.api.data.modularize.AkytheraScriptTypes;
 import com.yesman.akythera.api.lifecycle.ComponentsFactory;
 import com.yesman.akythera.api.lifecycle.ServerComponentsFactory;
 import com.yesman.akythera.api.world.patch.AkytheraPatches;
+import com.yesman.akythera.core.blueprint.AbilityBlueprint;
+import com.yesman.akythera.core.blueprint.AbilityCueBlueprint;
 import com.yesman.akythera.client.api.lifecycle.ClientComponentsFactory;
+import com.yesman.akythera.api.world.ability.AbilityCues;
+import com.yesman.akythera.api.world.ability.AbilityDebugScaffolding;
+import com.yesman.akythera.api.world.ability.AbilityResources;
+import com.yesman.akythera.api.world.ability.AbilitySlot;
+import com.yesman.akythera.api.world.ability.AbilitySlotGroup;
+import com.yesman.akythera.api.world.ability.AbilityTag;
+import com.yesman.akythera.commands.AbilityControlCommand;
 import com.yesman.akythera.commands.AnimatorControlCommand;
 import com.yesman.akythera.compat.IModPlugin;
 import com.yesman.akythera.compat.CompatibleMod;
@@ -80,15 +89,24 @@ public final class Akythera {
         // Register level load & unload events to cache registry access for the helper class
         StaticRegistryAccess.registerEvents();
         AkytheraPatches.registerEvents();
+        AbilityBlueprint.registerEvents();
+        AbilityCueBlueprint.registerEvents();
+
+        if (isAbilityDebugEnabled()) AbilityDebugScaffolding.registerEvents();
         EnumerableDataBlockSync.addSyncedDataBlock(AnimationInterfaceKey.ENUM_MANAGER);
         EnumerableDataBlockSync.addSyncedDataBlock(FSMAnimationState.ENUM_MANAGER);
         EnumerableDataBlockSync.addSyncedDataBlock(AnimationLayerSignature.ENUM_MANAGER);
         EnumerableDataBlockSync.addSyncedDataBlock(WeaponStance.ENUM_MANAGER);
+        EnumerableDataBlockSync.addSyncedDataBlock(AbilitySlotGroup.ENUM_MANAGER);
+        EnumerableDataBlockSync.addSyncedDataBlock(AbilitySlot.ENUM_MANAGER);
+        EnumerableDataBlockSync.addSyncedDataBlock(AbilityTag.ENUM_MANAGER);
         EnumerableDataBlockSync.registerEvents();
     }
 
     /// Called on mod loader lifecycle when the mod initializes
     public static void onModInitialized() {
+        AbilityResources.bootStrap();
+
         Arrays.stream(CompatibleMod.values())
             .filter(mod -> ModPlatformProvider.get().isModLoaded(mod.getModId()) && mod.getCompatibilityModule() != null)
             .map(mod -> {
@@ -104,11 +122,22 @@ public final class Akythera {
             .filter(Objects::nonNull)
             .forEach(IModPlugin::onInitialize);
 
+        AbilityResources.freeze();
+
         AnimationInterfaceKey.ENUM_MANAGER.loadEnum();
         FSMAnimationState.ENUM_MANAGER.loadEnum();
         AnimationLayerSignature.ENUM_MANAGER.loadEnum();
         ColliderType.ENUM_MANAGER.loadEnum();
         WeaponStance.ENUM_MANAGER.loadEnum();
+        if (isAbilityDebugEnabled()) {
+            AbilityDebugScaffolding.loadEnums();
+            AbilityDebugScaffolding.registerTestPatchProvider();
+
+            // A cue names AbilityTags, which do not exist until the enum above has loaded.
+            AbilityDebugScaffolding.registerCues();
+        }
+
+        AbilityCues.freeze();
 
         // Pair logics reference the collider type constants, so they bind after the enum loads.
         CollisionDetectionLogics.registerBuiltInLogics();
@@ -118,6 +147,20 @@ public final class Akythera {
         FSMAnimationState.ENUM_MANAGER.registerEnumCls(MODID, AkytheraAnimationState.class);
         AnimationLayerSignature.ENUM_MANAGER.registerEnumCls(MODID, AkytheraAnimationLayerSignature.class);
         ColliderType.ENUM_MANAGER.registerEnumCls(MODID, AkytheraColliderType.class);
+
+        if (isAbilityDebugEnabled()) {
+            AbilityDebugScaffolding.registerEnums();
+            AbilityDebugScaffolding.registerScriptFunctions();
+        }
+    }
+
+    /// Whether the ability system's test scaffolding runs.
+    ///
+    /// It hardcodes entity patches that outrank every data pack one, and registers slots, tags and
+    /// cues of its own, so a shipped jar must never load it.
+    public static boolean isAbilityDebugEnabled() {
+        return ModPlatformProvider.get().isDevelopmentEnvironment()
+            && Boolean.getBoolean("akythera.debug.ability");
     }
 
     /// Called on mod loader lifecycle when the mod initializes in a dedicated server
@@ -138,5 +181,7 @@ public final class Akythera {
     /// Register in-game commands
     public static void onRegisterCommands(CommandDispatcher<CommandSourceStack> dispatcher) {
         AnimatorControlCommand.register(dispatcher);
+
+        if (isAbilityDebugEnabled()) AbilityControlCommand.register(dispatcher);
     }
 }

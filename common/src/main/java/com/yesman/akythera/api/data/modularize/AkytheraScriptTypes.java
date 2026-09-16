@@ -4,6 +4,18 @@ import com.mojang.serialization.Codec;
 import com.yesman.akythera.api.animation.animator.AnimationInterfaceKey;
 import com.yesman.akythera.api.animation.animator.AnimationLayer;
 import com.yesman.akythera.api.data.modularize.impl.ScriptComparators;
+import com.yesman.akythera.api.world.ability.Ability;
+import com.yesman.akythera.api.world.ability.AbilityCue;
+import com.yesman.akythera.api.world.ability.AbilityCueInstance;
+import com.yesman.akythera.api.world.ability.AbilityEffect;
+import com.yesman.akythera.api.world.ability.AbilityEffectInstance;
+import com.yesman.akythera.api.world.ability.AbilityInstance;
+import com.yesman.akythera.api.world.ability.AbilitySlot;
+import com.yesman.akythera.api.world.ability.AbilityState;
+import com.yesman.akythera.api.world.ability.AbilitySystemComponent;
+import com.yesman.akythera.api.world.ability.AbilityTag;
+import com.yesman.akythera.api.world.ability.AbilityTask;
+import com.yesman.akythera.api.world.ability.AbilityTaskHandle;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
 import com.yesman.akythera.api.world.patch.entity.PlayerPatch;
@@ -21,6 +33,7 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Comparator;
@@ -36,24 +49,30 @@ public final class AkytheraScriptTypes {
 
     // primitives
 
-    public static final Holder<ScriptType> BYTE = MINECRAFT_REGISTRAR.register("byte", () -> new ScriptType(Byte.class, Codec.BYTE));
+    public static final Holder<ScriptType> BYTE = MINECRAFT_REGISTRAR.register("byte", () -> new ScriptType(Byte.class, Codec.BYTE, ByteBufCodecs.BYTE));
     public static final Holder<ScriptType> SHORT = MINECRAFT_REGISTRAR.register("short", () -> new ScriptType(Short.class, Codec.SHORT,
         Map.of(
             Byte.class, (Function<Short, Byte>)Short::byteValue
-        )
+        ),
+        true,
+        ByteBufCodecs.SHORT
     ));
     public static final Holder<ScriptType> INTEGER = MINECRAFT_REGISTRAR.register("integer", () -> new ScriptType(Integer.class, Codec.INT,
         Map.of(
             Byte.class, (Function<Integer, Byte>)Integer::byteValue,
             Short.class, (Function<Integer, Short>)Integer::shortValue
-        )
+        ),
+        true,
+        ByteBufCodecs.VAR_INT
     ));
     public static final Holder<ScriptType> LONG = MINECRAFT_REGISTRAR.register("long", () -> new ScriptType(Long.class, Codec.LONG,
         Map.of(
             Byte.class, (Function<Long, Byte>)Long::byteValue,
             Short.class, (Function<Long, Short>)Long::shortValue,
             Integer.class, (Function<Long, Integer>)Long::intValue
-        )
+        ),
+        true,
+        ByteBufCodecs.VAR_LONG
     ));
     public static final Holder<ScriptType> FLOAT = MINECRAFT_REGISTRAR.register("float", () -> new ScriptType(Float.class, Codec.FLOAT,
         Map.of(
@@ -61,7 +80,9 @@ public final class AkytheraScriptTypes {
             Short.class, (Function<Float, Short>)Float::shortValue,
             Integer.class, (Function<Float, Integer>)Float::intValue,
             Long.class, (Function<Float, Long>)Float::longValue
-        )
+        ),
+        true,
+        ByteBufCodecs.FLOAT
     ));
     public static final Holder<ScriptType> DOUBLE = MINECRAFT_REGISTRAR.register("double", () -> new ScriptType(Double.class, Codec.DOUBLE,
         Map.of(
@@ -70,20 +91,22 @@ public final class AkytheraScriptTypes {
             Integer.class, (Function<Double, Integer>)Double::intValue,
             Long.class, (Function<Double, Long>)Double::longValue,
             Float.class, (Function<Double, Float>)Double::floatValue
-        )
+        ),
+        true,
+        ByteBufCodecs.DOUBLE
     ));
-    public static final Holder<ScriptType> BOOLEAN = MINECRAFT_REGISTRAR.register("boolean", () -> new ScriptType(Boolean.class, Codec.BOOL));
+    public static final Holder<ScriptType> BOOLEAN = MINECRAFT_REGISTRAR.register("boolean", () -> new ScriptType(Boolean.class, Codec.BOOL, ByteBufCodecs.BOOL));
 
     // java.lang
 
-    public static final Holder<ScriptType> STRING = MINECRAFT_REGISTRAR.register("string", () -> new ScriptType(String.class, Codec.STRING));
+    public static final Holder<ScriptType> STRING = MINECRAFT_REGISTRAR.register("string", () -> new ScriptType(String.class, Codec.STRING, ByteBufCodecs.STRING_UTF8));
     public static final Holder<ScriptType> MAP = MINECRAFT_REGISTRAR.register("map", () -> new ScriptType(Map.class, null, Map.of(), true));
     public static final Holder<ScriptType> SET = MINECRAFT_REGISTRAR.register("set", () -> new ScriptType(Set.class, null, Map.of(), true));
     public static final Holder<ScriptType> NUMERIC_COMPARATOR = MINECRAFT_REGISTRAR.register("comparator", () -> new ScriptType(Comparator.class, ScriptComparators.CODEC, Map.of(), false));
 
     // Physics
 
-    public static final Holder<ScriptType> VEC3D = MINECRAFT_REGISTRAR.register("vec3d", () -> new ScriptType(Vec3.class, Vec3.CODEC));
+    public static final Holder<ScriptType> VEC3D = MINECRAFT_REGISTRAR.register("vec3d", () -> new ScriptType(Vec3.class, Vec3.CODEC, Vec3.STREAM_CODEC));
 
     // Minecraft
 
@@ -148,6 +171,42 @@ public final class AkytheraScriptTypes {
     public static final Holder<ScriptType> ITEM_PATCH = AKYTHERA_REGISTRAR.register("item_patch",
         () -> new ScriptType(ItemPatch.class));
 
+    // Ability
+
+    public static final Holder<ScriptType> ABILITY = AKYTHERA_REGISTRAR.register("ability",
+        () -> new ScriptType(Ability.class));
+
+    public static final Holder<ScriptType> ABILITY_STATE = AKYTHERA_REGISTRAR.register("ability_state",
+        () -> new ScriptType(AbilityState.class));
+
+    public static final Holder<ScriptType> ABILITY_INSTANCE = AKYTHERA_REGISTRAR.register("ability_instance",
+        () -> new ScriptType(AbilityInstance.class));
+
+    public static final Holder<ScriptType> ABILITY_SYSTEM_COMPONENT = AKYTHERA_REGISTRAR.register("ability_system_component",
+        () -> new ScriptType(AbilitySystemComponent.class, null,
+            Map.of(
+                LivingEntityPatch.class, (Function<AbilitySystemComponent, LivingEntityPatch<?>>)AbilitySystemComponent::getOwner
+            ),
+            false));
+
+    public static final Holder<ScriptType> ABILITY_TASK = AKYTHERA_REGISTRAR.register("ability_task",
+        () -> new ScriptType(AbilityTask.class));
+
+    public static final Holder<ScriptType> ABILITY_TASK_HANDLE = AKYTHERA_REGISTRAR.register("ability_task_handle",
+        () -> new ScriptType(AbilityTaskHandle.class));
+
+    public static final Holder<ScriptType> ABILITY_EFFECT = AKYTHERA_REGISTRAR.register("ability_effect",
+        () -> new ScriptType(AbilityEffect.class));
+
+    public static final Holder<ScriptType> ABILITY_EFFECT_INSTANCE = AKYTHERA_REGISTRAR.register("ability_effect_instance",
+        () -> new ScriptType(AbilityEffectInstance.class));
+
+    public static final Holder<ScriptType> ABILITY_CUE = AKYTHERA_REGISTRAR.register("ability_cue",
+        () -> new ScriptType(AbilityCue.class));
+
+    public static final Holder<ScriptType> ABILITY_CUE_INSTANCE = AKYTHERA_REGISTRAR.register("ability_cue_instance",
+        () -> new ScriptType(AbilityCueInstance.class));
+
     // EnumerableDataBlocks
 
     public static final Holder<ScriptType> ANIM_LAYER_SIGNATURE = AKYTHERA_REGISTRAR.register("anim_layer_signature",
@@ -155,4 +214,10 @@ public final class AkytheraScriptTypes {
 
     public static final Holder<ScriptType> WEAPON_STANCE = AKYTHERA_REGISTRAR.register("weapon_stance",
         () -> new ScriptType(WeaponStance.class, WeaponStance.ENUM_MANAGER.getNameCodec(), Map.of(), false));
+
+    public static final Holder<ScriptType> ABILITY_TAG = AKYTHERA_REGISTRAR.register("ability_tag",
+        () -> new ScriptType(AbilityTag.class, AbilityTag.ENUM_MANAGER.getNameCodec(), Map.of(), false));
+
+    public static final Holder<ScriptType> ABILITY_SLOT = AKYTHERA_REGISTRAR.register("ability_slot",
+        () -> new ScriptType(AbilitySlot.class, AbilitySlot.ENUM_MANAGER.getNameCodec(), Map.of(), false));
 }

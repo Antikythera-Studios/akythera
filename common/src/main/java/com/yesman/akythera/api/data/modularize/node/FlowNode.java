@@ -14,6 +14,7 @@ public interface FlowNode extends ScriptNode {
                 case BranchNode _               -> "branching_node";
                 case FlowFunctionNode _         -> "flow_function_node";
                 case ScriptVariableSetterNode _ -> "script_variable_setter";
+                case ReturnNode _               -> "return_node";
                 default -> throw new IllegalArgumentException(
                     "Unsupported execution node type " + node.getClass().getSimpleName()
                 );
@@ -24,6 +25,7 @@ public interface FlowNode extends ScriptNode {
                 case "branching_node"         -> BranchNode.CODEC.fieldOf("branching_node");
                 case "flow_function_node"     -> FlowFunctionNode.CODEC.fieldOf("flow_function_node");
                 case "script_variable_setter" -> ScriptVariableSetterNode.CODEC.fieldOf("script_variable_setter");
+                case "return_node"            -> ReturnNode.CODEC.fieldOf("return_node");
                 default -> throw new IllegalArgumentException(
                     "Unsupported execution node type " + literal
                 );

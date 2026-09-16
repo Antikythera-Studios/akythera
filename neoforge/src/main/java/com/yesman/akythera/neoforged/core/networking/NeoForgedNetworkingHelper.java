@@ -6,6 +6,7 @@ import com.yesman.akythera.core.networking.payload.AkytheraPayloadTypes;
 import com.yesman.akythera.core.util.ClientOnly;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -40,7 +41,15 @@ public final class NeoForgedNetworkingHelper extends NetworkingHelper {
 
     @Override
     public void sendToPlayersTrackingEntity(Entity entity, CustomPacketPayload payload, CustomPacketPayload... others) {
-        PacketDistributor.sendToPlayersTrackingEntity(entity, payload, others);
+        // The players the entity is actually paired with. A chunk tracking view can contain an
+        // entity the player was never sent, and before pairing it reaches nobody at all.
+        if (!(entity.level() instanceof ServerLevel serverLevel)) return;
+
+        serverLevel.getChunkSource().sendToTrackingPlayers(entity, new ClientboundCustomPayloadPacket(payload));
+
+        for (CustomPacketPayload other : others) {
+            serverLevel.getChunkSource().sendToTrackingPlayers(entity, new ClientboundCustomPayloadPacket(other));
+        }
     }
 
     @Override
@@ -67,7 +76,7 @@ public final class NeoForgedNetworkingHelper extends NetworkingHelper {
             payloadRegistrar.playToClient(
                 (CustomPacketPayload.Type<CustomPacketPayload>)payloadChannel.type(),
                 (StreamCodec<? super RegistryFriendlyByteBuf, CustomPacketPayload>)payloadChannel.streamCodec(),
-                mapContext((BiConsumer<CustomPacketPayload, PayloadContext>)payloadChannel.handler())
+                mapContext((BiConsumer<CustomPacketPayload, PayloadContext>)payloadChannel.handler().get())
             )
         );
 
@@ -75,7 +84,7 @@ public final class NeoForgedNetworkingHelper extends NetworkingHelper {
             payloadRegistrar.playToServer(
                 (CustomPacketPayload.Type<CustomPacketPayload>)payloadChannel.type(),
                 (StreamCodec<? super RegistryFriendlyByteBuf, CustomPacketPayload>)payloadChannel.streamCodec(),
-                mapContext((BiConsumer<CustomPacketPayload, PayloadContext>)payloadChannel.handler())
+                mapContext((BiConsumer<CustomPacketPayload, PayloadContext>)payloadChannel.handler().get())
             )
         );
 
@@ -83,8 +92,8 @@ public final class NeoForgedNetworkingHelper extends NetworkingHelper {
             payloadRegistrar.playBidirectional(
                 (CustomPacketPayload.Type<CustomPacketPayload>)payloadChannel.type(),
                 (StreamCodec<? super RegistryFriendlyByteBuf, CustomPacketPayload>)payloadChannel.streamCodec(),
-                mapContext((BiConsumer<CustomPacketPayload, PayloadContext>)payloadChannel.handler()),
-                mapContext((BiConsumer<CustomPacketPayload, PayloadContext>)payloadChannel.handler())
+                mapContext((BiConsumer<CustomPacketPayload, PayloadContext>)payloadChannel.handler().get()),
+                mapContext((BiConsumer<CustomPacketPayload, PayloadContext>)payloadChannel.handler().get())
             )
         );
     }

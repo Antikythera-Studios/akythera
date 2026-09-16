@@ -1,16 +1,25 @@
 package com.yesman.akythera.client.input;
 
+import com.yesman.akythera.api.input.InputAction;
+import com.yesman.akythera.api.input.TriggeringState;
 import com.yesman.akythera.core.util.ClientOnly;
 import com.yesman.akythera.mixinaccessor.client.KeyMappingAccessor;
 import net.minecraft.client.KeyMapping;
+import net.minecraft.core.Holder;
 import org.jetbrains.annotations.ApiStatus;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/// Client-side registry of [InputAction] events, dispatched once per tick by [MixinMinecraft].
+/// Client-side registry of [InputAction] listeners, dispatched once per tick by
+/// [com.yesman.akythera.mixin.client.MixinMinecraft].
+///
+/// Actions are keyed by [Holder], so two data pack entries carrying the same key and timing stay
+/// separate bindings.
 @ClientOnly
 public final class InputManager {
     private static final InputManager INSTANCE = new InputManager();
@@ -19,47 +28,67 @@ public final class InputManager {
         return INSTANCE;
     }
 
-    /// Event to run for each registered [InputAction].
-    private final Map<InputAction, Runnable> events = new HashMap<>();
+    /// Listeners per bound action, in registration order.
+    private final Map<Holder<InputAction>, List<InputListener>> listeners = new HashMap<>();
+
+    /// The key each bound action resolved to, which is what releases it again.
+    private final Map<Holder<InputAction>, KeyMapping> boundKeys = new HashMap<>();
 
     /// Key mappings with at least one binding; the per-tick driver scans only these.
     private final Set<KeyMapping> boundKeyMappings = new HashSet<>();
 
     private InputManager() {}
 
-    /// Registers [event] to run when `inputAction` triggers on its [InputAction#inputActivation].
-    public void registerInputAction(final InputAction inputAction, final Runnable event) {
-        events.put(inputAction, event);
+    /// Adds `listener` to `action`, binding it to `keyMapping` on the first listener.
+    public void register(
+        final Holder<InputAction> action,
+        final KeyMapping keyMapping,
+        final InputListener listener
+    ) {
+        boolean firstListener = !listeners.containsKey(action);
 
-        final KeyMapping keyMapping = inputAction.keyMapping();
-        ((KeyMappingAccessor) keyMapping).akythera$bindAction(inputAction);
+        listeners.computeIfAbsent(action, bound -> new ArrayList<>()).add(listener);
+
+        if (!firstListener) return;
+
+        boundKeys.put(action, keyMapping);
+        ((KeyMappingAccessor) keyMapping).akythera$bindAction(action);
         boundKeyMappings.add(keyMapping);
     }
 
-    /// Removes `inputAction` and its event.
-    public void removeInputAction(final InputAction inputAction) {
-        events.remove(inputAction);
+    /// Drops one `listener` from `action`, releasing the key once the last one is gone.
+    public void unregister(final Holder<InputAction> action, final InputListener listener) {
+        List<InputListener> bound = listeners.get(action);
 
-        final KeyMapping keyMapping = inputAction.keyMapping();
+        if (bound == null || !bound.remove(listener) || !bound.isEmpty()) return;
 
-        if (((KeyMappingAccessor) keyMapping).akythera$unbindAction(inputAction)) {
+        listeners.remove(action);
+
+        KeyMapping keyMapping = boundKeys.remove(action);
+
+        if (keyMapping == null) return;
+
+        if (((KeyMappingAccessor) keyMapping).akythera$unbindAction(action)) {
             boundKeyMappings.remove(keyMapping);
         }
     }
 
-    /// Key mappings the per-tick driver scans.
+    /// Key mappings the per-tick driver scans, copied because a listener may bind or unbind one
+    /// while the driver is still iterating.
     @ApiStatus.Internal
     public Set<KeyMapping> boundKeyMappings() {
-        return boundKeyMappings;
+        return Set.copyOf(boundKeyMappings);
     }
 
-    /// Runs the event bound to `inputAction`, if any.
+    /// Notifies every listener on `action` that `triggeringState` fired.
     @ApiStatus.Internal
-    public void runEvent(final InputAction inputAction) {
-        final Runnable event = events.get(inputAction);
+    public void runEvent(final Holder<InputAction> action, final TriggeringState triggeringState) {
+        List<InputListener> bound = listeners.get(action);
 
-        if (event != null) {
-            event.run();
+        if (bound == null) return;
+
+        for (InputListener listener : new ArrayList<>(bound)) {
+            listener.onTriggered(action.value(), triggeringState);
         }
     }
 }

@@ -62,7 +62,7 @@ public record FlowFunctionNode(
     public <T> T execute(final DataDrivenScript<?, ?> script, final ExecutionContext context) {
         T result = FunctionNode.super.execute(script, context);
 
-        if (nextNode != null) {
+        if (nextNode != null && !context.isReturning()) {
             nextNode.execute(script, context);
         }
 

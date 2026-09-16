@@ -1,6 +1,7 @@
 package com.yesman.akythera.api.data.modularize.node;
 
 import com.yesman.akythera.api.data.modularize.ScriptFunction;
+import com.yesman.akythera.core.blueprint.script.ScriptVariables;
 import com.yesman.akythera.core.reflection.DataDrivenScript;
 import com.yesman.akythera.core.reflection.FunctionSignature;
 
@@ -20,9 +21,14 @@ public interface FunctionNode extends ScriptNode {
 
         List<PureNode> params = params();
         Object[] args = new Object[params.size()];
+        ScriptVariables enclosingScope = context.beginCallbackScope();
 
-        for (int i = 0; i < args.length; i++) {
-            args[i] = params.get(i).execute(script, context);
+        try {
+            for (int i = 0; i < args.length; i++) {
+                args[i] = params.get(i).execute(script, context);
+            }
+        } finally {
+            context.endCallbackScope(enclosingScope);
         }
 
         context.recordInputs(args);

@@ -23,6 +23,8 @@ public record SequenceNode(List<FlowNode> executionBlocks) implements FlowNode {
         context.enter(this);
 
         for (ScriptNode exeNode : executionBlocks) {
+            if (context.isReturning()) break;
+
             exeNode.execute(script, context);
         }
 

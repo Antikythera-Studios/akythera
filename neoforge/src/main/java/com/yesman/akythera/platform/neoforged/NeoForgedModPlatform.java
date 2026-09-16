@@ -157,8 +157,10 @@ public final class NeoForgedModPlatform implements ModPlatform {
 
     @SubscribeEvent
     private void addClientReloadListeners(AddClientReloadListenersEvent event) {
+        // Client resources only. A SERVER_DATA listener run against the assets tree finds none of
+        // its own directory and clears everything it had loaded, including entries a dedicated
+        // server just synced.
         resourceReloadListeners.forEach(event::addListener);
-        dataReloadListeners.forEach(event::addListener);
     }
 
     @SubscribeEvent

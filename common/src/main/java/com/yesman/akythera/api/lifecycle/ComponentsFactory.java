@@ -95,6 +95,12 @@ public abstract class ComponentsFactory {
             return (EntityPatch<T>)provider.apply(entity);
         }
 
+        return getDataPackEntityPatch(entity);
+    }
+
+    /// The patch a data pack declares for `entity`'s type, or null when it declares none.
+    @SuppressWarnings("unchecked")
+    public <T extends Entity> @Nullable EntityPatch<T> getDataPackEntityPatch(T entity) {
         var registryOptional = entity.level().registryAccess().lookup(AkytheraRegistries.DataPack.ENTITY_PATCH_KEY);
 
         if (registryOptional.isEmpty()) {

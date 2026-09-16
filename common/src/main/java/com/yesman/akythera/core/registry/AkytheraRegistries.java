@@ -1,6 +1,8 @@
 package com.yesman.akythera.core.registry;
 
 import com.mojang.serialization.MapCodec;
+import com.yesman.akythera.api.input.InputAction;
+import com.yesman.akythera.core.blueprint.AbilityCueBlueprint;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.blueprint.script.DataDrivenAnimatorScript;
 import com.yesman.akythera.api.animation.notify.AnimationNotify;
@@ -16,6 +18,8 @@ import com.yesman.akythera.core.blueprint.ItemPatchBlueprint;
 import com.yesman.akythera.core.blueprint.ComponentBlueprint;
 import com.yesman.akythera.platform.ModPlatformProvider;
 import net.minecraft.core.Registry;
+import com.yesman.akythera.api.world.ability.AbilityEffect;
+import com.yesman.akythera.core.blueprint.AbilityBlueprint;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.Item;
@@ -40,6 +44,10 @@ public final class AkytheraRegistries {
         public static final ResourceKey<Registry<BlendSpace2D>> BLEND_SPACE_2D_KEY = createRegistryKey("blend_space_2d");
         public static final ResourceKey<Registry<EntityPatchBlueprint>> ENTITY_PATCH_KEY = createRegistryKey("script/entity_patch");
         public static final ResourceKey<Registry<ItemPatchBlueprint>> ITEM_PATCH_KEY = createRegistryKey("item_patch");
+        public static final ResourceKey<Registry<AbilityEffect>> ABILITY_EFFECT_KEY = createRegistryKey("ability_effect");
+        public static final ResourceKey<Registry<AbilityBlueprint>> ABILITY_KEY = createRegistryKey("ability");
+        public static final ResourceKey<Registry<InputAction>> INPUT_ACTION_KEY = createRegistryKey("input_action");
+        public static final ResourceKey<Registry<AbilityCueBlueprint>> ABILITY_CUE_KEY = createRegistryKey("ability_cue");
 
         static {
             ModPlatformProvider.get().createDataPackRegistry(ANIM_MONTAGE_KEY, AnimationMontage.CODEC);
@@ -48,6 +56,10 @@ public final class AkytheraRegistries {
             ModPlatformProvider.get().createDataPackRegistry(ANIMATOR_SCRIPT_KEY, DataDrivenAnimatorScript.AnimatorScriptBlueprint.CODEC);
             ModPlatformProvider.get().createDataPackRegistry(ENTITY_PATCH_KEY, EntityPatchBlueprint.CODEC);
             ModPlatformProvider.get().createDataPackRegistry(ITEM_PATCH_KEY, ItemPatchBlueprint.CODEC);
+            ModPlatformProvider.get().createDataPackRegistry(ABILITY_EFFECT_KEY, AbilityEffect.CODEC);
+            ModPlatformProvider.get().createDataPackRegistry(ABILITY_KEY, AbilityBlueprint.CODEC);
+            ModPlatformProvider.get().createDataPackRegistry(INPUT_ACTION_KEY, InputAction.CODEC);
+            ModPlatformProvider.get().createDataPackRegistry(ABILITY_CUE_KEY, AbilityCueBlueprint.CODEC);
         }
     }
 

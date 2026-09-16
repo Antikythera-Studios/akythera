@@ -1,6 +1,10 @@
 package com.yesman.akythera.fabric;
 
 import com.yesman.akythera.api.lifecycle.ComponentsFactory;
+import com.yesman.akythera.api.event.BuiltInEventHooks;
+import com.yesman.akythera.api.event.entity.EntityTrackingEvent;
+import com.yesman.akythera.api.world.patch.AkytheraPatches;
+import net.fabricmc.fabric.api.networking.v1.EntityTrackingEvents;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.networking.NetworkingHelper;
 import com.yesman.akythera.fabric.initializer.ComponentFactoryInitializer;
@@ -59,5 +63,29 @@ public final class AkytheraFabric implements ModInitializer {
 
         // Register commands
         CommandRegistrationCallback.EVENT.register((dispatcher, _, _) -> Akythera.onRegisterCommands(dispatcher));
+
+        registerTrackingEvents();
+    }
+
+    /// Posts [BuiltInEventHooks.Entity#TRACKING_START] and `TRACKING_END`, which the engine declares
+    /// and listens to but no loader fired.
+    private static void registerTrackingEvents() {
+        EntityTrackingEvents.START_TRACKING.register((trackedEntity, player) ->
+            AkytheraPatches.getEntityPatchOptional(trackedEntity).ifPresent(entityPatch ->
+                BuiltInEventHooks.Entity.TRACKING_START.postWithListener(
+                    new EntityTrackingEvent.Start(entityPatch, player),
+                    entityPatch.getEntityEventListener()
+                )
+            )
+        );
+
+        EntityTrackingEvents.STOP_TRACKING.register((trackedEntity, player) ->
+            AkytheraPatches.getEntityPatchOptional(trackedEntity).ifPresent(entityPatch ->
+                BuiltInEventHooks.Entity.TRACKING_END.postWithListener(
+                    new EntityTrackingEvent.Stop(entityPatch, player),
+                    entityPatch.getEntityEventListener()
+                )
+            )
+        );
     }
 }

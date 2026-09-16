@@ -39,10 +39,10 @@ public record BranchNode(
         context.enter(this);
         boolean b = Boolean.TRUE.equals(boolFunction.execute(script, context));
 
-        if (b) {
-            for (FlowNode node : whenTrue) node.execute(script, context);
-        } else {
-            for (FlowNode node : whenFalse) node.execute(script, context);
+        for (FlowNode node : b ? whenTrue : whenFalse) {
+            if (context.isReturning()) break;
+
+            node.execute(script, context);
         }
 
         // Closing here keeps the frame open across the arm, so the statements it chose are recorded
@@ -61,7 +61,7 @@ public record BranchNode(
 
         private Builder(final FlowFunctionNode boolFunction) {
             if (boolFunction.function().functionSignature().returnType() != boolean.class
-                || boolFunction.function().functionSignature().returnType() != Boolean.class)
+                && boolFunction.function().functionSignature().returnType() != Boolean.class)
             {
                 throw new IllegalArgumentException("Only boolean|Boolean return types are allowed for Branching Node");
             }

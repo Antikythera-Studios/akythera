@@ -12,7 +12,10 @@ import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.helper.ParseUtils;
 import org.jspecify.annotations.Nullable;
 
+import net.minecraft.network.protocol.PacketFlow;
+
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -58,6 +61,20 @@ public final class ScriptVariables {
         return value;
     }
 
+    /// A copy of the values this instance holds right now.
+    ///
+    /// A callback sub-flow runs long after the entry point that built it returned, and [#reset] has
+    /// wiped the locals by then, so the callback reads its locals from this. Member variables still
+    /// resolve through the live script.
+    public ScriptVariables snapshot() {
+        ScriptVariables copy = new ScriptVariables();
+
+        copy.variables.putAll(variables);
+        copy.memberVariables.putAll(memberVariables);
+
+        return copy;
+    }
+
     public void reset() {
         // Remove local variables
         variables.entrySet().removeIf(entry -> !memberVariables.containsKey(entry.getKey()));
@@ -68,17 +85,57 @@ public final class ScriptVariables {
         return "Script Variables: " + variables + "\nmember variables: " + memberVariables;
     }
 
+    /// Which way a variable travels, and whether it travels at all.
+    public enum SyncDirection {
+        NONE,
+
+        /// The server owns it and mirrors it to whoever instantiates the ability.
+        SERVER_TO_CLIENT,
+
+        /// The owner's client writes it and sends it with its activation request.
+        CLIENT_TO_SERVER;
+
+        static final Codec<SyncDirection> CODEC = Codec.STRING.xmap(
+            name -> ParseUtils.enumValueOfOrNull(SyncDirection.class, name) == null
+                ? NONE
+                : ParseUtils.enumValueOfOrNull(SyncDirection.class, name),
+            value -> value.name().toLowerCase(Locale.ROOT)
+        );
+    }
+
     /// @param defaultVal allowed only for primitives or string. No default value of references.
-    public record VariableInfo(String name, ScriptType type, @Nullable Object defaultVal) {
+    /// @param sync       forced to [SyncDirection#NONE] when the type carries no stream codec
+    public record VariableInfo(
+        String name, ScriptType type, @Nullable Object defaultVal, SyncDirection sync
+    ) {
+        public VariableInfo(final String name, final ScriptType type, final @Nullable Object defaultVal) {
+            this(name, type, defaultVal, SyncDirection.NONE);
+        }
+
+        public VariableInfo {
+            if (!type.isSyncable()) sync = SyncDirection.NONE;
+        }
+
         public static final Codec<VariableInfo> CODEC = RecordCodecBuilder.create(
             instance ->
                 instance.group(
                     Codec.STRING.fieldOf("name").forGetter(VariableInfo::name),
                     AkytheraRegistries.Frozen.SCRIPT_TYPE.byNameCodec().fieldOf("type").forGetter(VariableInfo::type),
-                    Codec.PASSTHROUGH.optionalFieldOf("default_value").forGetter(ParseUtils.provideOptional(VariableInfo::valueAsDynamic))
+                    Codec.PASSTHROUGH.optionalFieldOf("default_value").forGetter(ParseUtils.provideOptional(VariableInfo::valueAsDynamic)),
+                    SyncDirection.CODEC.optionalFieldOf("sync", SyncDirection.NONE).forGetter(VariableInfo::sync)
                 )
-                .apply(instance, (name, type, defaultValue) -> new VariableInfo(name, type, decodeDefaultValue(type, defaultValue)))
+                .apply(instance, (name, type, defaultValue, sync) ->
+                    new VariableInfo(name, type, decodeDefaultValue(type, defaultValue), sync))
         );
+
+        /// Whether this variable crosses the wire in `flow`'s direction.
+        public boolean travels(final PacketFlow flow) {
+            return switch (sync) {
+                case NONE -> false;
+                case SERVER_TO_CLIENT -> flow == PacketFlow.CLIENTBOUND;
+                case CLIENT_TO_SERVER -> flow == PacketFlow.SERVERBOUND;
+            };
+        }
 
         // For codec
         private Dynamic<?> valueAsDynamic() {

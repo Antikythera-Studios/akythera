@@ -30,6 +30,9 @@ public final class AkytheraComponentBlueprints {
     public static final Holder<MapCodec<? extends ComponentBlueprint<?, ?>>> ARMATURE =
         ENTITY_PATCH_REGISTRAR.register("armature", () -> ArmatureComponentBlueprint.CODEC);
 
+    public static final Holder<MapCodec<? extends ComponentBlueprint<?, ?>>> ABILITY_SYSTEM =
+        ENTITY_PATCH_REGISTRAR.register("ability_system", () -> AbilitySystemComponentBlueprint.CODEC);
+
     public static final Holder<MapCodec<? extends ComponentBlueprint<?, ?>>> BONE_SOCKET =
         ENTITY_PATCH_REGISTRAR.register("bone_socket", () -> BoneSocket.CODEC);
 

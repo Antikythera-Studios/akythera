@@ -50,9 +50,39 @@ public final class EnumerableDataBlockManager<T extends EnumerableDataBlock> {
     /// Used for getting data pack directory
     private final ResourceKey<Registry<T>> directoryKey;
 
+    /// The one namespace a path-identified type registers under, or null when identifiers carry
+    /// their own.
+    private final @Nullable String canonicalNamespace;
+
+    /// Builds the ancestor entries a path-identified type generates, or null when this type is not
+    /// one.
+    private final @Nullable Supplier<T> implicitParentFactory;
+
+    /// A type whose identity is its path alone: one namespace, implicit ancestors, and a throw when
+    /// two entries land on one path.
+    public EnumerableDataBlockManager(
+        final String enumName,
+        final MapCodec<T> mapCodec,
+        final Supplier<T> implicitParentFactory
+    ) {
+        this(Akythera.MODID, enumName, mapCodec, Akythera.MODID, implicitParentFactory);
+    }
+
     public EnumerableDataBlockManager(final String namespace, final String enumName, final MapCodec<T> mapCodec) {
+        this(namespace, enumName, mapCodec, null, null);
+    }
+
+    private EnumerableDataBlockManager(
+        final String namespace,
+        final String enumName,
+        final MapCodec<T> mapCodec,
+        final @Nullable String canonicalNamespace,
+        final @Nullable Supplier<T> implicitParentFactory
+    ) {
         this.enumType = enumName;
         this.mapCodec = mapCodec;
+        this.canonicalNamespace = canonicalNamespace;
+        this.implicitParentFactory = implicitParentFactory;
 
         // codecs are memorized suppliers for non-
         byNameCodec = Suppliers.memoize(() -> Identifier.CODEC.comapFlatMap(
@@ -63,14 +93,25 @@ public final class EnumerableDataBlockManager<T extends EnumerableDataBlock> {
         ));
 
         streamCodec = Suppliers.memoize(() -> new StreamCodec<> () {
+            /// Written by identifier, not by ordinal. An ordinal is assigned from a counter that
+            /// only ever climbs, so a client that has already loaded one world numbers data pack
+            /// entries differently from the next server it joins.
             @Override
             public void encode(@NonNull RegistryFriendlyByteBuf buffer, @NonNull T obj) {
-                buffer.writeInt(obj.universalOrdinal());
+                Identifier identifier = derefIdentifier(obj);
+
+                if (identifier == null) {
+                    throw new IllegalStateException(
+                        "No identifier registered in " + enumType + " for " + obj.getClass().getName()
+                    );
+                }
+
+                Identifier.STREAM_CODEC.encode(buffer, identifier);
             }
 
             @Override
             public @NonNull T decode(@NonNull RegistryFriendlyByteBuf buffer) {
-                return getOrThrow(buffer.readInt());
+                return getOrThrow(Identifier.STREAM_CODEC.decode(buffer));
             }
         });
 
@@ -221,6 +262,69 @@ public final class EnumerableDataBlockManager<T extends EnumerableDataBlock> {
         }
     }
 
+    /// Rewrites `parsed` into what a path-identified type actually registers: one namespace, no two
+    /// entries on one path, no entry shadowing a code-registered entry, and an entry for every
+    /// ancestor path no file declared. Other types pass through untouched.
+    ///
+    /// @throws IllegalStateException when two entries resolve to the same path
+    @ApiStatus.Internal
+    public Map<Identifier, T> canonicalizeDataPackEntries(final Map<Identifier, T> parsed) {
+        if (canonicalNamespace == null || implicitParentFactory == null) return parsed;
+
+        Map<String, Identifier> declaredBy = new HashMap<>();
+        Map<Identifier, T> canonical = new TreeMap<>();
+
+        for (Map.Entry<Identifier, T> entry : parsed.entrySet()) {
+            String path = entry.getKey().getPath();
+            Identifier declared = declaredBy.putIfAbsent(path, entry.getKey());
+
+            if (declared != null) {
+                throw new IllegalStateException(
+                    "Two " + enumType + " entries resolve to the path " + path + ": "
+                        + declared + " and " + entry.getKey()
+                );
+            }
+
+            Identifier identifier = Identifier.fromNamespaceAndPath(canonicalNamespace, path);
+            T registered = enumsByIdentifier.get(identifier);
+
+            // A code-registered entry survives reloads and a data pack one does not, so the
+            // hardcoded entry keeps the path.
+            if (registered != null && hardcodedEnums.contains(registered)) {
+                Akythera.LOGGER.warn(
+                    "Data pack {} declares {}, which a built-in entry already owns. Dropped.",
+                    entry.getKey(), path
+                );
+
+                continue;
+            }
+
+            canonical.put(identifier, entry.getValue());
+        }
+
+        for (Identifier identifier : Set.copyOf(canonical.keySet())) {
+            addImplicitParents(canonical, identifier.getPath());
+        }
+
+        return canonical;
+    }
+
+    /// Adds an entry for every ancestor segment of `path` that neither a file nor code declared.
+    private void addImplicitParents(final Map<Identifier, T> canonical, final String path) {
+        int cut = path.lastIndexOf('/');
+
+        while (cut > 0) {
+            String parent = path.substring(0, cut);
+            Identifier identifier = Identifier.fromNamespaceAndPath(canonicalNamespace, parent);
+
+            if (canonical.containsKey(identifier) || enumsByIdentifier.containsKey(identifier)) return;
+
+            canonical.put(identifier, implicitParentFactory.get());
+            cut = parent.lastIndexOf('/');
+        }
+    }
+
+
     @ApiStatus.Internal
     public void clearDataPackEntries() {
         // Clear non-datapack objects
@@ -280,6 +384,11 @@ public final class EnumerableDataBlockManager<T extends EnumerableDataBlock> {
 
     public Codec<T> getNameCodec() {
         return byNameCodec.get();
+    }
+
+    /// The data block type's name, which is also its data pack directory.
+    public String getEnumType() {
+        return enumType;
     }
 
     public MapCodec<T> getMapCodec() {

@@ -8,6 +8,8 @@ import com.yesman.akythera.client.core.shader.backend.impl.gl.GlComputeBackend;
 import com.yesman.akythera.client.core.shader.backend.impl.vulkan.VulkanComputeBackend;
 import com.yesman.akythera.client.core.shader.backend.setup.VanillaAnimationComputeShader;
 import com.yesman.akythera.client.gui.widget.BuiltInButtonTheme;
+import com.yesman.akythera.client.input.AbilityInputBinder;
+import com.yesman.akythera.client.input.AkytheraKeyMappings;
 import com.yesman.akythera.client.gui.widget.common.WidgetTheme;
 import com.yesman.akythera.compat.CompatibleMod;
 import com.yesman.akythera.core.Akythera;
@@ -24,10 +26,10 @@ public final class AkytheraClient {
 
     /// Called on each mod loader's mod entry point class's constructor
     public static void onModConstructed() {
-        //InputAction.ENUM_MANAGER.registerEnumCls(Akythera.MODID, EpicFightInputAction.class);
-        //InputAction.ENUM_MANAGER.registerEnumCls("minecraft", MinecraftInputAction.class);
         //WidgetTheme.ENUM_MANAGER.registerEnumCls(Akythera.MODID, ColorDeterminator.Theme.class);
         WidgetTheme.ENUM_MANAGER.registerEnumCls(Akythera.MODID, BuiltInButtonTheme.class);
+        AkytheraKeyMappings.bootStrap();
+        AbilityInputBinder.registerEvents();
     }
 
     /// Called on mod loader lifecycle when the mod initializes
@@ -50,7 +52,6 @@ public final class AkytheraClient {
             .filter(Objects::nonNull)
             .forEach(IClientModPlugin::onInitializeClient);
 
-        //InputAction.ENUM_MANAGER.loadEnum();
         WidgetTheme.ENUM_MANAGER.loadEnum();
 
         // Renderers key off the collider type constants, so they bind after the enum loads.
