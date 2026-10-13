@@ -9,6 +9,7 @@ import com.yesman.akythera.client.core.asset.loader.MeshLoader;
 import com.yesman.akythera.client.core.asset.mesh.Mesh;
 import com.yesman.akythera.client.core.asset.mesh.SkeletalMesh;
 import com.yesman.akythera.client.core.asset.mesh.StaticMesh;
+import com.yesman.akythera.client.core.asset.mesh.VanillaModelBaker;
 import com.yesman.akythera.client.core.renderer.PatchModelRenderer;
 import com.yesman.akythera.core.asset.loader.AssetLoader;
 import com.yesman.akythera.core.asset.loader.ResourceLoadingFailureException;
@@ -89,6 +90,8 @@ public final class MeshManager extends DynamicAssetManager<@NonNull Mesh<?>> {
             // Explicit call to release buffers
             if (mesh != null) mesh.close();
         }
+
+        VanillaModelBaker.clear();
 
         super.onAssetReloaded();
     }

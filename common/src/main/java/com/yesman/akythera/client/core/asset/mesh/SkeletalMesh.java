@@ -15,6 +15,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
+import org.joml.Vector2f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 import org.jspecify.annotations.NonNull;
@@ -194,6 +195,11 @@ public class SkeletalMesh implements Mesh<SkeletalMesh.SkeletalMeshPart> {
         );
     }
 
+    /// The UV at `index`, the index space [SkeletalMeshPart#getUvIndex] answers in, into `dest`.
+    public Vector2f getUv(final int index, final Vector2f dest) {
+        return dest.set(uvs.getFloat(Mesh.byteIndex(index * 2)), uvs.getFloat(Mesh.byteIndex(index * 2 + 1)));
+    }
+
     /// First entry of the bone–weight pairs deforming the position at `index`.
     public int getDeformationRangeStart(final int index) {
         return deformationFromToIndices.getInt(Mesh.byteIndex(index * 2));
@@ -202,6 +208,16 @@ public class SkeletalMesh implements Mesh<SkeletalMesh.SkeletalMeshPart> {
     /// One past the last entry of the bone–weight pairs deforming the position at `index`.
     public int getDeformationRangeEnd(final int index) {
         return deformationFromToIndices.getInt(Mesh.byteIndex(index * 2 + 1));
+    }
+
+    /// The bone id of the bone–weight pair at `entry`.
+    public int getDeformationBone(final int entry) {
+        return deformBoneIndices.getInt(Mesh.byteIndex(entry));
+    }
+
+    /// The weight of the bone–weight pair at `entry`.
+    public float getDeformationWeight(final int entry) {
+        return weights.getFloat(Mesh.byteIndex(deformWeightIndices.getInt(Mesh.byteIndex(entry))));
     }
 
     @Override
@@ -407,6 +423,11 @@ public class SkeletalMesh implements Mesh<SkeletalMesh.SkeletalMeshPart> {
         /// The position index of the `vertex`-th vertex of this part's triangle list.
         public int getPositionIndex(final int vertex) {
             return drawIndices.getInt(Mesh.byteIndex(vertex * 3));
+        }
+
+        /// The UV index of the `vertex`-th vertex of this part's triangle list.
+        public int getUvIndex(final int vertex) {
+            return drawIndices.getInt(Mesh.byteIndex(vertex * 3 + 2));
         }
 
         public SkeletalMeshPartBufferView getBufferView() {

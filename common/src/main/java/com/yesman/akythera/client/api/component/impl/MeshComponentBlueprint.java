@@ -75,7 +75,7 @@ public record MeshComponentBlueprint(
     }
 
     /// The armature that poses this mesh: the host itself, the one a socket rides, or a patch's first.
-    private static @Nullable ArmatureComponent armatureOf(final ComponentAttachable host) {
+    static @Nullable ArmatureComponent armatureOf(final ComponentAttachable host) {
         return switch (host) {
             case ArmatureComponent armature -> armature;
             case TransformSocket socket -> socket.getArmature();

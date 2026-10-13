@@ -61,7 +61,8 @@ public abstract class AnimationComputeShader implements AutoCloseable {
         vertexCount = count;
 
         ByteBuffer vertexData = MemoryUtil.memAlloc(vertexCount * VERTEX_STRIDE);
-        ByteBuffer weightMappingData = MemoryUtil.memAlloc(meshBuilder.affectingBoneIdArray.length * BONE_WEIGHT_STRIDE);
+        // A mesh no bone deforms still binds one zeroed entry: a storage buffer cannot be empty
+        ByteBuffer weightMappingData = MemoryUtil.memCalloc(Math.max(1, meshBuilder.affectingBoneIdArray.length) * BONE_WEIGHT_STRIDE);
 
         try {
             int partIndex = 0;
@@ -94,7 +95,7 @@ public abstract class AnimationComputeShader implements AutoCloseable {
             }
 
             vertexData.flip();
-            weightMappingData.flip();
+            weightMappingData.clear();
 
             ComputeBackend backend = ComputeBackends.get();
 

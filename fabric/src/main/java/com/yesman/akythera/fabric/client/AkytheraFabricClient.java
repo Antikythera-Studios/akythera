@@ -3,6 +3,7 @@ package com.yesman.akythera.fabric.client;
 import com.yesman.akythera.api.asset.animation.AnimationManager;
 import com.yesman.akythera.api.asset.armature.ArmatureManager;
 import com.yesman.akythera.api.asset.physics.ArmaturePhysicsManager;
+import com.yesman.akythera.client.api.lifecycle.ClientComponentsFactory;
 import com.yesman.akythera.client.api.mesh.MeshManager;
 import com.yesman.akythera.client.core.AkytheraClient;
 import com.yesman.akythera.client.input.AkytheraKeyMappings;
@@ -14,13 +15,35 @@ import fuzs.forgeconfigapiport.fabric.api.v5.ConfigRegistry;
 import fuzs.forgeconfigapiport.fabric.api.v5.ModConfigEvents;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
+import net.fabricmc.fabric.api.client.rendering.v1.ArmorRenderer;
 import net.fabricmc.fabric.api.resource.v1.ResourceLoader;
+import net.fabricmc.fabric.impl.client.rendering.ArmorRendererRegistryImpl;
+import net.minecraft.client.model.HumanoidModel;
+import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
 import net.minecraft.server.packs.PackType;
 import net.neoforged.fml.config.ModConfig;
 
 public final class AkytheraFabricClient implements ClientModInitializer {
+    @SuppressWarnings("unchecked")
     public AkytheraFabricClient() {
         AkytheraClient.onModConstructed();
+
+        ClientComponentsFactory.getImpl().setArmorSubmitter((poseStack, submitNodeCollector, stack, state, slot, lightCoords, parentModel) -> {
+            ArmorRenderer armorRenderer = ArmorRendererRegistryImpl.get(stack.getItem());
+
+            if (armorRenderer == null
+                || !(state instanceof HumanoidRenderState humanoidState)
+                || !(parentModel instanceof HumanoidModel<?> humanoidModel)
+            ) {
+                return false;
+            }
+
+            armorRenderer.render(
+                poseStack, submitNodeCollector, stack, humanoidState, slot, lightCoords, (HumanoidModel<HumanoidRenderState>) humanoidModel
+            );
+
+            return true;
+        });
     }
 
     @Override

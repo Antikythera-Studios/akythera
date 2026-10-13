@@ -3,6 +3,7 @@ package com.yesman.akythera.neoforged.client.core;
 import com.yesman.akythera.api.asset.animation.AnimationManager;
 import com.yesman.akythera.api.asset.armature.ArmatureManager;
 import com.yesman.akythera.api.asset.physics.ArmaturePhysicsManager;
+import com.yesman.akythera.client.api.lifecycle.ClientComponentsFactory;
 import com.yesman.akythera.client.api.mesh.MeshManager;
 import com.yesman.akythera.client.config.AkytheraClientConfig;
 import com.yesman.akythera.client.core.AkytheraClient;
@@ -17,8 +18,10 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.config.ModConfigEvent;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.neoforge.client.ClientHooks;
 import net.neoforged.neoforge.client.event.AddClientReloadListenersEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
+import net.neoforged.neoforge.client.extensions.common.IClientItemExtensions;
 
 @Mod(value = Akythera.MODID, dist = Dist.CLIENT)
 public final class AkytheraNeoForgedClient {
@@ -27,6 +30,16 @@ public final class AkytheraNeoForgedClient {
         // a second instance would receive the client events with empty listener maps
         NeoForgedModPlatform neoForgedModPlatform = (NeoForgedModPlatform) ModPlatformProvider.get();
         AkytheraClient.onModConstructed();
+
+        ClientComponentsFactory.getImpl().setArmorModelResolver(
+            (stack, layerType, model) -> IClientItemExtensions.of(stack).getGenericArmorModel(stack, layerType, model)
+        );
+        ClientComponentsFactory.getImpl().setArmorTextureResolver(ClientHooks::getArmorTexture);
+        ClientComponentsFactory.getImpl().setArmorTintResolver((stack, layer, layerIndex) -> {
+            IClientItemExtensions extensions = IClientItemExtensions.of(stack);
+
+            return extensions.getArmorLayerTintColor(stack, layer, layerIndex, extensions.getDefaultDyeColor(stack));
+        });
 
         // Register mod bus events
         modEventBus.addListener(this::doClientStuff);
