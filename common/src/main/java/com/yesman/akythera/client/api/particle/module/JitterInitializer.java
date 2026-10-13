@@ -1,0 +1,39 @@
+package com.yesman.akythera.client.api.particle.module;
+
+import com.mojang.serialization.MapCodec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
+import com.yesman.akythera.api.data.modularize.node.PureNode;
+import com.yesman.akythera.client.api.particle.AkytheraParticle;
+import com.yesman.akythera.client.api.particle.AkytheraParticleEmitter;
+import com.yesman.akythera.core.blueprint.particle.ParticleInitializerBlueprint;
+
+/// Changes a particle's lifetime by a random amount up to `spread` either way. A lifetime never drops below one tick.
+///
+/// @param spread in ticks. Zero when unset
+public record JitterInitializer(
+    @ModuleParameter(int.class) PureNode spread
+) implements ParticleInitializerBlueprint, ParticleInitializerModule {
+    public static final MapCodec<JitterInitializer> MAP_CODEC = RecordCodecBuilder.mapCodec(
+        instance ->
+            instance.group(
+                ParticleModuleContext.parameter("spread").forGetter(JitterInitializer::spread)
+            ).apply(instance, JitterInitializer::new)
+    );
+
+    @Override
+    public void initialize(final AkytheraParticle particle) {
+        int spread = Math.abs(new ParticleModuleContext(particle, "jitter").evaluateInt(this.spread, 0));
+
+        particle.setLifetime(Math.max(1, particle.getLifetime() + particle.getRandom().nextIntBetweenInclusive(-spread, spread)));
+    }
+
+    @Override
+    public ParticleInitializerModule instantiate(final AkytheraParticleEmitter emitter) {
+        return this;
+    }
+
+    @Override
+    public MapCodec<JitterInitializer> mapCodec() {
+        return MAP_CODEC;
+    }
+}

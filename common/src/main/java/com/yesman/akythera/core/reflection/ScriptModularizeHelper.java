@@ -1,13 +1,23 @@
 package com.yesman.akythera.core.reflection;
 
 import com.yesman.akythera.api.data.modularize.ScriptFunction;
+import com.yesman.akythera.api.data.modularize.ScriptType;
 import com.yesman.akythera.api.data.modularize.node.FlowFunctionNode;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.helper.ParseUtils;
 import com.yesman.akythera.platform.ModPlatform;
+import com.yesman.akythera.platform.ModPlatformProvider;
 import net.minecraft.util.StringUtil;
 import org.jspecify.annotations.Nullable;
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.Type;
+import org.objectweb.asm.tree.AnnotationNode;
+import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.FieldNode;
+import org.objectweb.asm.tree.MethodNode;
 
+import java.io.InputStream;
 import java.lang.invoke.*;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -15,12 +25,73 @@ import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.*;
 
-/// Scans a class and registers its methods as [ScriptFunction] entries, reflectively.
+/// Scans a class and registers its methods as [ScriptFunction] entries, reflectively. Also maps blueprint
+/// parents to the classes whose [BlueprintLayout] their editor shows.
 public final class ScriptModularizeHelper {
     private ScriptModularizeHelper() {}
+
+    /// The layout provider of each registered parent class, given the parent or subclass being edited.
+    private static final Map<Class<?>, UnaryOperator<Class<?>>> BLUEPRINT_PROVIDERS = new ConcurrentHashMap<>();
+
+    /// Every scanned layout, by provider.
+    private static final Map<Class<?>, BlueprintLayout> BLUEPRINT_LAYOUTS = new ConcurrentHashMap<>();
+
+    /// Lays out the blueprint editor of `parent` and of every subclass of it with `provider`'s annotated
+    /// members.
+    public static void registerBlueprintLayout(final Class<?> parent, final Class<?> provider) {
+        BLUEPRINT_PROVIDERS.put(parent, _ -> provider);
+    }
+
+    /// Lays out the blueprint editor of `parent` and of every subclass of it with the edited class's own
+    /// annotated members.
+    public static void registerBlueprintLayout(final Class<?> parent) {
+        BLUEPRINT_PROVIDERS.put(parent, UnaryOperator.identity());
+    }
+
+    /// The class whose layout the blueprint editor of `parent` shows, through the registration of its nearest
+    /// registered superclass. Null when none is registered.
+    public static @Nullable Class<?> blueprintLayoutProvider(final Class<?> parent) {
+        for (Class<?> type = parent; type != null; type = type.getSuperclass()) {
+            UnaryOperator<Class<?>> provider = BLUEPRINT_PROVIDERS.get(type);
+
+            if (provider != null) return provider.apply(parent);
+        }
+
+        return null;
+    }
+
+    /// The layout the blueprint editor of `parent` shows, see [#blueprintLayoutProvider]. Null when no
+    /// superclass of `parent` is registered.
+    public static @Nullable BlueprintLayout blueprintLayoutOf(final Class<?> parent) {
+        Class<?> provider = blueprintLayoutProvider(parent);
+
+        return provider == null ? null : scanBlueprintLayout(provider);
+    }
+
+    /// The [BlueprintField] `name` in the layout of `owner`, see [#blueprintLayoutOf].
+    ///
+    /// @throws IllegalArgumentException when that layout has no such field
+    public static BlueprintLayout.Variable blueprintFieldOf(final Class<?> owner, final String name) {
+        BlueprintLayout layout = blueprintLayoutOf(owner);
+        BlueprintLayout.Variable field = layout == null ? null : layout.field(name);
+
+        if (field == null) throw new IllegalArgumentException(owner.getName() + " has no blueprint field " + name);
+
+        return field;
+    }
+
+    /// `provider`'s [BlueprintLayout], scanned once.
+    ///
+    /// @throws IllegalStateException when a member breaks its annotation's contract
+    public static BlueprintLayout scanBlueprintLayout(final Class<?> provider) {
+        return BLUEPRINT_LAYOUTS.computeIfAbsent(provider, BlueprintLayout::scan);
+    }
 
     /// Get a registered modularized method by class and method name.
     ///
@@ -43,20 +114,62 @@ public final class ScriptModularizeHelper {
     }
 
     /// Make a custom script function which is expected to be used frequently.
+    ///
+    /// A [Number] of another type passed to a numeric parameter is converted with explicit-cast semantics
+    /// (e.g. `Double` -> `Integer`), the same as a scanned method.
     public static ScriptFunction makeCustomScript(
         final Object sam, final FunctionSignature signature, @Nullable final String label, @Nullable String category,
         @Nullable String desc, final boolean pure, final ScriptFunction.Usage usage
     ) {
         SamArity arity = arityOfSam(sam);
+        ScriptFunction.Metadata metadata = new ScriptFunction.Metadata(pure, false, label, category, desc, usage);
+        List<Class<?>> parameters = signature.parameters();
 
-        return wrap(arity, sam, signature, new ScriptFunction.Metadata(pure, false, label, category, desc, usage));
+        if (parameters.stream().noneMatch(parameter -> Number.class.isAssignableFrom(ParseUtils.box(parameter)))) {
+            return wrap(arity, sam, signature, metadata);
+        }
+
+        Method samMethod = Arrays.stream(arity.samInterface.getMethods())
+            .filter(method -> Modifier.isAbstract(method.getModifiers()))
+            .findFirst()
+            .orElseThrow();
+        MethodHandle impl;
+
+        try {
+            impl = MethodHandles.lookup().unreflect(samMethod).bindTo(sam);
+        } catch (IllegalAccessException e) {
+            throw new IllegalStateException("Failed at converting lambda: " + label, e);
+        }
+
+        for (int i = 0; i < parameters.size(); i++) {
+            Class<?> boxed = ParseUtils.box(parameters.get(i));
+
+            if (Number.class.isAssignableFrom(boxed)) {
+                impl = MethodHandles.filterArguments(impl, i, MethodHandles.insertArguments(COERCE_NUMBER, 0, boxed));
+            }
+        }
+
+        return wrap(arity, synthesize(arity, impl, String.valueOf(label)), signature, metadata);
     }
 
     /// Scan all annotated fields & methods to be used as [ScriptFunction]. Expose them to
     /// Akythera reflection system to allow building logics in data pack.
-    public static void scanScriptModulesAndRegister(final ModPlatform.Registrar<ScriptFunction> registrar, final Class<?> cls, final @Nullable String category, final ScriptFunction.Usage usage)
-        throws Throwable
-    {
+    ///
+    /// A class marked [com.yesman.akythera.core.reflection.ScriptType] is registered into `types` as well, under its
+    /// simple name in snake case.
+    public static void scanScriptModulesAndRegister(
+        final ModPlatform.Registrar<ScriptFunction> registrar,
+        final ModPlatform.Registrar<ScriptType> types,
+        final Class<?> cls,
+        final @Nullable String category,
+        final ScriptFunction.Usage usage
+    ) throws Throwable {
+        com.yesman.akythera.core.reflection.ScriptType scriptType = cls.getAnnotation(com.yesman.akythera.core.reflection.ScriptType.class);
+
+        if (scriptType != null && scriptType.autoRegister()) {
+            types.register(ParseUtils.camelToSnake(cls.getSimpleName()), () -> new ScriptType(cls));
+        }
+
         MethodHandles.Lookup lookup = MethodHandles.privateLookupIn(cls, MethodHandles.lookup());
 
         for (Field field : cls.getDeclaredFields()) {
@@ -116,6 +229,124 @@ public final class ScriptModularizeHelper {
                 new ScriptFunction.Metadata(scriptFuncAnnotation.pure(), !Modifier.isStatic(method.getModifiers()), label, methodCategory, scriptFuncAnnotation.desc(), scriptFuncAnnotation.usage())
             );
         }
+    }
+
+    /// [#scanScriptModulesAndRegister] for the client-only class `className` on a physical client. A dedicated
+    /// server, which can't load the class, reads its class file instead and registers a [#placeholder] under each
+    /// function id the scan registers, and an `Object` type under its type id, so a blueprint naming them still
+    /// decodes there.
+    public static void scanClientScriptModulesAndRegister(
+        final ModPlatform.Registrar<ScriptFunction> registrar,
+        final ModPlatform.Registrar<ScriptType> types,
+        final String className,
+        final @Nullable String category,
+        final ScriptFunction.Usage usage
+    ) throws Throwable {
+        if (ModPlatformProvider.get().getPhysicalSide().isClient()) {
+            scanScriptModulesAndRegister(registrar, types, Class.forName(className), category, usage);
+
+            return;
+        }
+
+        ClassNode node = new ClassNode();
+
+        try (InputStream stream = ScriptModularizeHelper.class.getClassLoader().getResourceAsStream(className.replace('.', '/') + ".class")) {
+            if (stream == null) throw new IllegalStateException("No class file for " + className);
+
+            new ClassReader(stream).accept(node, ClassReader.SKIP_CODE);
+        }
+
+        String typeName = ParseUtils.camelToSnake(className.substring(Math.max(className.lastIndexOf('.'), className.lastIndexOf('$')) + 1));
+        String base = typeName + "_";
+        AnnotationNode scriptType = annotationOf(node.visibleAnnotations, com.yesman.akythera.core.reflection.ScriptType.class);
+
+        if (scriptType != null && !Boolean.FALSE.equals(valueOf(scriptType, "autoRegister"))) {
+            types.register(typeName, () -> new ScriptType(Object.class));
+        }
+
+        for (FieldNode field : node.fields) {
+            AnnotationNode annotation = annotationOf(field.visibleAnnotations, ScriptField.class);
+
+            if (annotation == null) continue;
+
+            int receiver = (field.access & Opcodes.ACC_STATIC) == 0 ? 1 : 0;
+            String fieldName = ParseUtils.camelToSnake(field.name);
+
+            if (!Boolean.FALSE.equals(valueOf(annotation, "makeGetter"))) {
+                ScriptFunction getter = placeholder(Collections.nCopies(receiver, "owner"), false, true, base + "get_" + fieldName, usage);
+                registrar.register(base + "get_" + fieldName, () -> getter);
+            }
+
+            if (!Boolean.FALSE.equals(valueOf(annotation, "makeSetter")) && (field.access & Opcodes.ACC_FINAL) == 0) {
+                ScriptFunction setter = placeholder(Collections.nCopies(receiver + 1, "value"), false, true, base + "set_" + fieldName, usage);
+                registrar.register(base + "set_" + fieldName, () -> setter);
+            }
+        }
+
+        for (MethodNode method : node.methods) {
+            if ((method.access & (Opcodes.ACC_SYNTHETIC | Opcodes.ACC_BRIDGE | Opcodes.ACC_VARARGS)) != 0) continue;
+
+            AnnotationNode annotation = annotationOf(method.visibleAnnotations, com.yesman.akythera.core.reflection.ScriptFunction.class);
+            int parameterCount = Type.getArgumentCount(method.desc) + ((method.access & Opcodes.ACC_STATIC) == 0 ? 1 : 0);
+
+            if (annotation == null || arityOf(parameterCount, false) == null) continue;
+
+            String name = base + ParseUtils.camelToSnake(method.name);
+            ScriptFunction function = placeholder(
+                Collections.nCopies(parameterCount, "parameter"),
+                Type.getReturnType(method.desc) == Type.VOID_TYPE,
+                Boolean.TRUE.equals(valueOf(annotation, "pure")),
+                name,
+                valueOf(annotation, "usage") instanceof String[] usageEnum ? ScriptFunction.Usage.valueOf(usageEnum[1]) : ScriptFunction.Usage.SCRIPT
+            );
+            registrar.register(name, () -> function);
+        }
+    }
+
+    /// A function taking `parameterNames` and answering null. Stands in on a dedicated server for a function
+    /// that names client-only classes, under the same id, so a blueprint naming it still decodes there.
+    public static ScriptFunction placeholder(
+        final List<String> parameterNames, final boolean returnsVoid, final boolean pure, final String label, final ScriptFunction.Usage usage
+    ) {
+        SamArity arity = arityOf(parameterNames.size(), returnsVoid);
+
+        if (arity == null) throw new IllegalArgumentException("No function shape takes " + parameterNames.size() + " parameters");
+
+        Class<?>[] parameters = new Class<?>[parameterNames.size()];
+        Arrays.fill(parameters, Object.class);
+
+        MethodType type = MethodType.methodType(returnsVoid ? void.class : Object.class, parameters);
+
+        return wrap(
+            arity,
+            synthesize(arity, MethodHandles.empty(type), label),
+            FunctionSignature.create(type.returnType(), parameterNames, parameters),
+            new ScriptFunction.Metadata(pure, false, label, null, null, usage)
+        );
+    }
+
+    /// The annotation of `type` among `annotations`, or null when it is absent.
+    private static @Nullable AnnotationNode annotationOf(final @Nullable List<AnnotationNode> annotations, final Class<?> type) {
+        if (annotations == null) return null;
+
+        String descriptor = Type.getDescriptor(type);
+
+        for (AnnotationNode annotation : annotations) {
+            if (annotation.desc.equals(descriptor)) return annotation;
+        }
+
+        return null;
+    }
+
+    /// The value `annotation` sets for `name`, or null when it leaves the default.
+    private static @Nullable Object valueOf(final AnnotationNode annotation, final String name) {
+        if (annotation.values == null) return null;
+
+        for (int i = 0; i < annotation.values.size(); i += 2) {
+            if (annotation.values.get(i).equals(name)) return annotation.values.get(i + 1);
+        }
+
+        return null;
     }
 
     /// Converts the method's handle into a pure functional-interface instance for `arity`.
@@ -183,6 +414,9 @@ public final class ScriptModularizeHelper {
     // (Number) -> primitive conversion handles, one per numeric primitive.
     private static final MethodHandle BYTE_VALUE, SHORT_VALUE, INT_VALUE, LONG_VALUE, FLOAT_VALUE, DOUBLE_VALUE;
 
+    /// [#coerceNumber] as a handle.
+    private static final MethodHandle COERCE_NUMBER;
+
     static {
         try {
             MethodHandles.Lookup lookup = MethodHandles.publicLookup();
@@ -192,6 +426,9 @@ public final class ScriptModularizeHelper {
             LONG_VALUE   = lookup.findVirtual(Number.class, "longValue",   MethodType.methodType(long.class));
             FLOAT_VALUE  = lookup.findVirtual(Number.class, "floatValue",  MethodType.methodType(float.class));
             DOUBLE_VALUE = lookup.findVirtual(Number.class, "doubleValue", MethodType.methodType(double.class));
+            COERCE_NUMBER = MethodHandles.lookup().findStatic(
+                ScriptModularizeHelper.class, "coerceNumber", MethodType.methodType(Object.class, Class.class, Object.class)
+            );
         } catch (ReflectiveOperationException e) {
             throw new ExceptionInInitializerError(e);
         }
@@ -212,6 +449,19 @@ public final class ScriptModularizeHelper {
         }
 
         return impl;
+    }
+
+    /// `value` as the boxed numeric `type`, converted with explicit-cast semantics when it is another
+    /// [Number]. Anything else, null included, is returned as is.
+    private static @Nullable Object coerceNumber(final Class<?> type, final @Nullable Object value) {
+        if (!(value instanceof Number number) || type.isInstance(value)) return value;
+        if (type == Byte.class) return number.byteValue();
+        if (type == Short.class) return number.shortValue();
+        if (type == Integer.class) return number.intValue();
+        if (type == Long.class) return number.longValue();
+        if (type == Float.class) return number.floatValue();
+        if (type == Double.class) return number.doubleValue();
+        return value;
     }
 
     /// The `(Number) -> param` conversion for a numeric parameter type, or null when the
@@ -337,18 +587,9 @@ public final class ScriptModularizeHelper {
 
     /// Detects which [SamArity] shape a raw functional-interface instance implements.
     private static SamArity arityOfSam(Object sam) {
-        if (sam instanceof Supplier<?>) return SamArity.SUPPLIER;
-        if (sam instanceof Runnable) return SamArity.RUNNABLE;
-        if (sam instanceof Consumer<?>) return SamArity.CONSUMER;
-        if (sam instanceof Function<?, ?>) return SamArity.UNI_FUNCTION;
-        if (sam instanceof BiFunction<?, ?, ?>) return SamArity.BI_FUNCTION;
-        if (sam instanceof ScriptFunction.TriFunction<?, ?, ?, ?>) return SamArity.TRI_FUNCTION;
-        if (sam instanceof ScriptFunction.QuadFunction<?, ?, ?, ?, ?>) return SamArity.QUAD_FUNCTION;
-        if (sam instanceof ScriptFunction.QuintFunction<?, ?, ?, ?, ?, ?>) return SamArity.PENTA_FUNCTION;
-        if (sam instanceof BiConsumer<?, ?>) return SamArity.BI_CONSUMER;
-        if (sam instanceof ScriptFunction.TriConsumer<?, ?, ?>) return SamArity.TRI_CONSUMER;
-        if (sam instanceof ScriptFunction.QuadConsumer<?, ?, ?, ?>) return SamArity.QUAD_CONSUMER;
-        if (sam instanceof ScriptFunction.QuintConsumer<?, ?, ?, ?, ?>) return SamArity.QUINT_CONSUMER;
+        for (SamArity arity : SamArity.values()) {
+            if (arity.samInterface.isInstance(sam)) return arity;
+        }
 
         throw new IllegalArgumentException("Unsupported functional interface for custom script: " + sam.getClass());
     }
@@ -380,18 +621,25 @@ public final class ScriptModularizeHelper {
 
     /// The `ModularizedFunction` shapes, picked by folded parameter count + void return.
     public enum SamArity {
-        SUPPLIER,
-        RUNNABLE,
-        CONSUMER,
-        UNI_FUNCTION,
-        BI_FUNCTION,
-        TRI_FUNCTION,
-        QUAD_FUNCTION,
-        PENTA_FUNCTION,
-        BI_CONSUMER,
-        TRI_CONSUMER,
-        QUAD_CONSUMER,
-        QUINT_CONSUMER
+        SUPPLIER(Supplier.class),
+        RUNNABLE(Runnable.class),
+        CONSUMER(Consumer.class),
+        UNI_FUNCTION(Function.class),
+        BI_FUNCTION(BiFunction.class),
+        TRI_FUNCTION(ScriptFunction.TriFunction.class),
+        QUAD_FUNCTION(ScriptFunction.QuadFunction.class),
+        PENTA_FUNCTION(ScriptFunction.QuintFunction.class),
+        BI_CONSUMER(BiConsumer.class),
+        TRI_CONSUMER(ScriptFunction.TriConsumer.class),
+        QUAD_CONSUMER(ScriptFunction.QuadConsumer.class),
+        QUINT_CONSUMER(ScriptFunction.QuintConsumer.class);
+
+        /// The functional interface of this shape.
+        private final Class<?> samInterface;
+
+        SamArity(final Class<?> samInterface) {
+            this.samInterface = samInterface;
+        }
     }
 
 }

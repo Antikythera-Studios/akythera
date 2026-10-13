@@ -21,11 +21,15 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 public final class PlayerAnimationLibraryPlugin implements IClientModPlugin {
+    /// Poses `modelPart` by `bone`.
+    ///
+    /// @param modelBoneTransform the bone's forward-bound transform in the patch's model space, the armature's own
+    ///                           transform applied
     public static void mapAnimation(
         @NonNull final Bone bone,
         @Nullable final Bone bendBone,
         @NonNull final Pose pose,
-        @NonNull final Matrix4f forwardBoundBoneTransform,
+        @NonNull final Matrix4f modelBoneTransform,
         @NonNull PlayerAnimBone palBone,
         @NonNull ModelPart modelPart
     ) {
@@ -44,7 +48,7 @@ public final class PlayerAnimationLibraryPlugin implements IClientModPlugin {
         transform.translate(0.0F, -1.501F, 0.0F);
 
         // Apply animation in mesh space
-        transform.mul(forwardBoundBoneTransform);
+        transform.mul(modelBoneTransform);
         transform.mul(bone.getInverseTransformToOrigin());
 
         // Minecraft model space coord -> Mesh space coord (where the center of each leg becomes [0, 0, 0])

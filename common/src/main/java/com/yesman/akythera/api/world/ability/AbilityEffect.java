@@ -1,10 +1,10 @@
 package com.yesman.akythera.api.world.ability;
 
 import com.mojang.serialization.Codec;
-import com.mojang.serialization.DataResult;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.data.serializable.AttributeModifierEntry;
+import com.yesman.akythera.core.reflection.ScriptType;
 import com.yesman.akythera.core.util.helper.ParseUtils;
 import net.minecraft.core.Holder;
 import net.minecraft.resources.Identifier;
@@ -15,10 +15,10 @@ import org.jspecify.annotations.Nullable;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /// A change an ability makes to its owner's [Attribute]s and [AbilityResource]s. One effect fills
 /// any of three roles: a Duration Effect, a Cooldown Effect or a Cost.
+@ScriptType(autoRegister = false)
 public final class AbilityEffect {
     public static final MapCodec<AbilityEffect> MAP_CODEC =
         RecordCodecBuilder.mapCodec(
@@ -27,7 +27,7 @@ public final class AbilityEffect {
                     Identifier.CODEC.fieldOf("id").forGetter(AbilityEffect::getId),
                     Modifier.CODEC.listOf().optionalFieldOf("modifiers", List.of())
                         .forGetter(AbilityEffect::getModifiers),
-                    enumCodec(ApplicationType.class).fieldOf("type")
+                    ParseUtils.enumCodec(ApplicationType.class).fieldOf("type")
                         .forGetter(AbilityEffect::getApplicationType),
                     Codec.INT.optionalFieldOf("duration", 0).forGetter(AbilityEffect::getDuration),
                     Codec.INT.optionalFieldOf("max_stack", 1).forGetter(AbilityEffect::getMaxStack)
@@ -114,40 +114,26 @@ public final class AbilityEffect {
         return maxStack;
     }
 
-    /// A lowercase enum name, reported as a [DataResult] error rather than thrown when unknown.
-    static <E extends Enum<E>> Codec<E> enumCodec(final Class<E> enumCls) {
-        return Codec.STRING.comapFlatMap(
-            name -> {
-                E value = ParseUtils.enumValueOfOrNull(enumCls, name);
-
-                return value == null
-                    ? DataResult.error(() -> "Unknown " + enumCls.getSimpleName() + ": " + name)
-                    : DataResult.success(value);
-            },
-            value -> value.name().toLowerCase(Locale.ROOT)
-        );
-    }
-
     public enum ApplicationType {
         INSTANT, DURATION, INFINITE
     }
 
     public record Modifier<T>(ModifierType modifierType, T modifyTarget) {
         public static final Codec<Modifier<?>> CODEC =
-            enumCodec(ModifierType.class).dispatch(
+            ParseUtils.enumCodec(ModifierType.class).dispatch(
                 "modifier_type",
                 Modifier::modifierType,
                 modifierType -> switch (modifierType) {
                     case ATTRIBUTE -> AttributeModifierEntry.CODEC
                         .xmap(
                             entry -> new Modifier<>(ModifierType.ATTRIBUTE, entry),
-                            modifier -> (AttributeModifierEntry)modifier.modifyTarget()
+                            Modifier::modifyTarget
                         )
                         .fieldOf("attribute_modifier");
                     case RESOURCE -> AbilityResourceSpec.CODEC
                         .xmap(
                             spec -> new Modifier<>(ModifierType.RESOURCE, spec),
-                            modifier -> (AbilityResourceSpec)modifier.modifyTarget()
+                            Modifier::modifyTarget
                         )
                         .fieldOf("resource");
                 }

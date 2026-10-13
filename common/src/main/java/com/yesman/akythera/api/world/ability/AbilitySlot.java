@@ -2,6 +2,7 @@ package com.yesman.akythera.api.world.ability;
 
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import com.yesman.akythera.core.reflection.ScriptType;
 import com.yesman.akythera.core.util.EnumerableDataBlock;
 import com.yesman.akythera.core.util.EnumerableDataBlockManager;
 import net.minecraft.resources.Identifier;
@@ -10,6 +11,7 @@ import net.minecraft.resources.Identifier;
 /// give names the slot it fills.
 ///
 /// Akythera declares no entries. Each project registers its own.
+@ScriptType(autoRegister = false)
 public interface AbilitySlot extends EnumerableDataBlock {
     EnumerableDataBlockManager<AbilitySlot> ENUM_MANAGER = new EnumerableDataBlockManager<>(
         "ability_slot",

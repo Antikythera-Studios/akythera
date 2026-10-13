@@ -9,7 +9,7 @@ import com.yesman.akythera.api.animation.notify.AnimationNotify;
 import com.yesman.akythera.api.animation.notify.AnimationNotifyState;
 import com.yesman.akythera.api.asset.AssetAccessor;
 import com.yesman.akythera.api.asset.animation.AnimationManager;
-import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.animation.AnimationLayerSignature;
 import com.yesman.akythera.core.animation.driver.AnimationMontagePlayer;
 import com.yesman.akythera.api.animation.impl.AkytheraAnimationLayerSignature;
@@ -22,10 +22,10 @@ import com.yesman.akythera.core.asset.armature.Armature;
 import com.yesman.akythera.core.asset.loader.ArmatureLoader;
 import com.yesman.akythera.core.math.TimeWindow;
 import com.yesman.akythera.core.math.Transform;
+import com.yesman.akythera.core.reflection.ScriptType;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.NonNull;
 
@@ -43,6 +43,7 @@ import java.util.function.Supplier;
 /// Inspired by Unreal Engine 5's
 /// [Animation Montage](https://dev.epicgames.com/documentation/unreal-engine/animation-montage-in-unreal-engine)
 /// system. Most terminologies are from there.
+@ScriptType(autoRegister = false)
 public final class AnimationMontage implements PlayableAnimation {
     public static final MapCodec<AnimationMontage> MAP_CODEC = RecordCodecBuilder.mapCodec(
         instance ->
@@ -239,7 +240,7 @@ public final class AnimationMontage implements PlayableAnimation {
     }
 
     @Override
-    public void tick(final EntityPatch<Entity> owner, final float prevElapsedTime, final float currentElapsedTime) {
+    public void tick(final ComponentAttachable owner, final float prevElapsedTime, final float currentElapsedTime) {
         notifyTrack.tick(this, owner, prevElapsedTime, currentElapsedTime);
     }
 

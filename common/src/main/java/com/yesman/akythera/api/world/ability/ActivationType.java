@@ -2,9 +2,11 @@ package com.yesman.akythera.api.world.ability;
 
 import com.yesman.akythera.api.input.TriggeringState;
 import com.yesman.akythera.api.input.TriggeringType;
+import com.yesman.akythera.core.reflection.ScriptType;
 
 /// A [SystematicAbility] preset wiring an input action's [TriggeringState]s to the ability
 /// lifecycle. A bare [Ability] has no activation type.
+@ScriptType(autoRegister = false)
 public enum ActivationType {
     /// Activates, then ends on the same tick.
     INSTANT,

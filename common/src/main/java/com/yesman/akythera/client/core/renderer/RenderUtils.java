@@ -1,16 +1,24 @@
 package com.yesman.akythera.client.core.renderer;
 
+import com.mojang.blaze3d.GpuFormat;
+import com.mojang.blaze3d.IndexType;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
+import com.mojang.blaze3d.pipeline.ColorTargetState;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.systems.ScissorState;
 import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.yesman.akythera.core.Akythera;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.BindGroupLayouts;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
@@ -28,10 +36,22 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import org.jspecify.annotations.Nullable;
 
+import java.nio.ByteBuffer;
 import java.util.Optional;
 import java.util.OptionalDouble;
 
 public final class RenderUtils {
+    /// The depth-only pass of [#drawBuffers]: `entity_translucent`'s shader and alpha cutout, writing depth and no
+    /// color.
+    private static final RenderPipeline FRONTMOST_DEPTH = RenderPipeline.builder(RenderPipelines.ENTITY_SNIPPET)
+        .withLocation(Akythera.identifier("pipeline/frontmost_depth"))
+        .withShaderDefine("ALPHA_CUTOUT", 0.1F)
+        .withShaderDefine("PER_FACE_LIGHTING")
+        .withBindGroupLayout(BindGroupLayouts.SAMPLER1)
+        .withColorTargetState(new ColorTargetState(Optional.empty(), GpuFormat.RGBA8_UNORM, ColorTargetState.WRITE_NONE))
+        .withCull(false)
+        .build();
+
     private RenderUtils() {
     }
 
@@ -42,15 +62,21 @@ public final class RenderUtils {
         poseStack.scale(-1.0F, -1.0F, 1.0F);
     }
 
-    /// Draws `meshData` through `renderType` on the spot.
+    /// Draws `meshData` through `renderType` on the spot, in the order of its sorted index buffer when it has one
+    /// ([MeshData#sortQuads]).
     ///
     /// The body of [PreparedRenderType#drawFromBuffer] with its whole-buffer vertex binding replaced
     /// by the transient slice the upload hands back. Geometry built inside the feature-render phase
     /// belongs in `FeatureFrameContext#stagedVertexBuffer` instead — this is for callers that never
     /// reach it, which since 26.2 have no other route to the GPU.
     public static void drawImmediate(final RenderType renderType, final MeshData meshData) {
+        drawImmediate(renderType, meshData, false);
+    }
+
+    /// [#drawImmediate(RenderType, MeshData)], coloring only the fragments nearest the camera when `frontmost`, see
+    /// [#drawBuffers].
+    public static void drawImmediate(final RenderType renderType, final MeshData meshData, final boolean frontmost) {
         MeshData.DrawState drawState = meshData.drawState();
-        PreparedRenderType prepared = renderType.prepare();
         CommandEncoder commandEncoder = RenderSystem.getDevice().createCommandEncoder();
 
         // Both reach the command encoder—the upload writes through it, and the sequential buffer
@@ -58,9 +84,52 @@ public final class RenderUtils {
         // before the pass opens.
         GpuBufferSlice vertices = commandEncoder.transientMemory()
             .uploadGpu(meshData.vertexBuffer(), drawState.format().getVertexSize(), GpuBuffer.USAGE_VERTEX);
-        RenderSystem.AutoStorageIndexBuffer indices = RenderSystem.getSequentialBuffer(drawState.primitiveTopology());
-        GpuBuffer indexBuffer = indices.getBuffer(drawState.indexCount());
+        ByteBuffer sortedIndices = meshData.indexBuffer();
 
+        if (sortedIndices != null) {
+            GpuBufferSlice uploaded = commandEncoder.transientMemory().uploadGpu(sortedIndices, drawState.indexType().bytes, GpuBuffer.USAGE_INDEX);
+            IndexType indexType = drawState.indexType();
+
+            drawBuffers(renderType, vertices, uploaded.buffer(), indexType, (int)(uploaded.offset() / indexType.bytes), drawState.indexCount(), frontmost);
+        } else {
+            RenderSystem.AutoStorageIndexBuffer indices = RenderSystem.getSequentialBuffer(drawState.primitiveTopology());
+
+            drawBuffers(renderType, vertices, indices.getBuffer(drawState.indexCount()), indices.type(), 0, drawState.indexCount(), frontmost);
+        }
+    }
+
+    /// Draws `indexCount` indices of `indexBuffer` from `firstIndex`, over `vertices`, through `renderType`.
+    ///
+    /// When `frontmost`, a depth-only pass runs first, with `renderType`'s textures and the entity pipelines' alpha
+    /// cutout ([#FRONTMOST_DEPTH]). The color pass then colors only the fragments nearest the camera, so a translucent
+    /// model shows none of its own faces behind them and is equally see-through all over. `renderType` must take
+    /// [DefaultVertexFormat#ENTITY] vertices.
+    public static void drawBuffers(
+        final RenderType renderType,
+        final GpuBufferSlice vertices,
+        final GpuBuffer indexBuffer,
+        final IndexType indexType,
+        final int firstIndex,
+        final int indexCount,
+        final boolean frontmost
+    ) {
+        PreparedRenderType prepared = renderType.prepare();
+
+        if (frontmost) drawPass(prepared, FRONTMOST_DEPTH, vertices, indexBuffer, indexType, firstIndex, indexCount);
+
+        drawPass(prepared, prepared.pipeline(), vertices, indexBuffer, indexType, firstIndex, indexCount);
+    }
+
+    /// One render pass drawing through `pipeline` with `prepared`'s target, uniforms and textures.
+    private static void drawPass(
+        final PreparedRenderType prepared,
+        final RenderPipeline pipeline,
+        final GpuBufferSlice vertices,
+        final GpuBuffer indexBuffer,
+        final IndexType indexType,
+        final int firstIndex,
+        final int indexCount
+    ) {
         RenderTarget renderTarget = prepared.outputTarget().getRenderTarget();
         GpuTextureView colorTexture = RenderSystem.outputColorTextureOverride != null
             ? RenderSystem.outputColorTextureOverride
@@ -72,15 +141,15 @@ public final class RenderUtils {
             : null;
 
         try (
-            RenderPass renderPass = commandEncoder.createRenderPass(
-                () -> "Akythera immediate draw with " + prepared.pipeline(),
+            RenderPass renderPass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
+                () -> "Akythera immediate draw with " + pipeline,
                 colorTexture,
                 Optional.empty(),
                 depthTexture,
                 OptionalDouble.empty()
             )
         ) {
-            renderPass.setPipeline(prepared.pipeline());
+            renderPass.setPipeline(pipeline);
 
             ScissorState scissorState = prepared.scissorState();
 
@@ -96,8 +165,8 @@ public final class RenderUtils {
                 renderPass.bindTexture(texture.name(), texture.textureView(), texture.sampler());
             }
 
-            renderPass.setIndexBuffer(indexBuffer, indices.type());
-            renderPass.drawIndexed(drawState.indexCount(), 1, 0, 0, 0);
+            renderPass.setIndexBuffer(indexBuffer, indexType);
+            renderPass.drawIndexed(indexCount, 1, firstIndex, 0, 0);
         }
     }
 

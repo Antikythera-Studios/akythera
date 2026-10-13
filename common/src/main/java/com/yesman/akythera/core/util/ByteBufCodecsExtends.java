@@ -4,6 +4,8 @@ import com.mojang.datafixers.util.Function7;
 import com.mojang.datafixers.util.Function8;
 import com.mojang.datafixers.util.Function9;
 import com.yesman.akythera.api.asset.AssetAccessor;
+import com.yesman.akythera.api.data.modularize.ScriptType;
+import com.yesman.akythera.core.registry.AkytheraRegistries;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -133,6 +135,26 @@ public interface ByteBufCodecsExtends {
                 return ResourceKey.create(ResourceKey.createRegistryKey(buffer.readIdentifier()), buffer.readIdentifier());
             }
         };
+    }
+
+    /// Stream codec for a subclass of `bound` registered as a [ScriptType], written as its
+    /// [AkytheraRegistries.Frozen#SCRIPT_TYPE] id.
+    ///
+    /// Encoding an unregistered class, or decoding an id that names no subclass of `bound`, throws.
+    static <T> StreamCodec<ByteBuf, Class<? extends T>> scriptClass(final Class<T> bound) {
+        return Identifier.STREAM_CODEC.map(
+            id -> AkytheraRegistries.Frozen.SCRIPT_TYPE.getOptional(id)
+                .orElseThrow(() -> new IllegalArgumentException("No script type " + id))
+                .type()
+                .asSubclass(bound),
+            type -> {
+                ScriptType scriptType = ScriptType.of(type);
+
+                if (scriptType == null) throw new IllegalArgumentException(type.getName() + " is no registered ScriptType");
+
+                return AkytheraRegistries.Frozen.SCRIPT_TYPE.getKey(scriptType);
+            }
+        );
     }
 
     /// Stream codec for [Vec3] TODO: Remove, the stream codec has implemented in vanilla [Vec3#STREAM_CODEC]

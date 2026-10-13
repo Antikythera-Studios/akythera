@@ -1,12 +1,17 @@
 package com.yesman.akythera.api.world.ability;
 
+import com.mojang.datafixers.util.Either;
 import com.yesman.akythera.api.component.DynamicPatchComponent;
+import com.yesman.akythera.api.event.BuiltInEventHooks;
+import com.yesman.akythera.api.data.modularize.ScriptType;
+import com.yesman.akythera.api.component.PatchComponent;
 import com.yesman.akythera.api.input.InputAction;
 import com.yesman.akythera.api.component.TickableDynamicComponent;
 import com.yesman.akythera.api.component.UniqueComponent;
 import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.blueprint.AbilityBlueprint;
+import com.yesman.akythera.core.blueprint.AbilityCueBlueprint;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
 import net.minecraft.core.Holder;
@@ -19,8 +24,8 @@ import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilit
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityLifecycle;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityStateSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityTagSync;
-import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundCancelAbilityCue;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayAbilityCue;
+import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundTerminateAbilityCue;
 import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerPlayer;
@@ -34,8 +39,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.function.Predicate;
 
 /// The abilities one entity holds, one [AbilityInstance] per filled [AbilitySlot].
+@com.yesman.akythera.core.reflection.ScriptType(autoRegister = false)
 public final class AbilitySystemComponent
     implements DynamicPatchComponent<LivingEntityPatch<?>>, TickableDynamicComponent<LivingEntityPatch<?>>, UniqueComponent
 {
@@ -56,7 +64,10 @@ public final class AbilitySystemComponent
     private final Map<Identifier, List<AbilityEffectInstance>> effectInstances = new LinkedHashMap<>();
 
     /// Live cue plays, in the order they started.
-    private final List<AbilityCueInstance> cueInstances = new ArrayList<>();
+    private final List<AbilityCue> cues = new ArrayList<>();
+
+    /// The id the server gives the next cue play.
+    private int nextCueId;
 
     /// Tasks running this tick.
     private final List<AbilityTaskHandle> runningTasks = new ArrayList<>();
@@ -73,8 +84,24 @@ public final class AbilitySystemComponent
     /// would otherwise recurse until the stack gives out.
     private int triggerDepth;
 
-    /// Whether [AbilityTrace] writes this owner's lifecycle to the log.
-    private boolean tracing;
+    /// Whether this component takes part, see [PatchComponent#isEnabled].
+    private boolean enabled = true;
+
+    /// Equips each owner's loadout as it joins a level, and hands a new tracker the owner's ability state.
+    @ApiStatus.Internal
+    public static void registerEvents() {
+        BuiltInEventHooks.Entity.SPAWNED.registerEvent(event -> {
+            @Nullable AbilitySystemComponent component = event.getEntityPatch().getComponent(AbilitySystemComponent.class);
+
+            if (component != null) component.equipPendingLoadout();
+        });
+
+        BuiltInEventHooks.Entity.TRACKING_START.registerEvent(event -> {
+            @Nullable AbilitySystemComponent component = event.getEntityPatch().getComponent(AbilitySystemComponent.class);
+
+            if (component != null) component.sendSnapshotTo(event.getTracker());
+        });
+    }
 
     public AbilitySystemComponent(final LivingEntityPatch<?> owner) {
         this(owner, Map.of());
@@ -107,9 +134,25 @@ public final class AbilitySystemComponent
 
         instance.equip(this, ability, slot);
 
-        AbilityTrace.log(this, instance, "equipped");
-
         return instance;
+    }
+
+    /// Builds `ability` and equips it into `slot`, see [#giveAbility(AbilitySlot, Ability)]. Server only.
+    ///
+    /// @return the new instance, or null on the client, when the ability cannot be built, or when this
+    ///         component already holds it in another slot
+    @ScriptFunction(label = "Give Ability", category = "Ability", desc = "Equips the ability into the slot, replacing whatever the slot held.")
+    public @Nullable AbilityInstance giveAbility(final AbilitySlot slot, final AbilityBlueprint ability) {
+        if (!owner.isLogicalServer()) return null;
+
+        Registry<AbilityBlueprint> registry =
+            StaticRegistryAccess.getRegistryAccess().lookupOrThrow(AkytheraRegistries.DataPack.ABILITY_KEY);
+
+        if (!(registry.wrapAsHolder(ability) instanceof Holder.Reference<AbilityBlueprint> blueprint)) return null;
+
+        Ability<?> built = AbilityBlueprint.createAbility(blueprint);
+
+        return built == null ? null : giveAbility(slot, built);
     }
 
     /// Releases the ability in `slot`, cancelling it first when it is still running.
@@ -125,6 +168,9 @@ public final class AbilitySystemComponent
 
         Ability<?> released = instance.getAbility();
 
+        // Ended while the clients still hold the slot, whose state the ended plays copy.
+        stopCuesOf(instance, true);
+
         // Captured and sent before unequip, which nulls the ability and runs callbacks of its own.
         if (released != null) {
             sendScoped(released, new ClientBoundAbilityEquipmentSync(
@@ -133,11 +179,7 @@ public final class AbilitySystemComponent
         }
 
         stopTasksOf(instance, true);
-        stopCuesOf(instance, true);
 
-        if (instance.isActivated()) AbilityTrace.log(this, instance, "canceled");
-
-        AbilityTrace.log(this, instance, "unequipped");
         instance.unequip(this);
 
         // The ability's own cancel and unequip callbacks may have started more.
@@ -155,7 +197,7 @@ public final class AbilitySystemComponent
         if (instance == null) return false;
 
         boolean wasActivated = instance.isActivated();
-        @Nullable ActivationType activationType = activationTypeOf(instance);
+        ActivationType activationType = activationTypeOf(instance);
 
         // A Toggle preset's second request cancels; a Hold preset's second request is the release,
         // which finishes only when the hold reached its threshold. Only the presets with neither
@@ -176,8 +218,6 @@ public final class AbilitySystemComponent
             instance.setHoldingTicks(0);
             syncLifecycle(slot, instance, ClientBoundAbilityLifecycle.Transition.ACTIVATED);
         }
-
-        AbilityTrace.log(this, instance, wasActivated ? "recast" : "activated");
 
         // An Instant preset ends on the tick it activated.
         if (!wasActivated && activationType == ActivationType.INSTANT) endAbility(slot);
@@ -211,8 +251,6 @@ public final class AbilitySystemComponent
 
         if (!instance.cancelAbility(this)) return false;
 
-        AbilityTrace.log(this, instance, "canceled");
-
         return true;
     }
 
@@ -233,8 +271,6 @@ public final class AbilitySystemComponent
         syncLifecycle(slot, instance, ClientBoundAbilityLifecycle.Transition.FINISHED);
 
         if (!instance.endAbility(this)) return false;
-
-        AbilityTrace.log(this, instance, "finished");
 
         return true;
     }
@@ -594,70 +630,93 @@ public final class AbilitySystemComponent
     // Cues
     // ***************************************************************
 
-    /// Plays `cue` on behalf of `abilityInstance`, taking [AbilityCue#endsWithAbility] as given.
-    @ScriptFunction(label = "Play Ability Cue", category = "Ability/Cue")
-    public @Nullable AbilityCueInstance playCue(
-        final AbilityCue cue,
-        final @Nullable AbilityInstance abilityInstance,
-        final @Nullable AbilityState abilityState
-    ) {
-        return playCue(cue, abilityInstance, abilityState, cue.endsWithAbility());
-    }
-
-    /// Plays `cue`, overriding whether it ends with the ability that started it.
+    /// Plays the data pack cue `cueKey` on behalf of `source`.
     ///
-    /// The server keeps the play for its timer, its tags and its ability; the behavior belongs to
-    /// each client that instantiates that ability. A client asking directly, as a mirrored callback
-    /// does, plays nothing, because the server's packet already will.
+    /// The server keeps the play for its timer, its tags and its ability, and ends it; the script runs on
+    /// each client that instantiates that ability. A client asking directly, as a mirrored callback does,
+    /// plays nothing, because the server's packet already will.
     ///
-    /// @param abilityState any non-null value hands the behavior `abilityInstance`'s own state,
-    ///                     the only state that crosses the wire
+    /// @param withState       whether the events get snapshots of `source`'s state, the only state that
+    ///                        crosses the wire
+    /// @param endsWithAbility whether the play is canceled when `source` ends
     /// @return the play, or null on the client
-    public @Nullable AbilityCueInstance playCue(
-        final AbilityCue cue,
-        final @Nullable AbilityInstance abilityInstance,
-        final @Nullable AbilityState abilityState,
+    /// @throws IllegalStateException when no cue is registered under `cueKey`
+    public @Nullable AbilityCue playCue(
+        final ResourceKey<AbilityCueBlueprint> cueKey,
+        final @Nullable AbilityInstance source,
+        final boolean withState,
         final boolean endsWithAbility
     ) {
         if (!owner.isLogicalServer()) return null;
 
-        if (AbilityCues.get(cue.getId()) != cue) {
-            throw new IllegalArgumentException("A played cue must be registered in AbilityCues: " + cue.getId());
-        }
+        Holder.Reference<AbilityCueBlueprint> blueprint = StaticRegistryAccess.getRegistryAccess().getOrThrow(cueKey);
 
-        AbilityCueInstance cueInstance = new AbilityCueInstance(cue, abilityInstance, endsWithAbility);
-        cueInstances.add(cueInstance);
-        sendCue(cueInstance, abilityState != null);
-
-        return cueInstance;
+        return startCue(cue -> new DataDrivenAbilityCue(blueprint, cue), source, withState, endsWithAbility);
     }
 
-    /// Starts `cueInstance` on the clients that instantiate its ability, or wherever the owner is
-    /// tracked when no ability played it.
-    private void sendCue(final AbilityCueInstance cueInstance, final boolean withState) {
-        int entityId = owner.getOriginal().getId();
-        Identifier cueId = cueInstance.getCue().getId();
-        AbilityInstance source = cueInstance.getSource();
-
-        if (source == null) {
-            sendToScope(InstantiationScope.EVERYWHERE, new ClientBoundPlayAbilityCue(
-                entityId, cueId, Optional.empty(), false, cueInstance.endsWithAbility()
-            ));
-
-            return;
+    /// Plays the Java cue `scriptClass` on behalf of `source`, as [#playCue(ResourceKey, AbilityInstance, boolean, boolean)]
+    /// plays a data pack cue.
+    ///
+    /// @return the play, or null on the client
+    /// @throws IllegalArgumentException when `scriptClass` is not [AbilityCueScript#runnable], or is no
+    ///                                  registered [ScriptType]
+    public @Nullable AbilityCue playCue(
+        final Class<? extends AbilityCueScript> scriptClass,
+        final @Nullable AbilityInstance source,
+        final boolean withState,
+        final boolean endsWithAbility
+    ) {
+        if (!AbilityCueScript.runnable(scriptClass)) {
+            throw new IllegalArgumentException(scriptClass.getSimpleName() + " has no public no-argument constructor");
         }
 
-        Ability<?> ability = source.getAbility();
-        AbilitySlot slot = source.getSlot();
+        if (ScriptType.of(scriptClass) == null) {
+            throw new IllegalArgumentException(scriptClass.getSimpleName() + " is no registered ScriptType");
+        }
 
-        if (ability == null || slot == null) return;
+        if (!owner.isLogicalServer()) return null;
 
-        // The behavior reads the state it is handed, so the state goes first.
-        if (withState) flushState(slot, source);
+        return startCue(_ -> AbilityCueScript.instantiate(scriptClass), source, withState, endsWithAbility);
+    }
 
-        sendScoped(ability, new ClientBoundPlayAbilityCue(
-            entityId, cueId, Optional.of(slot), withState, cueInstance.endsWithAbility()
-        ));
+    /// Starts a play of the script `scriptProvider` builds, and sends it.
+    private AbilityCue startCue(
+        final Function<AbilityCue, AbilityCueScript> scriptProvider,
+        final @Nullable AbilityInstance source,
+        final boolean withState,
+        final boolean endsWithAbility
+    ) {
+        AbilityCue cue = new AbilityCue(nextCueId++, this, source, withState, endsWithAbility, scriptProvider);
+        cues.add(cue);
+
+        ClientBoundPlayAbilityCue payload = playPayloadOf(cue);
+
+        if (payload == null) return cue;
+
+        // The events copy the state they are handed, so the state goes first.
+        if (cue.withState() && source != null && source.getSlot() != null) flushState(source.getSlot(), source);
+
+        sendToScope(cueScopeOf(cue), payload);
+
+        return cue;
+    }
+
+    /// What starts `cue` on a client, or null when no client can hold it: its ability is gone.
+    private @Nullable ClientBoundPlayAbilityCue playPayloadOf(final AbilityCue cue) {
+        AbilityInstance source = cue.getSource();
+        AbilitySlot slot = source == null ? null : source.getSlot();
+
+        if (source != null && (source.getAbility() == null || slot == null)) return null;
+
+        Either<ResourceKey<AbilityCueBlueprint>, Class<? extends AbilityCueScript>> script =
+            cue.getScript() instanceof DataDrivenAbilityCue dataDriven
+                ? Either.left(dataDriven.getBlueprint().key())
+                : Either.right(cue.getScript().getClass());
+
+        return new ClientBoundPlayAbilityCue(
+            owner.getOriginal().getId(), cue.getId(), script, Optional.ofNullable(slot),
+            slot != null && cue.withState(), cue.endsWithAbility(), cue.getElapsedTicks()
+        );
     }
 
     /// Cancels every live play whose cue carries a tag matching `query`, on the server and on every
@@ -666,37 +725,31 @@ public final class AbilitySystemComponent
     /// @return how many were cancelled, always 0 on the client
     @ScriptFunction(label = "Cancel Ability Cue", category = "Ability/Cue")
     public int cancelCue(final AbilityTag query) {
+        return cancelCues(cue -> cue.hasTag(query));
+    }
+
+    /// Cancels every live play `filter` accepts, on the server and on every client holding one.
+    ///
+    /// @return how many were cancelled, always 0 on the client
+    public int cancelCues(final Predicate<AbilityCue> filter) {
         if (!owner.isLogicalServer()) return 0;
 
-        List<AbilityCueInstance> matched = new ArrayList<>();
+        List<AbilityCue> matched = new ArrayList<>();
 
-        for (AbilityCueInstance cueInstance : cueInstances) {
-            if (cueInstance.isValid() && cueInstance.getCue().hasTag(query)) matched.add(cueInstance);
+        for (AbilityCue cue : cues) {
+            if (cue.isValid() && filter.test(cue)) matched.add(cue);
         }
 
-        if (matched.isEmpty()) return 0;
-
-        // InstantiationScope is declared narrowest first.
-        InstantiationScope widest = InstantiationScope.SERVER_ONLY;
-
-        for (AbilityCueInstance cueInstance : matched) {
-            InstantiationScope scope = cueScopeOf(cueInstance);
-
-            if (scope.compareTo(widest) > 0) widest = scope;
-        }
-
-        sendToScope(widest, new ClientBoundCancelAbilityCue(owner.getOriginal().getId(), query));
-
-        for (AbilityCueInstance cueInstance : matched) {
-            terminateCue(cueInstance, true);
+        for (AbilityCue cue : matched) {
+            terminateCue(cue, true);
         }
 
         return matched.size();
     }
 
-    /// Who holds `cueInstance` besides the server.
-    private static InstantiationScope cueScopeOf(final AbilityCueInstance cueInstance) {
-        AbilityInstance source = cueInstance.getSource();
+    /// Who holds `cue` besides the server.
+    private static InstantiationScope cueScopeOf(final AbilityCue cue) {
+        AbilityInstance source = cue.getSource();
 
         if (source == null) return InstantiationScope.EVERYWHERE;
 
@@ -704,49 +757,59 @@ public final class AbilitySystemComponent
     }
 
     /// Every live play, in the order they started.
-    public List<AbilityCueInstance> getCueInstances() {
-        return Collections.unmodifiableList(cueInstances);
+    public List<AbilityCue> getCues() {
+        return Collections.unmodifiableList(cues);
     }
 
-    /// Ends one play, firing exactly one of [AbilityCue.Behavior#onCanceled] or
-    /// [AbilityCue.Behavior#onEnd]. The instance is invalidated and delisted before the callback
-    /// runs.
-    private void terminateCue(final AbilityCueInstance cueInstance, final boolean cancelled) {
-        if (!cueInstance.isValid()) return;
+    /// Ends one play. The play is invalidated and delisted first.
+    ///
+    /// The server tells the clients holding the play, after the source state they copy. A client runs
+    /// exactly one of [AbilityCueScript#onCanceled] or [AbilityCueScript#onEnd] with that copy.
+    private void terminateCue(final AbilityCue cue, final boolean cancelled) {
+        if (!cue.isValid()) return;
 
-        cueInstance.invalidate();
-        cueInstances.remove(cueInstance);
+        cue.invalidate();
+        cues.remove(cue);
 
-        // The server only keeps the books.
-        if (owner.isLogicalServer()) return;
+        if (owner.isLogicalServer()) {
+            AbilityInstance source = cue.getSource();
+
+            if (cue.withState() && source != null && source.getSlot() != null) flushState(source.getSlot(), source);
+
+            sendToScope(
+                cueScopeOf(cue), new ClientBoundTerminateAbilityCue(owner.getOriginal().getId(), cue.getId(), cancelled)
+            );
+
+            return;
+        }
 
         if (cancelled) {
-            cueInstance.getCue().getBehavior().onCanceled(this, cueInstance);
+            cue.getScript().onCanceled(cue, cue.snapshotSourceState());
         } else {
-            cueInstance.getCue().getBehavior().onEnd(this, cueInstance);
+            cue.getScript().onEnd(cue, cue.snapshotSourceState());
         }
     }
 
-    /// Cancels `abilityInstance`'s plays that declared [AbilityCueInstance#endsWithAbility].
+    /// Cancels `abilityInstance`'s plays that declared [AbilityCue#endsWithAbility].
     private void stopCuesOf(final AbilityInstance abilityInstance, final boolean includeDetached) {
-        for (AbilityCueInstance cueInstance : new ArrayList<>(cueInstances)) {
-            if (cueInstance.getSource() != abilityInstance) continue;
-            if (!includeDetached && !cueInstance.endsWithAbility()) continue;
+        for (AbilityCue cue : new ArrayList<>(cues)) {
+            if (cue.getSource() != abilityInstance) continue;
+            if (!includeDetached && !cue.endsWithAbility()) continue;
 
-            terminateCue(cueInstance, true);
+            terminateCue(cue, true);
         }
     }
 
-    /// Counts every live play down one tick, ending the ones that ran out.
+    /// Counts every live play one tick. The server ends the ones that ran out.
     private void tickCues() {
-        for (AbilityCueInstance cueInstance : new ArrayList<>(cueInstances)) {
-            if (!cueInstance.isValid()) continue;
+        for (AbilityCue cue : new ArrayList<>(cues)) {
+            if (!cue.isValid()) continue;
 
-            if (!owner.isLogicalServer()) cueInstance.getCue().getBehavior().tick(this, cueInstance);
+            if (!owner.isLogicalServer()) cue.getScript().onTick(cue);
 
-            if (!cueInstance.isValid()) continue;
+            if (!cue.isValid()) continue;
 
-            if (cueInstance.tickDuration()) terminateCue(cueInstance, false);
+            if (cue.tickDuration() && owner.isLogicalServer()) terminateCue(cue, false);
         }
     }
 
@@ -775,7 +838,8 @@ public final class AbilitySystemComponent
     }
 
     /// Sends `tracker` everything it needs to mirror this owner: the tags it carries, each filled
-    /// slot with its current activation and state, then every live effect application.
+    /// slot with its current activation and state, the live plays synced to late trackers, then every live
+    /// effect application.
     @ApiStatus.Internal
     public void sendSnapshotTo(final ServerPlayer tracker) {
         if (!owner.isLogicalServer()) return;
@@ -809,6 +873,16 @@ public final class AbilitySystemComponent
                 NetworkingHelper.getInstance()
                     .sendToClient(tracker, new ClientBoundAbilityStateSync(entityId, entry.getKey(), state));
             }
+        }
+
+        // After the slots: a play names its ability by slot.
+        for (AbilityCue cue : cues) {
+            if (!cue.isValid() || !cue.getScript().isSyncedToLateTrackers()) continue;
+            if (!cueScopeOf(cue).reachesTrackers()) continue;
+
+            ClientBoundPlayAbilityCue payload = playPayloadOf(cue);
+
+            if (payload != null) NetworkingHelper.getInstance().sendToClient(tracker, payload);
         }
 
         // Last: an application names its ability by slot, which the loop above filled.
@@ -1025,6 +1099,26 @@ public final class AbilitySystemComponent
         return false;
     }
 
+    /// Whether the owner carries any of `queries`, by [#hasAbilityTag]. False for no queries.
+    @ScriptFunction(pure = true, label = "Has Any Ability Tags", category = "Ability/Tag", desc = "True while the owner carries any of the tags.")
+    public boolean hasAnyAbilityTags(final AbilityTagSet queries) {
+        for (AbilityTag query : queries) {
+            if (hasAbilityTag(query)) return true;
+        }
+
+        return false;
+    }
+
+    /// Whether the owner carries every one of `queries`, by [#hasAbilityTag]. True for no queries.
+    @ScriptFunction(pure = true, label = "Has All Ability Tags", category = "Ability/Tag", desc = "True while the owner carries every one of the tags.")
+    public boolean hasAllAbilityTags(final AbilityTagSet queries) {
+        for (AbilityTag query : queries) {
+            if (!hasAbilityTag(query)) return false;
+        }
+
+        return true;
+    }
+
     /// How many live grants `tag` has, counting only that exact tag.
     @ScriptFunction(pure = true, label = "Ability Tag Count", category = "Ability/Tag")
     public int getAbilityTagCount(final AbilityTag tag) {
@@ -1034,14 +1128,6 @@ public final class AbilitySystemComponent
     /// The tags the owner carries, each mapped to its grant count.
     public Map<AbilityTag, Integer> getOwnerTags() {
         return Collections.unmodifiableMap(ownerTags);
-    }
-
-    public boolean isTracing() {
-        return tracing;
-    }
-
-    public void setTracing(final boolean tracing) {
-        this.tracing = tracing;
     }
 
     // ***************************************************************
@@ -1106,38 +1192,44 @@ public final class AbilitySystemComponent
         if (live.isEmpty()) effectInstances.remove(effectId);
     }
 
-    /// Starts the play the server sent and runs its behavior.
+    /// Starts the play the server sent, `elapsedTicks` into its timer, and runs [AbilityCueScript#onActivate].
+    ///
+    /// @param script the data pack cue, or the Java cue's script class
+    /// @throws IllegalStateException when no cue is registered under the data pack key
     @ApiStatus.Internal
     public void startMirroredCue(
-        final AbilityCue cue,
+        final int cueId,
+        final Either<ResourceKey<AbilityCueBlueprint>, Class<? extends AbilityCueScript>> script,
         final @Nullable AbilityInstance source,
-        final @Nullable AbilityState abilityState,
-        final boolean endsWithAbility
+        final boolean withState,
+        final boolean endsWithAbility,
+        final int elapsedTicks
     ) {
         if (owner.isLogicalServer()) return;
 
-        AbilityCueInstance cueInstance = new AbilityCueInstance(cue, source, endsWithAbility);
-        cueInstances.add(cueInstance);
-        cue.getBehavior().onExecute(this, cueInstance, abilityState);
+        Function<AbilityCue, AbilityCueScript> scriptProvider = script.map(
+            cueKey -> {
+                Holder.Reference<AbilityCueBlueprint> blueprint = StaticRegistryAccess.getRegistryAccess().getOrThrow(cueKey);
+
+                return cue -> new DataDrivenAbilityCue(blueprint, cue);
+            },
+            scriptClass -> _ -> AbilityCueScript.instantiate(scriptClass)
+        );
+
+        AbilityCue cue = new AbilityCue(cueId, this, source, withState, endsWithAbility, scriptProvider);
+        cue.setElapsedTicks(elapsedTicks);
+        cues.add(cue);
+        cue.getScript().onActivate(cue, cue.snapshotSourceState());
     }
 
-    /// Cancels the plays the server cancelled by `query`, by the same match it ran.
+    /// Ends the play `cueId` names the way the server ended it.
     @ApiStatus.Internal
-    public void cancelMirroredCues(final AbilityTag query) {
+    public void terminateMirroredCue(final int cueId, final boolean cancelled) {
         if (owner.isLogicalServer()) return;
 
-        for (AbilityCueInstance cueInstance : new ArrayList<>(cueInstances)) {
-            if (cueInstance.isValid() && cueInstance.getCue().hasTag(query)) terminateCue(cueInstance, true);
+        for (AbilityCue cue : new ArrayList<>(cues)) {
+            if (cue.getId() == cueId) terminateCue(cue, cancelled);
         }
-    }
-
-    /// Ends the plays `abilityInstance` started that end with it, as the server did before it sent
-    /// the deactivation.
-    @ApiStatus.Internal
-    public void stopMirroredCuesOf(final AbilityInstance abilityInstance) {
-        if (owner.isLogicalServer()) return;
-
-        stopCuesOf(abilityInstance, false);
     }
 
     // ***************************************************************
@@ -1146,7 +1238,7 @@ public final class AbilitySystemComponent
 
     @Override
     public void tick() {
-        // Both sides count a play's timer down; only the client runs its behavior.
+        // Both sides count a play's timer; the server ends it, and only the client runs its behavior.
         tickCues();
 
         if (!owner.isLogicalServer()) {
@@ -1179,7 +1271,7 @@ public final class AbilitySystemComponent
                 continue;
             }
 
-            if (task.isEnd()) {
+            if (task.isEnd(this)) {
                 terminate(handle, false);
             }
         }
@@ -1191,6 +1283,20 @@ public final class AbilitySystemComponent
     @Override
     public void frameUpdate(final float frameTime, final float partialTick) {
 
+    }
+
+    // ***************************************************************
+    // [PatchComponent]
+    // ***************************************************************
+
+    @Override
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    @Override
+    public void setEnabled(final boolean enabled) {
+        this.enabled = enabled;
     }
 
     // ***************************************************************

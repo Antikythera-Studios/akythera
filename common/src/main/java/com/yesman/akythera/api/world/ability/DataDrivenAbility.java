@@ -1,11 +1,16 @@
 package com.yesman.akythera.api.world.ability;
 
+import com.yesman.akythera.api.data.modularize.AkytheraScriptFunctions;
 import com.yesman.akythera.core.blueprint.AbilityBlueprint;
 import com.yesman.akythera.core.blueprint.script.DataDrivenAbilityState;
 import net.minecraft.core.Holder;
 
-/// A [SystematicAbility] whose event entry points run the blueprint's graphs instead of Java, so an
-/// ability needs no class in the codebase.
+/// A [SystematicAbility] whose event entry points run the blueprint's graphs after the Java ones, and whose
+/// `canActivate` runs the blueprint's override when it declares one, so an ability needs no class in the
+/// codebase.
+///
+/// What [AkytheraScriptFunctions#SYSTEMATIC_ABILITY_CONSTRUCTOR] builds for a [SystematicAbility] written in
+/// a data pack. It is never a parent of its own.
 public class DataDrivenAbility extends SystematicAbility<DataDrivenAbilityState> {
     private final Holder.Reference<AbilityBlueprint> blueprint;
 
@@ -22,17 +27,21 @@ public class DataDrivenAbility extends SystematicAbility<DataDrivenAbilityState>
 
     /// Refuses once the activation graph has thrown, so the ability stops charging costs and
     /// spending charges for a graph that no longer runs.
+    ///
+    /// Fails closed: an override that throws, or answers with anything but true, refuses the activation.
     @Override
     public boolean canActivate(
         final AbilitySystemComponent abilitySystemComponent,
         final AbilityInstance abilityInstance,
         final DataDrivenAbilityState abilityState
     ) {
-        if (abilityState.hasFailed(DataDrivenAbilityState.Event.ON_ACTIVATED)) return false;
+        if (abilityState.getBlueprintExecutor().hasFailed("onActivated")) return false;
 
-        if (!super.canActivate(abilitySystemComponent, abilityInstance, abilityState)) return false;
-
-        return abilityState.evaluateCanActivate(abilitySystemComponent, abilityInstance);
+        return Boolean.TRUE.equals(abilityState.getBlueprintExecutor().invokeMethod(
+            "canActivate",
+            () -> super.canActivate(abilitySystemComponent, abilityInstance, abilityState),
+            abilitySystemComponent, abilityInstance, abilityState
+        ));
     }
 
     @Override
@@ -43,7 +52,8 @@ public class DataDrivenAbility extends SystematicAbility<DataDrivenAbilityState>
     ) {
         super.onEquipped(abilitySystemComponent, abilityInstance, abilityState);
 
-        abilityState.run(DataDrivenAbilityState.Event.ON_EQUIPPED, abilitySystemComponent, abilityInstance);
+        abilityState.getBlueprintExecutor().invokeMethod(
+            "onEquipped", null, abilitySystemComponent, abilityInstance, abilityState);
     }
 
     @Override
@@ -54,7 +64,8 @@ public class DataDrivenAbility extends SystematicAbility<DataDrivenAbilityState>
     ) {
         super.onUnequipped(abilitySystemComponent, abilityInstance, abilityState);
 
-        abilityState.run(DataDrivenAbilityState.Event.ON_UNEQUIPPED, abilitySystemComponent, abilityInstance);
+        abilityState.getBlueprintExecutor().invokeMethod(
+            "onUnequipped", null, abilitySystemComponent, abilityInstance, abilityState);
     }
 
     @Override
@@ -65,7 +76,8 @@ public class DataDrivenAbility extends SystematicAbility<DataDrivenAbilityState>
     ) {
         super.onActivated(abilitySystemComponent, abilityInstance, abilityState);
 
-        abilityState.run(DataDrivenAbilityState.Event.ON_ACTIVATED, abilitySystemComponent, abilityInstance);
+        abilityState.getBlueprintExecutor().invokeMethod(
+            "onActivated", null, abilitySystemComponent, abilityInstance, abilityState);
     }
 
     @Override
@@ -76,7 +88,8 @@ public class DataDrivenAbility extends SystematicAbility<DataDrivenAbilityState>
     ) {
         super.onRecast(abilitySystemComponent, abilityInstance, abilityState);
 
-        abilityState.run(DataDrivenAbilityState.Event.ON_RECAST, abilitySystemComponent, abilityInstance);
+        abilityState.getBlueprintExecutor().invokeMethod(
+            "onRecast", null, abilitySystemComponent, abilityInstance, abilityState);
     }
 
     @Override
@@ -87,7 +100,8 @@ public class DataDrivenAbility extends SystematicAbility<DataDrivenAbilityState>
     ) {
         super.onCanceled(abilitySystemComponent, abilityInstance, abilityState);
 
-        abilityState.run(DataDrivenAbilityState.Event.ON_CANCELED, abilitySystemComponent, abilityInstance);
+        abilityState.getBlueprintExecutor().invokeMethod(
+            "onCanceled", null, abilitySystemComponent, abilityInstance, abilityState);
     }
 
     @Override
@@ -98,6 +112,7 @@ public class DataDrivenAbility extends SystematicAbility<DataDrivenAbilityState>
     ) {
         super.onFinished(abilitySystemComponent, abilityInstance, abilityState);
 
-        abilityState.run(DataDrivenAbilityState.Event.ON_FINISHED, abilitySystemComponent, abilityInstance);
+        abilityState.getBlueprintExecutor().invokeMethod(
+            "onFinished", null, abilitySystemComponent, abilityInstance, abilityState);
     }
 }

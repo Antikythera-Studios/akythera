@@ -3,7 +3,7 @@ package com.yesman.akythera.core.animation.playable;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.yesman.akythera.api.asset.animation.AnimationManager;
-import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.animation.keyframe.AnimationClip;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.notify.AnimationNotifyTrack;
@@ -15,7 +15,6 @@ import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.RegistryFileCodec;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.world.entity.Entity;
 import org.jspecify.annotations.NonNull;
 
 /// A set of keyframe and pose data managed by [AnimationClip].
@@ -62,7 +61,7 @@ public interface PlayableAnimation {
     /// Ticks the animation in fixed update
     ///
     /// Designed to run owner attached [AnimationNotifyTrack]
-    void tick(final EntityPatch<Entity> owner, final float prevElapsedTime, final float currentElapsedTime);
+    void tick(final ComponentAttachable owner, final float prevElapsedTime, final float currentElapsedTime);
 
     /// Polymorphic codec for [PlayableAnimation] driven classes. JSON shape:
     ///

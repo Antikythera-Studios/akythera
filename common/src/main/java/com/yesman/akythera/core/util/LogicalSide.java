@@ -42,6 +42,11 @@ public enum LogicalSide implements StringRepresentable {
         return this == LogicalSide.BOTH || this == LogicalSide.SERVER;
     }
 
+    /// Whether something bound to this side runs on `side`. [#BOTH] on either end accepts.
+    public boolean accepts(final LogicalSide side) {
+        return this == LogicalSide.BOTH || side == LogicalSide.BOTH || this == side;
+    }
+
     @Override
     public @NonNull String getSerializedName() {
         return name;

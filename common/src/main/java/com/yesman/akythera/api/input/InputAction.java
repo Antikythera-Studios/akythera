@@ -3,6 +3,7 @@ package com.yesman.akythera.api.input;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import com.yesman.akythera.core.reflection.ScriptType;
 import com.yesman.akythera.core.util.helper.ParseUtils;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -18,6 +19,7 @@ import java.util.Optional;
 ///
 /// @param threshold ticks a [TriggeringType#HOLD_UNTIL] release is judged against. Absent means 0
 /// @param priority  order among the actions bound to one key and triggering type. Higher runs first
+@ScriptType(autoRegister = false)
 public record InputAction(
     String keyMapping,
     TriggeringType triggeringType,
@@ -41,8 +43,7 @@ public record InputAction(
             instance ->
                 instance.group(
                     Codec.STRING.fieldOf("key_mapping").forGetter(InputAction::keyMapping),
-                    TRIGGERING_TYPE_CODEC.fieldOf("triggering_type")
-                        .forGetter(InputAction::triggeringType),
+                    TRIGGERING_TYPE_CODEC.fieldOf("triggering_type").forGetter(InputAction::triggeringType),
                     Codec.INT.optionalFieldOf("threshold").forGetter(InputAction::threshold),
                     Codec.INT.optionalFieldOf("priority", 0).forGetter(InputAction::priority)
                 )

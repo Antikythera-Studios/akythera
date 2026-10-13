@@ -4,6 +4,7 @@ import com.yesman.akythera.api.animation.animator.AnimationInterfaceKey;
 import com.yesman.akythera.api.animation.animator.AnimationLayer;
 import com.yesman.akythera.api.animation.animator.AnimationSequenceInterface;
 import com.yesman.akythera.api.animation.animator.BlendSpace2DInterface;
+import com.yesman.akythera.api.data.modularize.ScriptFunction;
 import com.yesman.akythera.core.animation.animator.BlendingAnimator;
 import com.yesman.akythera.core.animation.driver.AnimationDriver;
 import com.yesman.akythera.core.animation.AnimationLayerSignature;
@@ -11,6 +12,7 @@ import com.yesman.akythera.core.animation.driver.AnimationPlayer;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.playable.AnimationSequence;
 import com.yesman.akythera.core.animation.playable.BlendSpace2D;
+import com.yesman.akythera.core.reflection.BlueprintFunction;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.resources.ResourceKey;
@@ -70,12 +72,14 @@ public interface AnimatorScript {
     /// then mix it with other layers for actions like bow aiming, blocking, etc.
     ///
     /// @param animLayerMap      Use it for building animation layers. Each layer contain montage player.
-    /// @param cachedPoseDrivers Use it for building pose drivers which is references multiple times through multiple layers in one frame.
-    void construct(final Map<AnimationLayerSignature, AnimationLayer> animLayerMap, final Map<String, AnimationDriver> cachedPoseDrivers, final BlendingAnimator animator);
+    /// @param poseCaches        Use it for building pose drivers which is references multiple times through multiple layers in one frame.
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.EVENT_GRAPH)
+    void construct(final Map<AnimationLayerSignature, AnimationLayer> animLayerMap, final Map<String, AnimationDriver> poseCaches, final BlendingAnimator animator);
 
     /// Called on determining the final pose of animator. Build logics for combining each layer.
     Pose getFinalPose(final Map<AnimationLayerSignature, AnimationLayer> layers);
 
     /// Called on each frame update.
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.EVENT_GRAPH)
     void update(final float frameTime, final float partialTick);
 }

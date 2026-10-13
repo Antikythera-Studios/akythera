@@ -2,10 +2,11 @@ package com.yesman.akythera.api.lifecycle;
 
 import com.yesman.akythera.api.animation.animator.Animator;
 import com.yesman.akythera.api.asset.AssetAccessor;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.api.data.modularize.ScriptFunction;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.client.api.gui.viewer.Model3DViewer;
 import com.yesman.akythera.client.api.lifecycle.ClientComponentsFactory;
-import com.yesman.akythera.client.gui.widget.viewer.Model3DViewer;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.animation.animator.BlendingAnimator;
 import com.yesman.akythera.core.animation.animator.MontageOnlyAnimator;
@@ -14,6 +15,7 @@ import com.yesman.akythera.core.asset.armature.Bone;
 import com.yesman.akythera.core.blueprint.EntityPatchBlueprint;
 import com.yesman.akythera.core.blueprint.script.AnimatorScript;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
+import com.yesman.akythera.core.util.LogicalSide;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.core.Holder;
@@ -149,10 +151,10 @@ public abstract class ComponentsFactory {
         return entityArmatures.get(entityType);
     }
 
-    /// Custom animator providers by entity types. Register a new provider that doesn't follow
+    /// Custom animator providers by owner types. Register a new provider that doesn't follow
     /// the default animator supply rule. ([MontageOnlyAnimator] in a server and
     /// [BlendingAnimator] in a client)
-    private final Map<Class<?>, BiFunction<EntityPatch<Entity>, Function<Animator, AnimatorScript>, ? extends Animator>> customAnimatorSuppliers = new HashMap<>();
+    private final Map<Class<?>, BiFunction<ComponentAttachable, Function<Animator, AnimatorScript>, ? extends Animator>> customAnimatorSuppliers = new HashMap<>();
 
     /// Register a new animator provider rule. The default rule is returning [MontageOnlyAnimator] in
     /// logical server and [BlendingAnimator] in logical client to optimize redundant animator state
@@ -161,33 +163,34 @@ public abstract class ComponentsFactory {
     /// Consider assigning [BlendingAnimator] for huge scaled mobs with IK, whose require to update
     /// hitboxes and position corresponding to [Bone]s.
     public void registerCustomAnimatorSupplyRule(
-        Class<?> entityType,
-        BiFunction<EntityPatch<Entity>, Function<Animator, AnimatorScript>, ? extends Animator> supplier
+        Class<?> ownerType,
+        BiFunction<ComponentAttachable, Function<Animator, AnimatorScript>, ? extends Animator> supplier
     ) {
-        if (customAnimatorSuppliers.containsKey(entityType)) {
+        if (customAnimatorSuppliers.containsKey(ownerType)) {
             Akythera.LOGGER.warn(
                 "{} has already registered for custom animator supply rule. You're overwriting previous entry.",
-                entityType
+                ownerType
             );
         }
 
-        customAnimatorSuppliers.put(entityType, supplier);
+        customAnimatorSuppliers.put(ownerType, supplier);
     }
 
-    /// Provides an animator for given entity patch. If no custom animator provider rule is registered, follow the
+    /// Provides an animator for given owner. If no custom animator provider rule is registered, follow the
     /// default rule.
     ///
     /// Since this method calls [StaticRegistryAccess] to get [AnimatorScript], it must be called after world-loading is done.
     ///
     /// @see #registerCustomAnimatorSupplyRule
-    public Animator getAnimator(final EntityPatch<Entity> owner, final Function<Animator, AnimatorScript> scriptProvider) {
+    public Animator getAnimator(final ComponentAttachable owner, final Function<Animator, AnimatorScript> scriptProvider) {
         if (customAnimatorSuppliers.containsKey(owner.getClass())) {
-            // Force cast to root type
             return customAnimatorSuppliers.get(owner.getClass()).apply(owner, scriptProvider);
         }
 
         // default behavior
-        return owner.isLogicalClient() ? new BlendingAnimator(owner, scriptProvider) : new MontageOnlyAnimator(owner);
+        return owner.logicalSide() == LogicalSide.SERVER
+            ? new MontageOnlyAnimator(owner)
+            : new BlendingAnimator(owner, scriptProvider);
     }
 
     /// Returns the resource manager the assets are read from.

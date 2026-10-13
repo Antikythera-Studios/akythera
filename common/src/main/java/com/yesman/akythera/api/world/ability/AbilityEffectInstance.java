@@ -2,6 +2,7 @@ package com.yesman.akythera.api.world.ability;
 
 import com.yesman.akythera.api.data.serializable.AttributeModifierEntry;
 import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
+import com.yesman.akythera.core.reflection.ScriptType;
 import org.jetbrains.annotations.ApiStatus;
 import org.jspecify.annotations.Nullable;
 import net.minecraft.resources.Identifier;
@@ -13,6 +14,7 @@ import java.util.List;
 
 /// One live application of an [AbilityEffect]. Never created for
 /// [AbilityEffect.ApplicationType#INSTANT].
+@ScriptType
 public final class AbilityEffectInstance {
     /// Which of the two effect roles this application fills.
     public enum Role {

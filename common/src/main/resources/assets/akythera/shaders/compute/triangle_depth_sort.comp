@@ -1,0 +1,148 @@
+// No `#version` line: the backend prepends its own preamble, along with the `AKYTHERA_GL` or
+// `AKYTHERA_VULKAN` define that selects the uniform declarations below.
+//
+// Bitonic sort of a skinned mesh's triangles, farthest from `eye` first. `stage` picks the pass;
+// TriangleDepthSort runs them in order. The entry count is a power of two of at least BLOCK_SIZE.
+
+#define WORK_GROUP_SIZE 512u
+#define BLOCK_SIZE 1024u
+
+#define STAGE_KEYS 0u
+#define STAGE_LOCAL_SORT 1u
+#define STAGE_GLOBAL_STEP 2u
+#define STAGE_LOCAL_MERGE 3u
+#define STAGE_INDICES 4u
+
+layout(local_size_x = 512) in;
+
+// DefaultVertexFormat.ENTITY, 36 bytes, as vanilla_mesh_transformer.comp writes it.
+struct VertexAttr {
+    float px, py, pz;
+    uint color;
+    float u0, v0;
+    uint uv1;
+    uint uv2;
+    uint nor;
+};
+
+// Sorted ascending by key, the negated squared distance of the triangle's centroid from `eye`.
+struct Entry {
+    float key;
+    uint triangle;
+};
+
+layout(std430, binding = 0) readonly buffer VertexIn {
+    VertexAttr vertices[];
+};
+
+layout(std430, binding = 1) buffer EntryBuffer {
+    Entry entries[];
+};
+
+layout(std430, binding = 2) writeonly buffer IndexOut {
+    uint indices[];
+};
+
+#ifdef AKYTHERA_VULKAN
+layout(push_constant, std430) uniform Uniforms {
+    uint stage;
+    uint k;
+    uint j;
+    uint triangleCount;
+    vec3 eye;
+};
+#else
+uniform uint stage;
+uniform uint k;
+uniform uint j;
+uniform uint triangleCount;
+uniform vec3 eye;
+#endif
+
+shared Entry block[BLOCK_SIZE];
+
+// Orders the pair at global indices `first` < `second` for the bitonic sequence of size `size`.
+bool outOfOrder(Entry a, Entry b, uint first, uint size) {
+    bool ascending = (first & size) == 0u;
+
+    return ascending ? a.key > b.key : a.key < b.key;
+}
+
+// Runs every step of sequence size `size` from `fromJ` down to 1 inside this work group's block.
+void sortBlock(uint size, uint fromJ, uint base) {
+    uint t = gl_LocalInvocationID.x;
+
+    for (uint stride = fromJ; stride > 0u; stride >>= 1) {
+        uint first = 2u * stride * (t / stride) + (t % stride);
+        uint second = first + stride;
+        Entry a = block[first];
+        Entry b = block[second];
+
+        if (outOfOrder(a, b, base + first, size)) {
+            block[first] = b;
+            block[second] = a;
+        }
+
+        barrier();
+    }
+}
+
+void main() {
+    uint t = gl_LocalInvocationID.x;
+    uint base = gl_WorkGroupID.x * BLOCK_SIZE;
+
+    if (stage == STAGE_KEYS) {
+        uint i = gl_GlobalInvocationID.x;
+
+        if (i >= uint(entries.length())) return;
+
+        if (i < triangleCount) {
+            VertexAttr v0 = vertices[i * 3u];
+            VertexAttr v1 = vertices[i * 3u + 1u];
+            VertexAttr v2 = vertices[i * 3u + 2u];
+            vec3 center = (vec3(v0.px, v0.py, v0.pz) + vec3(v1.px, v1.py, v1.pz) + vec3(v2.px, v2.py, v2.pz)) / 3.0;
+
+            vec3 fromEye = center - eye;
+
+            entries[i] = Entry(-dot(fromEye, fromEye), i);
+        } else {
+            entries[i] = Entry(uintBitsToFloat(0x7F800000u), i); // padding sorts last
+        }
+    } else if (stage == STAGE_LOCAL_SORT || stage == STAGE_LOCAL_MERGE) {
+        block[t] = entries[base + t];
+        block[t + WORK_GROUP_SIZE] = entries[base + t + WORK_GROUP_SIZE];
+        barrier();
+
+        if (stage == STAGE_LOCAL_SORT) {
+            for (uint size = 2u; size <= BLOCK_SIZE; size <<= 1) {
+                sortBlock(size, size >> 1, base);
+            }
+        } else {
+            sortBlock(k, BLOCK_SIZE >> 1, base);
+        }
+
+        entries[base + t] = block[t];
+        entries[base + t + WORK_GROUP_SIZE] = block[t + WORK_GROUP_SIZE];
+    } else if (stage == STAGE_GLOBAL_STEP) {
+        uint pair = gl_GlobalInvocationID.x;
+        uint first = 2u * j * (pair / j) + (pair % j);
+        uint second = first + j;
+        Entry a = entries[first];
+        Entry b = entries[second];
+
+        if (outOfOrder(a, b, first, k)) {
+            entries[first] = b;
+            entries[second] = a;
+        }
+    } else if (stage == STAGE_INDICES) {
+        uint i = gl_GlobalInvocationID.x;
+
+        if (i >= triangleCount) return;
+
+        uint triangle = entries[i].triangle;
+
+        indices[i * 3u] = triangle * 3u;
+        indices[i * 3u + 1u] = triangle * 3u + 1u;
+        indices[i * 3u + 2u] = triangle * 3u + 2u;
+    }
+}

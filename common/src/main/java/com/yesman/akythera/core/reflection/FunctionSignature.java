@@ -1,14 +1,33 @@
 package com.yesman.akythera.core.reflection;
 
 import com.yesman.akythera.api.data.modularize.ScriptFunction;
+import com.yesman.akythera.core.util.helper.ParseUtils;
 
+import java.lang.reflect.Type;
+import java.util.Arrays;
 import java.util.List;
 
 /// Signature of [ScriptFunction]
-public record FunctionSignature(List<String> parameterNames, List<Class<?>> parameters, Class<?> returnType) {
+///
+/// @param parameters        the class each parameter erases to
+/// @param genericParameters each parameter as declared, e.g. `ResourceKey<AnimationMontage>`. The same as
+///                          [#parameters] for a parameter declared without type arguments
+/// @param genericReturnType the return type as declared, e.g. `V` of `Map<K, V>`. The same as [#returnType]
+///                          for a return type declared without type arguments
+public record FunctionSignature(
+    List<String> parameterNames, List<Class<?>> parameters, Class<?> returnType, List<Type> genericParameters, Type genericReturnType
+) {
     /// Generate a function signature
     public static FunctionSignature create(Class<?> returnType, List<String> parameterNames, Class<?>... parameters) {
-        return new FunctionSignature(parameterNames, List.of(parameters), returnType);
+        return new FunctionSignature(parameterNames, List.of(parameters), returnType, List.of(parameters), returnType);
+    }
+
+    /// Generate a function signature whose return type and parameters may carry type arguments or be type
+    /// variables, see [ParseUtils#parameterized].
+    public static FunctionSignature create(Type returnType, List<String> parameterNames, Type... parameters) {
+        List<Class<?>> erased = Arrays.stream(parameters).<Class<?>>map(ParseUtils::erase).toList();
+
+        return new FunctionSignature(parameterNames, erased, ParseUtils.erase(returnType), List.of(parameters), returnType);
     }
 
     /// Compares function signature

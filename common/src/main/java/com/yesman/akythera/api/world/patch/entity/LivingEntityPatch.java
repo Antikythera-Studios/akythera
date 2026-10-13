@@ -13,6 +13,7 @@ import com.yesman.akythera.core.animation.animator.BlendingAnimator;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.blueprint.EntityPatchBlueprint;
 import com.yesman.akythera.core.reflection.ScriptFunction;
+import com.yesman.akythera.core.reflection.ScriptType;
 import net.minecraft.core.Holder;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.resources.ResourceKey;
@@ -22,10 +23,12 @@ import net.minecraft.world.item.ItemStack;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+@ScriptType(autoRegister = false)
 public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> implements EquipmentHolder {
     /// Slots equipment is read from, in priority order — the main hand answers before the off hand.
     private static final List<EquipmentSlot> STANCE_SLOTS = List.of(EquipmentSlot.MAINHAND, EquipmentSlot.OFFHAND);
@@ -39,6 +42,9 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
 
     /// Whether [#animationReplacements] were written through their mirrored twins.
     private boolean replacementsMirrored;
+
+    /// This entity's own item patch per equipment slot, and the shared patch it was built from.
+    private final Map<EquipmentSlot, SlotItemPatch> slotItemPatches = new EnumMap<>(EquipmentSlot.class);
 
     public LivingEntityPatch(@NonNull T original) {
         super(original);
@@ -174,7 +180,23 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
     @ScriptFunction(pure = true, label = "Get Item Patch In Slot", desc = "Returns the item patch of the item in the slot. Null when the item has none.")
     @Override
     public @Nullable ItemPatch getItemPatchInSlot(final EquipmentSlot equipmentSlot) {
-        return AkytheraPatches.getItemPatch(getItemInSlot(equipmentSlot));
+        ItemStack itemStack = getItemInSlot(equipmentSlot);
+        ItemPatch shared = AkytheraPatches.getItemPatch(itemStack);
+
+        if (shared == null) {
+            slotItemPatches.remove(equipmentSlot);
+
+            return null;
+        }
+
+        SlotItemPatch slotItemPatch = slotItemPatches.get(equipmentSlot);
+
+        if (slotItemPatch == null || slotItemPatch.shared() != shared) {
+            slotItemPatch = new SlotItemPatch(shared, shared.getBlueprint().instantiate(itemStack.getItem(), this, equipmentSlot));
+            slotItemPatches.put(equipmentSlot, slotItemPatch);
+        }
+
+        return slotItemPatch.instance();
     }
 
     @ScriptFunction(pure = true, label = "Get Main Hand Item Patch")
@@ -242,5 +264,10 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
     @ScriptFunction(pure = true, label = "Is Dead or Dying")
     public boolean isDeadOrDying() {
         return getOriginal().isDeadOrDying();
+    }
+
+    /// An entity's own item patch for one slot, and the shared patch it was built from, which tells when the slot's
+    /// item, or the loaded blueprint, changed.
+    private record SlotItemPatch(ItemPatch shared, ItemPatch instance) {
     }
 }

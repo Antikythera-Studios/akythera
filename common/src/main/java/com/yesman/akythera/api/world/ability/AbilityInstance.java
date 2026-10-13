@@ -1,5 +1,6 @@
 package com.yesman.akythera.api.world.ability;
 
+import com.yesman.akythera.core.reflection.ScriptType;
 import org.jetbrains.annotations.ApiStatus;
 import org.jspecify.annotations.Nullable;
 
@@ -7,6 +8,7 @@ import org.jspecify.annotations.Nullable;
 /// and the per-owner state its callbacks read.
 ///
 /// Drives only what every ability shares: the activation lifecycle.
+@ScriptType
 public final class AbilityInstance {
     private @Nullable Ability<?> ability;
     private @Nullable AbilitySlot slot;

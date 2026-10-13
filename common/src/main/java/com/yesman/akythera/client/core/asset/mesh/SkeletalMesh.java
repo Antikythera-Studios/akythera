@@ -6,17 +6,19 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.yesman.akythera.client.api.lifecycle.ClientComponentsFactory;
 import com.yesman.akythera.client.core.asset.loader.MeshLoader;
 import com.yesman.akythera.client.core.asset.loader.VertexBuilder;
+import com.yesman.akythera.client.core.asset.physics.ClothPhysicsData;
 import com.yesman.akythera.client.core.shader.backend.setup.AnimationComputeShader;
+import com.yesman.akythera.client.core.shader.backend.setup.ClothComputeShader;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.asset.armature.Armature;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.nio.FloatBuffer;
 import java.util.List;
@@ -62,6 +64,12 @@ public class SkeletalMesh implements Mesh<SkeletalMesh.SkeletalMeshPart> {
 
     /// Buffers to be used in compute shader. Assigned only if compute shader is supported by device.
     protected @Nullable AnimationComputeShader animationComputeShader;
+
+    /// The cloth this mesh carries, or null for none.
+    protected final @Nullable ClothPhysicsData clothPhysics;
+
+    /// The cloth's GPU residency. Null without [#clothPhysics] or without device support for it.
+    protected @Nullable ClothComputeShader clothComputeShader;
 
     protected final MeshLoader.Metadata metadata;
 
@@ -118,7 +126,7 @@ public class SkeletalMesh implements Mesh<SkeletalMesh.SkeletalMeshPart> {
             deformWeightIndices.writeInt(i);
         }
 
-        ImmutableMap.Builder<@NotNull String, @NotNull SkeletalMeshPart> meshPartBuilder = ImmutableMap.builder();
+        ImmutableMap.Builder<@NonNull String, @NonNull SkeletalMeshPart> meshPartBuilder = ImmutableMap.builder();
 
         for (Map.Entry<String, List<VertexBuilder>> entry : meshBuilder.partBuilders.entrySet()) {
             meshPartBuilder.put(entry.getKey(), new SkeletalMeshPart(entry.getValue(), entry.getKey()));
@@ -127,6 +135,11 @@ public class SkeletalMesh implements Mesh<SkeletalMesh.SkeletalMeshPart> {
         meshParts = meshPartBuilder.build();
 
         animationComputeShader = ClientComponentsFactory.getImpl().getAnimationComputeShaderSetup(meshBuilder);
+
+        clothPhysics = meshBuilder.clothPhysics;
+        clothComputeShader = clothPhysics == null
+            ? null
+            : ClientComponentsFactory.getImpl().createClothComputeShader(this, clothPhysics.weights(), clothPhysics.offsetPairs());
     }
 
     /// Draw a mesh with mesh deformation, by the bone transform in a specific pose.
@@ -158,6 +171,39 @@ public class SkeletalMesh implements Mesh<SkeletalMesh.SkeletalMeshPart> {
         return animationComputeShader;
     }
 
+    public @Nullable ClothPhysicsData getClothPhysics() {
+        return clothPhysics;
+    }
+
+    public @Nullable ClothComputeShader getClothComputeShader() {
+        return clothComputeShader;
+    }
+
+    /// Number of distinct vertex positions, the index space [SkeletalMeshPart#getPositionIndex]
+    /// answers in.
+    public int getPositionCount() {
+        return positions.writerIndex() / 12;
+    }
+
+    /// The bind-pose position at `index`, in armature space, into `dest`.
+    public Vector3f getPosition(final int index, final Vector3f dest) {
+        return dest.set(
+            positions.getFloat(Mesh.byteIndex(index * 3)),
+            positions.getFloat(Mesh.byteIndex(index * 3 + 1)),
+            positions.getFloat(Mesh.byteIndex(index * 3 + 2))
+        );
+    }
+
+    /// First entry of the bone–weight pairs deforming the position at `index`.
+    public int getDeformationRangeStart(final int index) {
+        return deformationFromToIndices.getInt(Mesh.byteIndex(index * 2));
+    }
+
+    /// One past the last entry of the bone–weight pairs deforming the position at `index`.
+    public int getDeformationRangeEnd(final int index) {
+        return deformationFromToIndices.getInt(Mesh.byteIndex(index * 2 + 1));
+    }
+
     @Override
     public Map<String, SkeletalMeshPart> getParts() {
         return meshParts;
@@ -183,6 +229,7 @@ public class SkeletalMesh implements Mesh<SkeletalMesh.SkeletalMeshPart> {
             meshPart.drawIndices.release();
         }
 
+        if (clothComputeShader != null) clothComputeShader.close();
         if (animationComputeShader != null) animationComputeShader.close();
     }
 
@@ -357,6 +404,11 @@ public class SkeletalMesh implements Mesh<SkeletalMesh.SkeletalMeshPart> {
             return vertexCount;
         }
 
+        /// The position index of the `vertex`-th vertex of this part's triangle list.
+        public int getPositionIndex(final int vertex) {
+            return drawIndices.getInt(Mesh.byteIndex(vertex * 3));
+        }
+
         public SkeletalMeshPartBufferView getBufferView() {
             return new SkeletalMeshPartBufferView(drawIndices.nioBuffer().asFloatBuffer().asReadOnlyBuffer());
         }
@@ -371,6 +423,7 @@ public class SkeletalMesh implements Mesh<SkeletalMesh.SkeletalMeshPart> {
         public int[] deformationFromToArray;
         public int[] affectingBoneIdArray;
         public int[] affectingWeightIndexArray;
+        public @Nullable ClothPhysicsData clothPhysics;
 
         /// An array of actual weight value (referenced by [#deformWeightIndices])
         public SkeletalMeshBuilder weights(final float[] weights) {
@@ -393,6 +446,12 @@ public class SkeletalMesh implements Mesh<SkeletalMesh.SkeletalMeshPart> {
         /// Array of weight indices affecting a vertex
         public SkeletalMeshBuilder affectingWeightIndexArray(final int[] affectingWeightIndexArray) {
             this.affectingWeightIndexArray = affectingWeightIndexArray;
+            return this;
+        }
+
+        /// The cloth the loaded mesh carries, see [MeshLoader#clothPhysics]
+        public SkeletalMeshBuilder clothPhysics(final @Nullable ClothPhysicsData clothPhysics) {
+            this.clothPhysics = clothPhysics;
             return this;
         }
     }

@@ -1,5 +1,6 @@
 package com.yesman.akythera.api.world.ability;
 
+import com.yesman.akythera.core.reflection.ScriptType;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import net.minecraft.core.RegistryAccess;
@@ -14,6 +15,7 @@ import org.jspecify.annotations.Nullable;
 ///
 /// A null codec in a direction means the state is not a sync target that way. Fields a codec
 /// leaves out keep their current value on the receiving side.
+@ScriptType
 public interface AbilityState {
     /// The state an ability that declares no variables receives: nothing to sync, never dirty.
     AbilityState EMPTY = new AbilityState() {

@@ -133,9 +133,9 @@ public final class AbilityResources {
             return Kind.CONSUMPTIVE;
         }
 
-        /// Zero health is death.
         @Override
         public boolean canEmpty() {
+            // Zero health is death.
             return false;
         }
     }

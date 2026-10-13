@@ -69,6 +69,27 @@ public interface AssetLoader {
         }
     }
 
+    /// Decodes the `.json` asset at `assetPath` (given without extension).
+    ///
+    /// @exception ResourceLoadingFailureException when the file is absent, unreadable, or does not
+    ///                                            decode against `codec`
+    static <T> T readJsonAsset(
+        final Identifier assetPath,
+        final ResourceManager resourceManager,
+        final Codec<T> codec
+    ) throws ResourceLoadingFailureException {
+        Identifier asJson = Identifier.fromNamespaceAndPath(assetPath.getNamespace(), assetPath.getPath() + ".json");
+        Resource resource = resourceManager.getResource(asJson)
+            .orElseThrow(() -> new ResourceLoadingFailureException(assetPath, "Found no json(.json) asset file"));
+
+        try (BufferedReader reader = resource.openAsReader()) {
+            return codec.parse(JsonOps.INSTANCE, JsonParser.parseReader(reader))
+                .getOrThrow(message -> new ResourceLoadingFailureException(assetPath, message));
+        } catch (IOException | JsonParseException e) {
+            throw new ResourceLoadingFailureException(assetPath, e);
+        }
+    }
+
     /// Reads an asset's sidecar metadata. [AssetLoader#readMetadata] is the shape a loader uses when
     /// its caller names none.
     ///

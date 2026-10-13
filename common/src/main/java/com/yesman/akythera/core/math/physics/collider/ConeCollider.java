@@ -4,6 +4,7 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.component.ComponentAttachable;
+import com.yesman.akythera.api.component.TransformInheritPolicy;
 import com.yesman.akythera.core.math.Transform;
 import com.yesman.akythera.core.math.physics.collider.component.ConeColliderComponent;
 import net.minecraft.world.phys.Vec3;
@@ -15,9 +16,11 @@ public final class ConeCollider extends Collider {
     public static final MapCodec<ConeCollider> CODEC = RecordCodecBuilder.mapCodec(
         instance ->
             instance.group(
-                Transform.CODEC.fieldOf("transform").forGetter(Collider::getPivotTransform),
+                TRANSFORM_CODEC.forGetter(Collider::getPivotTransform),
+                TRANSFORM_INHERIT_POLICY_CODEC.forGetter(Collider::getTransformInheritPolicy),
                 Codec.DOUBLE.fieldOf("radius").forGetter(ConeCollider::getRadius),
-                Codec.DOUBLE.fieldOf("height").forGetter(ConeCollider::getHeight)
+                Codec.DOUBLE.fieldOf("height").forGetter(ConeCollider::getHeight),
+                ENABLED_CODEC.forGetter(Collider::enabled)
             )
             .apply(instance, ConeCollider::new)
     );
@@ -29,8 +32,14 @@ public final class ConeCollider extends Collider {
     private final Vec3 localApex;
     private final Vec3 localBaseCenter;
 
-    public ConeCollider(final Transform pivotTransform, final double radius, final double height) {
-        super(pivotTransform);
+    public ConeCollider(
+        final Transform pivotTransform,
+        final TransformInheritPolicy transformInheritPolicy,
+        final double radius,
+        final double height,
+        final boolean enabled
+    ) {
+        super(pivotTransform, transformInheritPolicy, enabled);
 
         this.radius = radius;
         this.height = height;
@@ -58,7 +67,7 @@ public final class ConeCollider extends Collider {
 
     @Override
     public ConeColliderComponent instantiate(final @Nullable ComponentAttachable host) {
-        return new ConeColliderComponent(this, Transform.identity());
+        return new ConeColliderComponent(this, host, Transform.identity());
     }
 
     @Override

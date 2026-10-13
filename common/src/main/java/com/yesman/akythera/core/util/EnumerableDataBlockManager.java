@@ -58,8 +58,12 @@ public final class EnumerableDataBlockManager<T extends EnumerableDataBlock> {
     /// one.
     private final @Nullable Supplier<T> implicitParentFactory;
 
-    /// A type whose identity is its path alone: one namespace, implicit ancestors, and a throw when
-    /// two entries land on one path.
+    /// A type whose identity is its path alone, under one namespace.
+    ///
+    /// An entry is a terminal tag and its ancestor segments are path tags: `activation/combo_attack`
+    /// registers the terminal `activation/combo_attack` and the path tag `activation`. Path tags are
+    /// shared by any number of entries, but a terminal may not land on a registered path, terminal or
+    /// path tag. Code registration and data pack loading both throw when an entry breaks this.
     public EnumerableDataBlockManager(
         final String enumName,
         final MapCodec<T> mapCodec,
@@ -221,9 +225,22 @@ public final class EnumerableDataBlockManager<T extends EnumerableDataBlock> {
         throw new IllegalArgumentException("Can't find registered owner class: " + value.getClass().getSimpleName());
     }
 
-    private int register(final T value, final Identifier enumIdentifier, final boolean hardcoded) {
+    private int register(final T value, final Identifier declaredIdentifier, final boolean hardcoded) {
+        Identifier enumIdentifier = canonical(declaredIdentifier);
+
         if (enumsByIdentifier.containsKey(enumIdentifier)) {
             throw new IllegalArgumentException("Enum identifier " + enumIdentifier + " already exists in " + enumType + ". Consider another enum name.");
+        }
+
+        if (hardcoded && implicitParentFactory != null) {
+            Set<String> registered = new HashSet<>();
+            enumsByIdentifier.keySet().forEach(identifier -> registered.add(identifier.getPath()));
+            String terminal = terminalAncestorOf(enumIdentifier.getPath(), registered);
+
+            if (terminal != null) {
+                throw new IllegalArgumentException(
+                    "Enum identifier " + enumIdentifier + " sits under the terminal entry " + terminal + " in " + enumType);
+            }
         }
 
         int enumOrdinal = lastOrdinal;
@@ -232,6 +249,17 @@ public final class EnumerableDataBlockManager<T extends EnumerableDataBlock> {
         enumsByIdentifier.put(enumIdentifier, value);
         if (hardcoded) hardcodedEnums.add(value);
         ++lastOrdinal;
+
+        // A code-registered path-identified entry registers its parent as a path tag, which does the same for its own.
+        if (hardcoded && implicitParentFactory != null) {
+            String path = enumIdentifier.getPath();
+            int cut = path.lastIndexOf('/');
+
+            if (cut > 0) {
+                Identifier parent = Identifier.fromNamespaceAndPath(canonicalNamespace, path.substring(0, cut));
+                if (!enumsByIdentifier.containsKey(parent)) register(implicitParentFactory.get(), parent, true);
+            }
+        }
 
         return enumOrdinal;
     }
@@ -262,68 +290,84 @@ public final class EnumerableDataBlockManager<T extends EnumerableDataBlock> {
         }
     }
 
-    /// Rewrites `parsed` into what a path-identified type actually registers: one namespace, no two
-    /// entries on one path, no entry shadowing a code-registered entry, and an entry for every
-    /// ancestor path no file declared. Other types pass through untouched.
+    /// Rewrites `parsed` into what a path-identified type actually registers: one namespace, and a
+    /// path tag for every ancestor segment no code-registered entry covers. Other types pass through
+    /// untouched.
     ///
-    /// @throws IllegalStateException when two entries resolve to the same path
+    /// @throws IllegalStateException when an entry breaks the path rule of
+    /// [#EnumerableDataBlockManager(String, MapCodec, Supplier)] against the other entries or the
+    /// code-registered ones
     @ApiStatus.Internal
     public Map<Identifier, T> canonicalizeDataPackEntries(final Map<Identifier, T> parsed) {
         if (canonicalNamespace == null || implicitParentFactory == null) return parsed;
 
+        Set<String> hardcodedPaths = new HashSet<>();
+        enumsByIdentifier.forEach((identifier, value) -> {
+            if (hardcodedEnums.contains(value)) hardcodedPaths.add(identifier.getPath());
+        });
+
         Map<String, Identifier> declaredBy = new HashMap<>();
+        Set<String> parentPaths = new HashSet<>();
+
+        for (Identifier declaring : parsed.keySet()) {
+            String path = declaring.getPath();
+            Identifier declared = declaredBy.putIfAbsent(path, declaring);
+
+            if (declared != null) {
+                throw new IllegalStateException(
+                    "Two " + enumType + " entries resolve to the path " + path + ": " + declared + " and " + declaring
+                );
+            }
+
+            for (int cut = path.lastIndexOf('/'); cut > 0; cut = path.lastIndexOf('/', cut - 1)) {
+                parentPaths.add(path.substring(0, cut));
+            }
+        }
+
         Map<Identifier, T> canonical = new TreeMap<>();
 
         for (Map.Entry<Identifier, T> entry : parsed.entrySet()) {
             String path = entry.getKey().getPath();
-            Identifier declared = declaredBy.putIfAbsent(path, entry.getKey());
 
-            if (declared != null) {
+            if (hardcodedPaths.contains(path) || parentPaths.contains(path)) {
                 throw new IllegalStateException(
-                    "Two " + enumType + " entries resolve to the path " + path + ": "
-                        + declared + " and " + entry.getKey()
+                    "The " + enumType + " entry " + entry.getKey() + " lands on " + path + ", which is already a registered path"
                 );
             }
 
-            Identifier identifier = Identifier.fromNamespaceAndPath(canonicalNamespace, path);
-            T registered = enumsByIdentifier.get(identifier);
+            String terminal = terminalAncestorOf(path, hardcodedPaths);
 
-            // A code-registered entry survives reloads and a data pack one does not, so the
-            // hardcoded entry keeps the path.
-            if (registered != null && hardcodedEnums.contains(registered)) {
-                Akythera.LOGGER.warn(
-                    "Data pack {} declares {}, which a built-in entry already owns. Dropped.",
-                    entry.getKey(), path
+            if (terminal != null) {
+                throw new IllegalStateException(
+                    "The " + enumType + " entry " + entry.getKey() + " sits under the built-in terminal entry " + terminal
                 );
-
-                continue;
             }
 
-            canonical.put(identifier, entry.getValue());
+            canonical.put(Identifier.fromNamespaceAndPath(canonicalNamespace, path), entry.getValue());
         }
 
-        for (Identifier identifier : Set.copyOf(canonical.keySet())) {
-            addImplicitParents(canonical, identifier.getPath());
+        for (String parent : parentPaths) {
+            if (!hardcodedPaths.contains(parent)) {
+                canonical.put(Identifier.fromNamespaceAndPath(canonicalNamespace, parent), implicitParentFactory.get());
+            }
         }
 
         return canonical;
     }
 
-    /// Adds an entry for every ancestor segment of `path` that neither a file nor code declared.
-    private void addImplicitParents(final Map<Identifier, T> canonical, final String path) {
-        int cut = path.lastIndexOf('/');
+    /// The nearest ancestor of `path` that `registered` holds as a terminal, with nothing beneath it.
+    /// Null when there is none.
+    private static @Nullable String terminalAncestorOf(final String path, final Set<String> registered) {
+        for (int cut = path.lastIndexOf('/'); cut > 0; cut = path.lastIndexOf('/', cut - 1)) {
+            String ancestor = path.substring(0, cut);
 
-        while (cut > 0) {
-            String parent = path.substring(0, cut);
-            Identifier identifier = Identifier.fromNamespaceAndPath(canonicalNamespace, parent);
-
-            if (canonical.containsKey(identifier) || enumsByIdentifier.containsKey(identifier)) return;
-
-            canonical.put(identifier, implicitParentFactory.get());
-            cut = parent.lastIndexOf('/');
+            if (registered.contains(ancestor) && registered.stream().noneMatch(other -> other.startsWith(ancestor + "/"))) {
+                return ancestor;
+            }
         }
-    }
 
+        return null;
+    }
 
     @ApiStatus.Internal
     public void clearDataPackEntries() {
@@ -340,20 +384,37 @@ public final class EnumerableDataBlockManager<T extends EnumerableDataBlock> {
         return enumsByOrdinal.get(id);
     }
 
+    /// Resolves by path alone when [#isPathIdentified].
     public T getOrThrow(final Identifier identifier) throws NoSuchElementException {
-        if (!enumsByIdentifier.containsKey(identifier)) {
+        T value = enumsByIdentifier.get(canonical(identifier));
+
+        if (value == null) {
             throw new NoSuchElementException("Enum identifier " + identifier + " does not exist in " + enumType);
         }
 
-        return enumsByIdentifier.get(identifier);
+        return value;
     }
 
     public Optional<T> get(final int id) {
         return Optional.ofNullable(enumsByOrdinal.get(id));
     }
 
+    /// Resolves by path alone when [#isPathIdentified].
     public Optional<T> get(final Identifier name) {
-        return Optional.ofNullable(enumsByIdentifier.get(name));
+        return Optional.ofNullable(enumsByIdentifier.get(canonical(name)));
+    }
+
+    /// Whether entries are told apart by their path alone, under one namespace. See
+    /// [#EnumerableDataBlockManager(String, MapCodec, Supplier)] for the path rule they follow.
+    public boolean isPathIdentified() {
+        return canonicalNamespace != null;
+    }
+
+    /// `identifier` under the namespace this manager registers it by.
+    private Identifier canonical(final Identifier identifier) {
+        return canonicalNamespace == null
+            ? identifier
+            : Identifier.fromNamespaceAndPath(canonicalNamespace, identifier.getPath());
     }
 
     /// The ordinal `object` is registered under.

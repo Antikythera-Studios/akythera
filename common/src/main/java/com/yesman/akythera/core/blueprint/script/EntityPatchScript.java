@@ -1,19 +1,24 @@
 package com.yesman.akythera.core.blueprint.script;
 
+import com.yesman.akythera.api.data.modularize.ScriptFunction;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.blueprint.ComponentBlueprint;
+import com.yesman.akythera.core.reflection.BlueprintFunction;
 import net.minecraft.world.level.Level;
 
 import java.util.Map;
 
 public interface EntityPatchScript {
     /// Called on the constructor of [EntityPatch]
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.EVENT_GRAPH)
     void onConstruct();
 
     /// Called on [EntityPatch#onJoinWorld]
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.EVENT_GRAPH)
     void onJoinWorld(final Level level);
 
     /// Called on [EntityPatch#postTick()]
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.EVENT_GRAPH)
     void update();
 
     /// Entries of (name, components) to attach to the owner

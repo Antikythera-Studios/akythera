@@ -3,10 +3,12 @@ package com.yesman.akythera.client.core.asset.loader;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.client.core.asset.loader.binary.BinaryMeshLoader;
+import com.yesman.akythera.client.core.asset.loader.binary.ClothPhysicsLoader;
 import com.yesman.akythera.client.core.asset.loader.json.JsonMeshLoader;
 import com.yesman.akythera.client.core.asset.mesh.Mesh;
 import com.yesman.akythera.client.core.asset.mesh.SkeletalMesh;
 import com.yesman.akythera.client.core.asset.mesh.StaticMesh;
+import com.yesman.akythera.client.core.asset.physics.ClothPhysicsData;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.asset.loader.AssetLoader;
 import com.yesman.akythera.core.asset.loader.ResourceLoadingFailureException;
@@ -29,6 +31,9 @@ public interface MeshLoader extends AssetLoader {
 
     /// The sidecar metadata of the asset this loader reads.
     Metadata metadata();
+
+    /// The cloth this mesh carries, handed to a [SkeletalMesh] it loads; null for none.
+    @Nullable ClothPhysicsData clothPhysics();
 
     /// Loads a static mesh. Even tho the asset file was exported
     /// as skeletal, this will extract only information to draw the mesh.
@@ -53,12 +58,20 @@ public interface MeshLoader extends AssetLoader {
         AssetLoader.MetadataLoader<Metadata> metadataLoader
     ) throws ResourceLoadingFailureException {
         Metadata metadata = metadataLoader.load(resourcePath, resourceManager, Metadata.CODEC, Metadata.DEFAULT);
+        ClothPhysicsData clothPhysics = null;
+
+        try {
+            clothPhysics = ClothPhysicsLoader.read(resourcePath, resourceManager);
+        } catch (ResourceLoadingFailureException e) {
+            Akythera.LOGGER.error("Failed at loading cloth physics of {}. Loaded without cloth.", resourcePath, e);
+        }
+
         Identifier asBinary = Identifier.fromNamespaceAndPath(resourcePath.getNamespace(), resourcePath.getPath() + "." + AssetLoader.BINARY_EXTENSION);
         Optional<Resource> binaryResource = resourceManager.getResource(asBinary);
 
         if (binaryResource.isPresent()) {
             try {
-                return new BinaryMeshLoader(asBinary, binaryResource.get(), metadata);
+                return new BinaryMeshLoader(asBinary, binaryResource.get(), metadata, clothPhysics);
             } catch (ResourceLoadingFailureException e) {
                 Akythera.LOGGER.warn("Failed at loading a binary file. Now trying to read a json file...", e);
             }
@@ -68,7 +81,7 @@ public interface MeshLoader extends AssetLoader {
         Optional<Resource> jsonResource = resourceManager.getResource(asJson);
 
         if (jsonResource.isPresent()) {
-            return new JsonMeshLoader(asJson, jsonResource.get(), metadata);
+            return new JsonMeshLoader(asJson, jsonResource.get(), metadata, clothPhysics);
         }
 
         throw new ResourceLoadingFailureException(resourcePath, "Found neither binary(.akasset) nor json(.json) asset file");

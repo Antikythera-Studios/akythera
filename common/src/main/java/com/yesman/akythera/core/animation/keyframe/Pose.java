@@ -4,6 +4,7 @@ import com.yesman.akythera.api.asset.AssetAccessor;
 import com.yesman.akythera.core.asset.armature.Armature;
 import com.yesman.akythera.core.asset.armature.Bone;
 import com.yesman.akythera.core.math.Transform;
+import com.yesman.akythera.core.reflection.ScriptType;
 import com.yesman.akythera.core.util.helper.Matrix4fUtils;
 import org.joml.Matrix4f;
 import org.jspecify.annotations.NonNull;
@@ -16,6 +17,7 @@ import java.util.Set;
 import java.util.function.BiConsumer;
 
 /// Snapshot of animation captured in a specific time
+@ScriptType
 public final class Pose {
     /// A pose without any data inside it
     ///

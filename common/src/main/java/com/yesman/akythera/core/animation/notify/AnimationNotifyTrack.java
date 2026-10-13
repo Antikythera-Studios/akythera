@@ -4,11 +4,10 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.animation.notify.AnimationNotify;
 import com.yesman.akythera.api.animation.notify.AnimationNotifyState;
-import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.math.TimeWindow;
 import com.yesman.akythera.core.util.LogicalSide;
-import net.minecraft.world.entity.Entity;
 import org.jspecify.annotations.NonNull;
 
 import java.util.List;
@@ -56,7 +55,7 @@ public final class AnimationNotifyTrack {
     /// the owning [PlayableAnimation] so notify callbacks know who fired them.
     public void tick(
         final PlayableAnimation playingAnimation,
-        final EntityPatch<Entity> owner,
+        final ComponentAttachable owner,
         final float prevElapsedTime,
         final float currentElapsedTime
     ) {

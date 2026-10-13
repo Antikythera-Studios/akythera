@@ -30,11 +30,18 @@ public final class VulkanComputeBackend implements ComputeBackend {
     private final VulkanDevice device;
     private final int storageBufferOffsetAlignment;
     private final long maxStorageBlockSize;
+    private final int maxComputeStorageBlocks;
 
-    private VulkanComputeBackend(final VulkanDevice device, final int storageBufferOffsetAlignment, final long maxStorageBlockSize) {
+    private VulkanComputeBackend(
+        final VulkanDevice device,
+        final int storageBufferOffsetAlignment,
+        final long maxStorageBlockSize,
+        final int maxComputeStorageBlocks
+    ) {
         this.device = device;
         this.storageBufferOffsetAlignment = storageBufferOffsetAlignment;
         this.maxStorageBlockSize = maxStorageBlockSize;
+        this.maxComputeStorageBlocks = maxComputeStorageBlocks;
     }
 
     public static VulkanComputeBackend create() {
@@ -44,7 +51,10 @@ public final class VulkanComputeBackend implements ComputeBackend {
             VkPhysicalDeviceLimits limits = VulkanDevices.limits(device, stack);
 
             return new VulkanComputeBackend(
-                device, (int) limits.minStorageBufferOffsetAlignment(), Integer.toUnsignedLong(limits.maxStorageBufferRange())
+                device,
+                (int) limits.minStorageBufferOffsetAlignment(),
+                Integer.toUnsignedLong(limits.maxStorageBufferRange()),
+                limits.maxPerStageDescriptorStorageBuffers()
             );
         }
     }
@@ -77,8 +87,20 @@ public final class VulkanComputeBackend implements ComputeBackend {
     }
 
     @Override
+    public GpuBuffer createIndexStorageBuffer(final Supplier<String> label, final long size) {
+        return VulkanStorageBuffer.create(
+            device, label, size, GpuBuffer.USAGE_INDEX | GpuBuffer.USAGE_COPY_DST, VK12.VK_BUFFER_USAGE_INDEX_BUFFER_BIT, false
+        );
+    }
+
+    @Override
     public GpuBuffer createMappedStorageBuffer(final Supplier<String> label, final long size) {
         return VulkanStorageBuffer.create(device, label, size, GpuBuffer.USAGE_MAP_WRITE | GpuBuffer.USAGE_COPY_DST, 0, true);
+    }
+
+    @Override
+    public GpuBuffer createComputeStorageBuffer(final Supplier<String> label, final long size) {
+        return VulkanStorageBuffer.create(device, label, size, GpuBuffer.USAGE_COPY_DST, 0, false);
     }
 
     @Override
@@ -89,5 +111,10 @@ public final class VulkanComputeBackend implements ComputeBackend {
     @Override
     public long maxStorageBlockSize() {
         return maxStorageBlockSize;
+    }
+
+    @Override
+    public int maxComputeStorageBlocks() {
+        return maxComputeStorageBlocks;
     }
 }

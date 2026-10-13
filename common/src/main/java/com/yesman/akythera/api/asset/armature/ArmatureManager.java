@@ -12,14 +12,13 @@ import com.yesman.akythera.core.asset.armature.Bone;
 import com.yesman.akythera.core.asset.loader.ArmatureLoader;
 import com.yesman.akythera.core.asset.loader.ResourceLoadingFailureException;
 import net.minecraft.resources.Identifier;
-import org.jetbrains.annotations.NotNull;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Map;
 
-public final class ArmatureManager extends DynamicAssetManager<@NotNull Armature> {
+public final class ArmatureManager extends DynamicAssetManager<@NonNull Armature> {
     public static final String DIRECTORY = "animmodels/armatures/";
 
     /// The armature a slot left unfilled resolves to: [ArmatureLoader#ROOT_BONE] and nothing else.

@@ -1,0 +1,399 @@
+// No `#version` line: the backend prepends its own preamble, along with the `AKYTHERA_GL` or
+// `AKYTHERA_VULKAN` define that selects the uniform declarations below.
+
+layout(local_size_x = 128) in;
+
+const uint STAGE_INTEGRATE = 0u;
+const uint STAGE_DISTANCE = 1u;
+const uint STAGE_SELF_COLLIDE = 2u;
+const uint STAGE_APPLY_DELTA = 3u;
+const uint STAGE_CONSTRAIN = 4u;
+const uint STAGE_FRAMES = 5u;
+const uint STAGE_FOLLOW = 6u;
+
+const uint KIND_STRETCH = 0u;
+const uint MAX_NEIGHBORS = 16u;
+
+const float SHAPE_SPHERE = 0.0;
+const float SHAPE_CAPSULE = 1.0;
+
+const float EPSILON = 1.0e-7;
+
+struct Particle {
+    vec4 rest;
+    int bone_from;
+    int bone_to;
+    float weight;
+    int tether_anchor;
+    float tether_length;
+    uint adjacency_start;
+    uint adjacency_count;
+    int root;
+};
+
+struct ParticleState {
+    vec4 position;
+    vec4 previous;
+    vec4 target;
+    vec4 previous_target;
+    vec4 delta;
+    vec4 axis_x;            // x column of the turn from the animated surface to the simulated one
+    vec4 axis_y;            // y column of it; z is their cross product
+};
+
+struct DistanceConstraint {
+    uint a;
+    uint b;
+    float rest_length;
+    uint kind;
+};
+
+struct Collider {
+    vec4 header;            // x shape, y radius
+    vec4 a;
+    vec4 b;
+    vec4 axis_x;
+    vec4 axis_y;
+    vec4 axis_z;
+};
+
+layout(std430, binding = 0) readonly buffer ParamsBuffer {
+    mat4 armature_to_simulation;
+    mat4 frame_correction;
+    vec4 gravity;
+    vec4 solver;
+    vec4 limits;
+    vec4 hashing;
+    uint particle_count;
+    uint collider_count;
+    uint substep_count;
+    uint reset;
+    uint key_count;
+    uint table_size;
+    uint offset_count;
+    uint params_pad1;
+};
+
+layout(std430, binding = 1) readonly buffer ParticleBuffer {
+    Particle particles[];
+};
+
+layout(std430, binding = 2) readonly buffer ConstraintBuffer {
+    DistanceConstraint constraints[];
+};
+
+layout(std430, binding = 3) readonly buffer ColliderBuffer {
+    Collider colliders[];
+};
+
+layout(std430, binding = 4) buffer StateBuffer {
+    ParticleState states[];
+};
+
+layout(std430, binding = 5) readonly buffer NeighborBuffer {
+    uint neighbors[];       // per particle: count, then MAX_NEIGHBORS indices
+};
+
+layout(std430, binding = 6) readonly buffer TriangleBuffer {
+    uint triangles[];       // particle-index triples
+};
+
+#ifdef AKYTHERA_VULKAN
+layout(push_constant, std430) uniform Uniforms {
+    uint stage;
+    uint range_offset;
+    uint range_count;
+    uint substep;
+};
+#else
+uniform uint stage;
+uniform uint range_offset;
+uniform uint range_count;
+uniform uint substep;
+#endif
+
+vec3 substepTarget(uint i) {
+    float t = float(substep + 1u) / float(substep_count);
+    return mix(states[i].previous_target.xyz, states[i].target.xyz, t);
+}
+
+// Signed distance from `x` to the collider's surface, with the outward normal at the nearest point.
+float colliderDistance(Collider collider, vec3 x, out vec3 normal) {
+    float shape = collider.header.x;
+
+    if (shape == SHAPE_SPHERE || shape == SHAPE_CAPSULE) {
+        vec3 nearest = collider.a.xyz;
+
+        if (shape == SHAPE_CAPSULE) {
+            vec3 segment = collider.b.xyz - collider.a.xyz;
+            float lengthSqr = dot(segment, segment);
+            float along = lengthSqr > EPSILON ? clamp(dot(x - collider.a.xyz, segment) / lengthSqr, 0.0, 1.0) : 0.0;
+            nearest = collider.a.xyz + segment * along;
+        }
+
+        vec3 offset = x - nearest;
+        float distanceToCore = length(offset);
+        normal = distanceToCore > EPSILON ? offset / distanceToCore : vec3(0.0, 1.0, 0.0);
+
+        return distanceToCore - collider.header.y;
+    }
+
+    vec3 toPoint = x - collider.a.xyz;
+    vec3 local = vec3(dot(toPoint, collider.axis_x.xyz), dot(toPoint, collider.axis_y.xyz), dot(toPoint, collider.axis_z.xyz));
+    vec3 q = abs(local) - collider.b.xyz;
+    vec3 outside = max(q, vec3(0.0));
+    float outsideLength = length(outside);
+    vec3 localNormal;
+
+    if (outsideLength > 0.0) {
+        localNormal = sign(local) * outside / outsideLength;
+    } else if (q.x >= q.y && q.x >= q.z) {
+        localNormal = vec3(sign(local.x), 0.0, 0.0);
+    } else if (q.y >= q.z) {
+        localNormal = vec3(0.0, sign(local.y), 0.0);
+    } else {
+        localNormal = vec3(0.0, 0.0, sign(local.z));
+    }
+
+    normal = collider.axis_x.xyz * localNormal.x + collider.axis_y.xyz * localNormal.y + collider.axis_z.xyz * localNormal.z;
+
+    return outsideLength + min(max(q.x, max(q.y, q.z)), 0.0);
+}
+
+void integrate(uint i) {
+    float dt = gravity.w;
+    ParticleState state = states[i];
+
+    if (particles[i].rest.w == 0.0) {
+        states[i].previous = state.position;
+        states[i].position = vec4(substepTarget(i), 1.0);
+        return;
+    }
+
+    vec3 velocity = (state.position.xyz - state.previous.xyz) / dt;
+    velocity *= max(0.0, 1.0 - solver.z * dt);
+    velocity += gravity.xyz * dt;
+
+    states[i].previous = state.position;
+    states[i].position = vec4(state.position.xyz + velocity * dt, 1.0);
+}
+
+void solveDistance(uint k) {
+    if (k >= range_count) {
+        return;
+    }
+
+    DistanceConstraint constraint = constraints[range_offset + k];
+    float wa = particles[constraint.a].rest.w;
+    float wb = particles[constraint.b].rest.w;
+    float w = wa + wb;
+
+    if (w == 0.0) {
+        return;
+    }
+
+    vec3 d = states[constraint.a].position.xyz - states[constraint.b].position.xyz;
+    float currentLength = length(d);
+
+    if (currentLength < EPSILON) {
+        return;
+    }
+
+    float dt = gravity.w;
+    float compliance = constraint.kind == KIND_STRETCH ? solver.x : solver.y;
+    float lambda = -(currentLength - constraint.rest_length) / (w + compliance / (dt * dt));
+    vec3 correction = d / currentLength * lambda;
+
+    if (wa > 0.0) {
+        states[constraint.a].position.xyz += correction * wa;
+    }
+
+    if (wb > 0.0) {
+        states[constraint.b].position.xyz -= correction * wb;
+    }
+}
+
+void selfCollide(uint i) {
+    if (particles[i].rest.w == 0.0) {
+        states[i].delta = vec4(0.0);
+        return;
+    }
+
+    uint base = i * (MAX_NEIGHBORS + 1u);
+    uint count = neighbors[base];
+    vec3 x = states[i].position.xyz;
+    float thickness = limits.w;
+    vec3 correction = vec3(0.0);
+
+    for (uint n = 0u; n < count; ++n) {
+        uint j = neighbors[base + 1u + n];
+        vec3 d = x - states[j].position.xyz;
+        float separation = length(d);
+
+        if (separation < thickness && separation > EPSILON) {
+            // A kinematic neighbor does not move, so this particle takes the whole push
+            float share = particles[j].rest.w > 0.0 ? 0.5 : 1.0;
+            correction += d / separation * (thickness - separation) * share;
+        }
+    }
+
+    states[i].delta = vec4(correction, 0.0);
+}
+
+void applyDelta(uint i) {
+    if (particles[i].rest.w > 0.0) {
+        states[i].position.xyz += states[i].delta.xyz;
+    }
+}
+
+void constrain(uint i) {
+    Particle particle = particles[i];
+
+    if (particle.rest.w == 0.0) {
+        return;
+    }
+
+    vec3 x = states[i].position.xyz;
+
+    if (particle.tether_anchor >= 0) {
+        vec3 anchor = states[uint(particle.tether_anchor)].position.xyz;
+        vec3 d = x - anchor;
+        float currentLength = length(d);
+        float maxLength = particle.tether_length * limits.y;
+
+        if (currentLength > maxLength && currentLength > EPSILON) {
+            x = anchor + d * (maxLength / currentLength);
+        }
+    }
+
+    // The animated position, and how far the simulation may pull the particle off it
+    vec3 target = substepTarget(i);
+    vec3 offset = x - target;
+    float drift = length(offset);
+    float radius = particle.weight * limits.x;
+
+    if (drift > radius) {
+        x = target + offset * (radius / max(drift, EPSILON));
+    }
+
+    vec3 previous = states[i].previous.xyz;
+
+    for (uint c = 0u; c < collider_count; ++c) {
+        vec3 normal;
+        float distanceToSurface = colliderDistance(colliders[c], x, normal);
+
+        if (distanceToSurface < limits.z) {
+            x += normal * (limits.z - distanceToSurface);
+
+            vec3 displacement = x - previous;
+            vec3 tangential = displacement - normal * dot(displacement, normal);
+            x -= tangential * solver.w;
+        }
+    }
+
+    states[i].position = vec4(x, 1.0);
+}
+
+vec3 surfacePoint(uint i, bool animated) {
+    return animated ? states[i].target.xyz : states[i].position.xyz;
+}
+
+// Orthonormal frame of the surface around particle `i`: x along the first edge of its first triangle,
+// z the normal. Identity where the surface is degenerate.
+mat3 surfaceFrame(uint i, bool animated) {
+    Particle particle = particles[i];
+    vec3 normal = vec3(0.0);
+
+    for (uint t = 0u; t < particle.adjacency_count; ++t) {
+        uint first = (particle.adjacency_start + t) * 3u;
+        vec3 a = surfacePoint(triangles[first], animated);
+        vec3 b = surfacePoint(triangles[first + 1u], animated);
+        vec3 c = surfacePoint(triangles[first + 2u], animated);
+        normal += cross(b - a, c - a);
+    }
+
+    float normalLength = length(normal);
+
+    if (normalLength < EPSILON) {
+        return mat3(1.0);
+    }
+
+    normal /= normalLength;
+
+    uint first = particle.adjacency_start * 3u;
+    uint next = triangles[first] == i ? triangles[first + 1u] : triangles[first + 1u] == i ? triangles[first + 2u] : triangles[first];
+    vec3 edge = surfacePoint(next, animated) - surfacePoint(i, animated);
+    vec3 tangent = edge - normal * dot(edge, normal);
+    float tangentLength = length(tangent);
+
+    if (tangentLength < EPSILON) {
+        return mat3(1.0);
+    }
+
+    tangent /= tangentLength;
+
+    return mat3(tangent, cross(normal, tangent), normal);
+}
+
+// `v` turned by the rotation whose x and y columns are `axisX` and `axisY`.
+vec3 turn(vec4 axisX, vec4 axisY, vec3 v) {
+    return axisX.xyz * v.x + axisY.xyz * v.y + cross(axisX.xyz, axisY.xyz) * v.z;
+}
+
+// How far the surface around a simulated particle turned away from its animated shape.
+void updateFrame(uint i) {
+    if (particles[i].rest.w == 0.0) {
+        return;
+    }
+
+    mat3 rotation = surfaceFrame(i, false) * transpose(surfaceFrame(i, true));
+
+    states[i].axis_x = vec4(rotation[0], 0.0);
+    states[i].axis_y = vec4(rotation[1], 0.0);
+}
+
+// Places offset particle `k` at its animated offset from its root, turned with the root's surface.
+void follow(uint k) {
+    uint i = particle_count + k;
+    uint root = uint(particles[i].root);
+    vec4 axisX = states[root].axis_x;
+    vec4 axisY = states[root].axis_y;
+    vec3 offset = states[i].target.xyz - states[root].target.xyz;
+
+    states[i].position = vec4(states[root].position.xyz + turn(axisX, axisY, offset), 1.0);
+    states[i].axis_x = axisX;
+    states[i].axis_y = axisY;
+}
+
+void main() {
+    uint id = gl_GlobalInvocationID.x;
+
+    if (stage == STAGE_DISTANCE) {
+        solveDistance(id);
+        return;
+    }
+
+    if (stage == STAGE_FOLLOW) {
+        if (id < offset_count) {
+            follow(id);
+        }
+
+        return;
+    }
+
+    if (id >= particle_count) {
+        return;
+    }
+
+    if (stage == STAGE_INTEGRATE) {
+        integrate(id);
+    } else if (stage == STAGE_SELF_COLLIDE) {
+        selfCollide(id);
+    } else if (stage == STAGE_APPLY_DELTA) {
+        applyDelta(id);
+    } else if (stage == STAGE_CONSTRAIN) {
+        constrain(id);
+    } else if (stage == STAGE_FRAMES) {
+        updateFrame(id);
+    }
+}

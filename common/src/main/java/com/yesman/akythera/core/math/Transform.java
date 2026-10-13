@@ -2,20 +2,21 @@ package com.yesman.akythera.core.math;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import com.yesman.akythera.core.reflection.ScriptFunction;
+import com.yesman.akythera.core.reflection.ScriptType;
 import com.yesman.akythera.core.util.helper.MathUtils;
 import com.yesman.akythera.core.util.helper.Matrix4fUtils;
 import com.yesman.akythera.core.util.helper.QuaternionUtils;
 import com.yesman.akythera.core.util.helper.VectorUtils;
 import net.minecraft.util.Mth;
-import net.minecraft.util.Util;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.joml.Quaterniond;
 
-import java.util.List;
 import java.util.Optional;
 
 /// Represents a transform in 3-dimensional space into 3 components, location, rotation, and sca
+@ScriptType(autoRegister = false)
 public record Transform(
     Vec3 loc,
     Quaterniond rot,
@@ -25,26 +26,7 @@ public record Transform(
         instance ->
             instance.group(
                 Vec3.CODEC.optionalFieldOf("location").forGetter(transform -> Optional.of(transform.loc())),
-                Codec.DOUBLE.listOf()
-                    .comapFlatMap(
-                        list -> Util.fixedSize(list, 4)
-                            .map(floatList ->
-                                new Quaterniond(
-                                    floatList.get(0),
-                                    floatList.get(1),
-                                    floatList.get(2),
-                                    floatList.get(3)
-                                )
-                            ),
-                        quaternion ->
-                            List.of(
-                                quaternion.x(),
-                                quaternion.y(),
-                                quaternion.z(),
-                                quaternion.w()
-                            )
-                    )
-                    .optionalFieldOf("rotation").forGetter(transform -> Optional.of(transform.rot())),
+                QuaternionUtils.CODEC.optionalFieldOf("rotation").forGetter(transform -> Optional.of(transform.rot())),
                 Vec3.CODEC.optionalFieldOf("sca").forGetter(transform -> Optional.of(transform.sca()))
             )
         .apply(
@@ -62,6 +44,16 @@ public record Transform(
 
     /// Readonly immutable identity transform
     public static final Transform IDENTITY = identity();
+
+    /// Returns a transform between two: linear for the location and the scale, spherical for the rotation, which turns
+    /// at a constant rate
+    public static Transform slerp(final Transform from, final Transform to, final float delta) {
+        return new Transform(
+            from.loc().lerp(to.loc(), delta),
+            from.rot().slerp(to.rot(), delta, new Quaterniond()),
+            from.sca().lerp(to.sca(), delta)
+        );
+    }
 
     /// Returns an liner-interpolated transform between two
     public static Transform lerp(final Transform from, final Transform to, final float delta) {
@@ -104,6 +96,11 @@ public record Transform(
         ).scale(
             VectorUtils.doubleToFloatVector(sca)
         );
+    }
+
+    @ScriptFunction(pure = true, label = "Make Transform", desc = "Makes a transform from a location, a rotation and a scale")
+    public static Transform of(final Vec3 location, final Quaterniond rotation, final Vec3 scale) {
+        return new Transform(location, rotation, scale);
     }
 
     /// Creates transform by translation

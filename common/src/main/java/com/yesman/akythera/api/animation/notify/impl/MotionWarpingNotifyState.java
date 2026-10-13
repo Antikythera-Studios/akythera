@@ -33,16 +33,16 @@ public final class MotionWarpingNotifyState extends AnimationNotifyState<EntityP
     }
 
     @Override
-    public void onBegin(EntityPatch<?> entityPatch, PlayableAnimation owner) {
+    public void onBegin(EntityPatch<?> owner, PlayableAnimation animation) {
     }
 
     @Override
-    public void onTick(EntityPatch<?> entityPatch, PlayableAnimation owner, float prevElapsedTime, float currentElapsedTime) {
+    public void onTick(EntityPatch<?> owner, PlayableAnimation animation, float prevElapsedTime, float currentElapsedTime) {
 
     }
 
     @Override
-    public void onEnd(EntityPatch<?> entityPatch, PlayableAnimation owner) {
+    public void onEnd(EntityPatch<?> owner, PlayableAnimation animation) {
 
     }
 

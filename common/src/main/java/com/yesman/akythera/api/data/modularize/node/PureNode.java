@@ -4,6 +4,10 @@ import com.mojang.serialization.Codec;
 import com.yesman.akythera.api.data.modularize.node.animgraph.AnimationStateMachineNode;
 import com.yesman.akythera.api.data.modularize.node.animgraph.CachedPoseReferenceNode;
 import com.yesman.akythera.api.data.modularize.node.animgraph.SourceDriverNode;
+import com.yesman.akythera.client.api.particle.module.ParticleSystemParameterNode;
+import com.yesman.akythera.core.reflection.DataDrivenScript;
+
+import java.util.function.Function;
 
 /// Nodes that are used for getting parameters of another
 public interface PureNode extends ScriptNode {
@@ -26,6 +30,12 @@ public interface PureNode extends ScriptNode {
                 case SourceDriverNode _          -> "source_driver";
                 case TypeConvertNode _           -> "type_converter";
                 case MeshAccessorNode _          -> "mesh_accessor";
+                case RegistryEntryNode _         -> "registry_entry";
+                case RegistryKeyNode _           -> "registry_key";
+                case ParentCallNode _            -> "parent_call";
+                case FunctionCallNode _          -> "function_call";
+                case BlueprintFieldGetterNode _  -> "blueprint_field_getter";
+                case ParticleSystemParameterNode _ -> "particle_system_parameter";
                 default -> throw new IllegalArgumentException(
                     "Unsupported pure node type " + node.getClass().getSimpleName()
                 );
@@ -47,9 +57,35 @@ public interface PureNode extends ScriptNode {
                 case "source_driver"         -> SourceDriverNode.CODEC.fieldOf("source_driver");
                 case "type_converter"        -> TypeConvertNode.CODEC.fieldOf("type_converter");
                 case "mesh_accessor"         -> MeshAccessorNode.CODEC.fieldOf("mesh_accessor");
+                case "registry_entry"        -> RegistryEntryNode.CODEC.fieldOf("registry_entry");
+                case "registry_key"          -> RegistryKeyNode.CODEC.fieldOf("registry_key");
+                case "parent_call"           -> ParentCallNode.CODEC.fieldOf("parent_call");
+                case "function_call"         -> FunctionCallNode.CODEC.fieldOf("function_call");
+                case "blueprint_field_getter" -> BlueprintFieldGetterNode.CODEC.fieldOf("blueprint_field_getter");
+                case "particle_system_parameter" -> ParticleSystemParameterNode.CODEC.fieldOf("particle_system_parameter");
                 default -> throw new IllegalArgumentException(
                     "Unsupported pure node type " + literal
                 );
             }
     );
+
+    /// A node answering what `function` computes from the run's context. It has no [#CODEC] form, so
+    /// only hardcoded scripts build one.
+    ///
+    /// ```java
+    /// PureNode.of(context -> {
+    ///     EntityPatch<?> owner = context.locals().getValue("owner");
+    ///
+    ///     return owner.isLogicalClient();
+    /// })
+    /// ```
+    static PureNode of(final Function<ExecutionContext, ?> function) {
+        return new PureNode() {
+            @Override
+            public <T> T execute(final DataDrivenScript<?, ?> script, final ExecutionContext context) {
+                context.enter(this);
+                return context.returnVal(function.apply(context));
+            }
+        };
+    }
 }

@@ -2,25 +2,33 @@ package com.yesman.akythera.client.core.networking;
 
 import com.yesman.akythera.api.world.patch.AkytheraPatches;
 import com.yesman.akythera.core.networking.PayloadContext;
-import com.yesman.akythera.api.world.ability.AbilityCue;
-import com.yesman.akythera.api.world.ability.AbilityCues;
 import com.yesman.akythera.api.world.ability.AbilityEffect;
 import com.yesman.akythera.api.world.ability.AbilityInstance;
 import com.yesman.akythera.api.world.ability.AbilityState;
 import com.yesman.akythera.api.world.ability.AbilitySystemComponent;
 import com.yesman.akythera.api.world.ability.SystematicAbility;
+import com.yesman.akythera.client.api.gui.BlueprintWidgets;
+import com.yesman.akythera.client.api.gui.HudManager;
+import com.yesman.akythera.client.api.particle.AkytheraParticleSystem;
+import com.yesman.akythera.client.api.particle.AkytheraParticles;
 import com.yesman.akythera.client.input.AbilityInputBinder;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.blueprint.AbilityBlueprint;
+import com.yesman.akythera.core.blueprint.AbilityCueBlueprint;
+import com.yesman.akythera.core.blueprint.particle.ParticleAttachment;
+import com.yesman.akythera.core.math.Transform;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityEffectSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityEquipmentSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityLifecycle;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityStateSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityTagSync;
-import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundCancelAbilityCue;
+import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundClearWidgetHuds;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundDataBlockSync;
+import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundOpenWidget;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayAbilityCue;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayAnimMontage;
+import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayParticleSystem;
+import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundTerminateAbilityCue;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.EnumerableDataBlockSync;
 import net.minecraft.client.Minecraft;
@@ -31,6 +39,8 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.Entity;
 import org.jspecify.annotations.Nullable;
+
+import java.util.Optional;
 
 public interface AkytheraClientBoundPayloadHandler {
     /// Receiver is always a [LocalPlayer] for client bound payloads
@@ -146,14 +156,8 @@ public interface AkytheraClientBoundPayloadHandler {
             switch (payload.transition()) {
                 case ACTIVATED -> instance.applyActivated(component);
                 case RECAST -> instance.applyRecast(component);
-                case CANCELED -> {
-                    component.stopMirroredCuesOf(instance);
-                    instance.cancelAbility(component);
-                }
-                case FINISHED -> {
-                    component.stopMirroredCuesOf(instance);
-                    instance.endAbility(component);
-                }
+                case CANCELED -> instance.cancelAbility(component);
+                case FINISHED -> instance.endAbility(component);
             }
         });
     }
@@ -268,16 +272,21 @@ public interface AkytheraClientBoundPayloadHandler {
             .orElse(null);
     }
 
-    /// Starts the play the server sent. A cue whose ability this client never instantiated has
-    /// nowhere to park, and is dropped.
+    /// Starts the play the server sent. A data pack cue this client does not know, or a cue whose ability
+    /// this client never instantiated, is dropped.
     static void handlePlayAbilityCue(
         final ClientBoundPlayAbilityCue payload,
         final PayloadContext context
     ) {
-        AbilityCue cue = AbilityCues.get(payload.cueId());
+        Optional<ResourceKey<AbilityCueBlueprint>> cueKey = payload.cue().left();
 
-        if (cue == null) {
-            Akythera.LOGGER.warn("Unknown ability cue {}", payload.cueId());
+        if (cueKey.isPresent()
+            && Minecraft.getInstance().level.registryAccess()
+                .lookup(AkytheraRegistries.DataPack.ABILITY_CUE_KEY)
+                .flatMap(registry -> registry.get(cueKey.get()))
+                .isEmpty()
+        ) {
+            Akythera.LOGGER.warn("Unknown ability cue {}", cueKey.get().identifier());
 
             return;
         }
@@ -291,21 +300,44 @@ public interface AkytheraClientBoundPayloadHandler {
         if (payload.source().isPresent() && source == null) return;
 
         component.startMirroredCue(
-            cue,
-            source,
-            payload.withState() && source != null ? source.getState() : null,
-            payload.endsWithAbility()
+            payload.cueId(), payload.cue(), source, payload.withState(), payload.endsWithAbility(), payload.elapsedTicks()
         );
     }
 
-    /// Cancels the plays the server cancelled, by the same tag match it ran.
-    static void handleCancelAbilityCue(
-        final ClientBoundCancelAbilityCue payload,
+    /// Ends the play the server ended.
+    static void handleTerminateAbilityCue(
+        final ClientBoundTerminateAbilityCue payload,
         final PayloadContext context
     ) {
         AbilitySystemComponent component = componentOf(entityOf(payload.entityId()));
 
-        if (component != null) component.cancelMirroredCues(payload.query());
+        if (component != null) component.terminateMirroredCue(payload.cueId(), payload.cancelled());
+    }
+
+    /// Opens the screen or shows the HUD the blueprint describes, built for the local player's patch.
+    static void handleOpenWidget(final ClientBoundOpenWidget payload, final PayloadContext context) {
+        context.receiver().registryAccess().lookupOrThrow(AkytheraRegistries.DataPack.WIDGET_KEY).get(payload.widget()).ifPresent(BlueprintWidgets::open);
+    }
+
+    static void handleClearWidgetHuds(final ClientBoundClearWidgetHuds payload, final PayloadContext context) {
+        HudManager.getInstance().clear();
+    }
+
+    /// Plays the particle system the server sent, on its attachment's socket when the client finds one. A system this
+    /// client does not know is dropped.
+    static void handlePlayParticleSystem(final ClientBoundPlayParticleSystem payload, final PayloadContext context) {
+        context.receiver().registryAccess().lookupOrThrow(AkytheraRegistries.DataPack.PARTICLE_SYSTEM_KEY).getOptional(payload.system()).ifPresentOrElse(
+            blueprint -> {
+                ParticleAttachment attachment = payload.attachment().orElse(null);
+                Transform socketTransform = attachment == null ? null : attachment.worldTransform(context.receiver().level());
+                AkytheraParticleSystem system = AkytheraParticles.play(
+                    blueprint, socketTransform == null ? Transform.fromTranslation(payload.position()) : socketTransform, attachment
+                );
+
+                if (system != null) system.setParameters(payload.parameters());
+            },
+            () -> Akythera.LOGGER.warn("Unknown particle system {}", payload.system().identifier())
+        );
     }
 
     static void handlePlayMontage(ClientBoundPlayAnimMontage payload, PayloadContext context) {

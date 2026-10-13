@@ -4,11 +4,13 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.component.PatchComponent;
+import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.api.world.patch.item.ItemPatch;
 import com.yesman.akythera.api.world.patch.item.component.WeaponStanceVariationAdapter;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.Item;
 import org.jetbrains.annotations.ApiStatus;
 
@@ -35,10 +37,16 @@ public record ItemPatchBlueprint(
 
     public static final Codec<ItemPatchBlueprint> CODEC = MAP_CODEC.codec();
 
-    /// Builds an [ItemPatch] after resolving the parent chain. Requires a loaded registry access.
+    /// Builds the shared [ItemPatch] after resolving the parent chain. Requires a loaded registry access.
     @Override
     public ItemPatch instantiate(final Item item) {
-        return new ItemPatch(item, this);
+        return new ItemPatch(item, this, null, null);
+    }
+
+    /// Builds `holder`'s own instance of the patch for the item it holds in `slot`, whose components are attached
+    /// under it. Requires a loaded registry access.
+    public ItemPatch instantiate(final Item item, final EntityPatch<?> holder, final EquipmentSlot slot) {
+        return new ItemPatch(item, this, holder, slot);
     }
 
     /// The whole parent chain's components instantiated into one map, root first and each blueprint

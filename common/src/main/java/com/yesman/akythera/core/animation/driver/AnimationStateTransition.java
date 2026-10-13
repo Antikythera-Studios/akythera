@@ -1,9 +1,8 @@
 package com.yesman.akythera.core.animation.driver;
 
-import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.animation.FSMAnimationState;
 import com.yesman.akythera.core.math.model.Transition;
-import net.minecraft.world.entity.Entity;
 import org.jspecify.annotations.Nullable;
 
 import java.util.function.BiConsumer;
@@ -13,7 +12,7 @@ import java.util.function.BiFunction;
 ///
 /// @param blendTime           An animation switching time span to the next state.
 /// @param transferElapsedTime Whether the elapsed time of the previous state will be copied to the next state driver.
-public record AnimationStateTransition<O extends EntityPatch<Entity>>(
+public record AnimationStateTransition<O extends ComponentAttachable>(
     FSMAnimationState nextState,
     BiFunction<AnimationStateMachine<O>.AnimationStateInstance, AnimationStateMachine<O>.AnimationStateInstance, Boolean> canTransitFunction,
     @Nullable BiConsumer<AnimationStateMachine<O>.AnimationStateInstance, AnimationStateMachine<O>.AnimationStateInstance> onTransitConsumer,

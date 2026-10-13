@@ -1,11 +1,13 @@
 package com.yesman.akythera.api.world.ability;
 
+import com.yesman.akythera.core.reflection.ScriptType;
 import org.jetbrains.annotations.ApiStatus;
 
 /// A reference to one running [AbilityTask].
 ///
 /// Goes invalid when the task terminates and when the ability that started it is unequipped. Server
 /// side only, never synced.
+@ScriptType
 public final class AbilityTaskHandle {
     private final AbilitySystemComponent abilitySystemComponent;
     private final AbilityTask task;

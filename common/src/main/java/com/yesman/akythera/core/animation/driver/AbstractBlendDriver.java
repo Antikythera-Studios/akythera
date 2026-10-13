@@ -1,8 +1,7 @@
 package com.yesman.akythera.core.animation.driver;
 
-import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
-import net.minecraft.world.entity.Entity;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -39,7 +38,7 @@ public abstract class AbstractBlendDriver implements AnimationDriver {
     }
 
     @Override
-    public void tick(final EntityPatch<Entity> owner) {
+    public void tick(final ComponentAttachable owner) {
         base.tick(owner);
         blend.tick(owner);
     }

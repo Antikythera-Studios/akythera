@@ -15,7 +15,8 @@ public interface EquipmentHolder {
     /// Returns [ItemStack] in specific equipment slot. Returns [Items#AIR] if empty
     ItemStack getItemInSlot(EquipmentSlot equipmentSlot);
 
-    /// Returns [ItemPatch] in specific equipment slot. Null if the item has no patch.
+    /// Returns this holder's own [ItemPatch] instance for the item in specific equipment slot, rebuilt when the
+    /// item changes. Null if the item has no patch.
     @Nullable ItemPatch getItemPatchInSlot(EquipmentSlot equipmentSlot);
 
     /// Conventional access for [ItemPatch] in [EquipmentSlot#MAINHAND]

@@ -3,6 +3,7 @@ package com.yesman.akythera.client.core.shader.backend.impl.gl;
 import com.yesman.akythera.client.core.shader.backend.program.ComputeUniform;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
+import org.joml.Vector3fc;
 
 import org.lwjgl.opengl.ARBSeparateShaderObjects;
 import org.lwjgl.system.MemoryStack;
@@ -33,5 +34,12 @@ record GlComputeUniform(int programHandle, int location) implements ComputeUnifo
         if (location < 0) return;
 
         ARBSeparateShaderObjects.glProgramUniform1ui(programHandle, location, value);
+    }
+
+    @Override
+    public void putVector3f(final Vector3fc value) {
+        if (location < 0) return;
+
+        ARBSeparateShaderObjects.glProgramUniform3f(programHandle, location, value.x(), value.y(), value.z());
     }
 }

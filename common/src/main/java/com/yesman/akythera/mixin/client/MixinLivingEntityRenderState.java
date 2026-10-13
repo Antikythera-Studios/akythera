@@ -1,11 +1,7 @@
 package com.yesman.akythera.mixin.client;
 
-import com.yesman.akythera.api.asset.AssetAccessor;
-import com.yesman.akythera.client.api.component.impl.EntityModelComponent;
 import com.yesman.akythera.client.core.renderer.PatchModelRenderer;
 import com.yesman.akythera.client.core.renderer.collider.ColliderDebugRenderer;
-import com.yesman.akythera.core.animation.keyframe.Pose;
-import com.yesman.akythera.core.asset.armature.Armature;
 import com.yesman.akythera.mixinaccessor.client.LivingEntityRenderStateAccessor;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.client.renderer.item.ItemStackRenderState;
@@ -22,12 +18,6 @@ import java.util.Map;
 
 @Mixin(LivingEntityRenderState.class)
 public abstract class MixinLivingEntityRenderState implements LivingEntityRenderStateAccessor {
-    @Unique @Nullable
-    private Pose epicfight$pose;
-
-    @Unique @Nullable
-    private AssetAccessor<? extends Armature> epicfight$armature;
-
     @Unique
     private final List<PatchModelRenderer.RenderableSubmit> epicfight$renderables = new ArrayList<>();
 
@@ -35,31 +25,17 @@ public abstract class MixinLivingEntityRenderState implements LivingEntityRender
     private final List<ColliderDebugRenderer.ColliderSubmit> akythera$colliders = new ArrayList<>();
 
     @Unique
-    private EntityModelComponent.@Nullable ModelSubmit epicfight$modelSubmit;
+    private PatchModelRenderer.@Nullable ModelDraw epicfight$modelDraw;
+
+    @Unique
+    private boolean akythera$vanillaModelHidden;
+
+    @Unique
+    private boolean akythera$armaturePlaced;
 
     @Unique
     private final Map<EquipmentSlot, Map<ItemDisplayContext, ItemStackRenderState>> epicfight$itemStates =
         new EnumMap<>(EquipmentSlot.class);
-
-    @Unique @Override
-    public void akythera$setPose(Pose pose) {
-        epicfight$pose = pose;
-    }
-
-    @Unique @Override
-    public Pose akythera$getPose() {
-        return epicfight$pose;
-    }
-
-    @Unique @Override
-    public void akythera$setArmature(AssetAccessor<? extends Armature> pose) {
-        epicfight$armature = pose;
-    }
-
-    @Unique @Override
-    public AssetAccessor<? extends Armature> akythera$getArmature() {
-        return epicfight$armature;
-    }
 
     @Unique @Override
     public List<PatchModelRenderer.RenderableSubmit> akythera$getRenderables() {
@@ -72,13 +48,33 @@ public abstract class MixinLivingEntityRenderState implements LivingEntityRender
     }
 
     @Unique @Override
-    public void akythera$setModelSubmit(EntityModelComponent.@Nullable ModelSubmit modelSubmit) {
-        epicfight$modelSubmit = modelSubmit;
+    public void akythera$setModelDraw(PatchModelRenderer.@Nullable ModelDraw modelDraw) {
+        epicfight$modelDraw = modelDraw;
     }
 
     @Unique @Override
-    public EntityModelComponent.@Nullable ModelSubmit akythera$getModelSubmit() {
-        return epicfight$modelSubmit;
+    public PatchModelRenderer.@Nullable ModelDraw akythera$getModelDraw() {
+        return epicfight$modelDraw;
+    }
+
+    @Unique @Override
+    public boolean akythera$isVanillaModelHidden() {
+        return akythera$vanillaModelHidden;
+    }
+
+    @Unique @Override
+    public void akythera$setVanillaModelHidden(boolean vanillaModelHidden) {
+        akythera$vanillaModelHidden = vanillaModelHidden;
+    }
+
+    @Unique @Override
+    public boolean akythera$isArmaturePlaced() {
+        return akythera$armaturePlaced;
+    }
+
+    @Unique @Override
+    public void akythera$setArmaturePlaced(boolean armaturePlaced) {
+        akythera$armaturePlaced = armaturePlaced;
     }
 
     @Unique @Override

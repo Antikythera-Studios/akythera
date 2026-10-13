@@ -1,13 +1,12 @@
 package com.yesman.akythera.core.animation.driver;
 
-import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.playable.AnimationMontage;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.util.helper.MathUtils;
 import com.yesman.akythera.core.util.helper.ParseUtils;
 import net.minecraft.core.Holder;
-import net.minecraft.world.entity.Entity;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -57,7 +56,7 @@ public final class AnimationPlayer implements AnimationDriver {
     /// Drives the underlying [PlayableAnimation]'s notify track for this tick.
     /// Mirrors [AnimationMontagePlayer#tick] so sequences carry notify support
     /// when this player runs them.
-    public void tick(final EntityPatch<Entity> owner) {
+    public void tick(final ComponentAttachable owner) {
         if (getWeight() >= 0.01F) playableAnimation.value().tick(owner, lastUpdatedTime, elapsedTime);
         lastUpdatedTime = elapsedTime;
     }

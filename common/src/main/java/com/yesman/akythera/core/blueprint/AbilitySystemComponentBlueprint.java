@@ -14,8 +14,11 @@ import net.minecraft.world.entity.Entity;
 import java.util.Map;
 
 /// Declares an [AbilitySystemComponent] on an entity patch, with the loadout it starts holding.
+///
+/// @param enabled whether the built [AbilitySystemComponent] starts switched on
 public record AbilitySystemComponentBlueprint(
-    Map<AbilitySlot, ResourceKey<AbilityBlueprint>> loadout
+    Map<AbilitySlot, ResourceKey<AbilityBlueprint>> loadout,
+    boolean enabled
 ) implements ComponentBlueprint<AbilitySystemComponent, EntityPatch<Entity>>
 {
     public static final MapCodec<AbilitySystemComponentBlueprint> CODEC = RecordCodecBuilder.mapCodec(
@@ -26,7 +29,8 @@ public record AbilitySystemComponentBlueprint(
                         ResourceKey.codec(AkytheraRegistries.DataPack.ABILITY_KEY)
                     )
                     .optionalFieldOf("loadout", Map.of())
-                    .forGetter(AbilitySystemComponentBlueprint::loadout)
+                    .forGetter(AbilitySystemComponentBlueprint::loadout),
+                ENABLED_CODEC.forGetter(AbilitySystemComponentBlueprint::enabled)
             )
             .apply(instance, AbilitySystemComponentBlueprint::new)
     );
@@ -35,7 +39,11 @@ public record AbilitySystemComponentBlueprint(
     ///         ability system needs
     @Override
     public AbilitySystemComponent instantiate(final EntityPatch<Entity> blueprintOwner) {
-        return new AbilitySystemComponent((LivingEntityPatch<?>)blueprintOwner, loadout);
+        AbilitySystemComponent component = new AbilitySystemComponent((LivingEntityPatch<?>)blueprintOwner, loadout);
+
+        component.setEnabled(enabled);
+
+        return component;
     }
 
     @Override

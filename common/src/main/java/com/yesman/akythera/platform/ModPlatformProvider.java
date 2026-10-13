@@ -1,6 +1,6 @@
 package com.yesman.akythera.platform;
 
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
 
 import java.util.ServiceLoader;
 
@@ -31,7 +31,7 @@ public final class ModPlatformProvider {
     private ModPlatformProvider() {
     }
 
-    public static @NotNull ModPlatform get() {
+    public static @NonNull ModPlatform get() {
         return InstanceHolder.INSTANCE;
     }
 }

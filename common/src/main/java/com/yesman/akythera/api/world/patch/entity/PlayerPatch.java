@@ -3,12 +3,15 @@ package com.yesman.akythera.api.world.patch.entity;
 import com.yesman.akythera.api.lifecycle.ComponentsFactory;
 import com.yesman.akythera.core.blueprint.EntityPatchBlueprint;
 import com.yesman.akythera.core.reflection.ScriptFunction;
+import com.yesman.akythera.core.reflection.ScriptType;
 import net.minecraft.core.Holder;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.player.PlayerModelPart;
 import net.minecraft.world.entity.player.PlayerSkin;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+@ScriptType(autoRegister = false)
 public class PlayerPatch extends LivingEntityPatch<Player> {
     public PlayerPatch(final Holder.@Nullable Reference<EntityPatchBlueprint> blueprint, @NonNull final Player original) {
         super(blueprint, original);
@@ -27,5 +30,12 @@ public class PlayerPatch extends LivingEntityPatch<Player> {
     """)
     public PlayerSkin getPlayerSkin() {
         return ComponentsFactory.getImpl().getPlayerSkin(getOriginal());
+    }
+
+    @ScriptFunction(pure = true, label = "Is Cape Shown", category = "Online", desc = """
+        Returns whether the player shows the cape in their skin customization
+    """)
+    public boolean isCapeShown() {
+        return getOriginal().isModelPartShown(PlayerModelPart.CAPE);
     }
 }

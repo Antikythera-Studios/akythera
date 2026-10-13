@@ -11,6 +11,7 @@ import com.yesman.akythera.core.reflection.DataDrivenScript;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.helper.ParseUtils;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Optional;
 
@@ -49,9 +50,9 @@ public record LiteralNode<T>(ScriptType type, T literal, int nodeId) implements 
         return context.returnVal(literal);
     }
 
-    // For codec
-    private Dynamic<?> valueAsDynamic() {
-        return type.codec() == null ? null : new Dynamic<> (JsonOps.INSTANCE, encode().getOrThrow());
+    // For codec. A null literal is left out of the json.
+    private @Nullable Dynamic<?> valueAsDynamic() {
+        return type.codec() == null || literal == null ? null : new Dynamic<> (JsonOps.INSTANCE, encode().getOrThrow());
     }
 
     @SuppressWarnings("unchecked")

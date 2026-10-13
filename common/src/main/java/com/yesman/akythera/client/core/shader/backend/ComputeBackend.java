@@ -28,12 +28,22 @@ public interface ComputeBackend {
     /// A storage buffer the graphics pipeline also reads as vertex attributes.
     GpuBuffer createVertexStorageBuffer(Supplier<String> label, long size);
 
+    /// A storage buffer the graphics pipeline also reads as indices.
+    GpuBuffer createIndexStorageBuffer(Supplier<String> label, long size);
+
     /// A storage buffer whose contents the host rewrites through `GpuBuffer#map`.
     GpuBuffer createMappedStorageBuffer(Supplier<String> label, long size);
+
+    /// A device-local storage buffer that compute dispatches read and write across frames. Its
+    /// contents start undefined.
+    GpuBuffer createComputeStorageBuffer(Supplier<String> label, long size);
 
     /// Byte alignment a storage buffer binding offset must satisfy.
     int storageBufferOffsetAlignment();
 
     /// Largest `layout(std430) buffer` block the device accepts, in bytes.
     long maxStorageBlockSize();
+
+    /// Most storage buffers one compute stage may bind.
+    int maxComputeStorageBlocks();
 }

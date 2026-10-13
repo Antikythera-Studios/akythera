@@ -1,21 +1,20 @@
 package com.yesman.akythera.core.animation.driver;
 
 import com.yesman.akythera.api.animation.impl.AkytheraAnimationState;
-import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.animation.FSMAnimationState;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.math.model.FiniteStateMachine;
 import com.yesman.akythera.core.math.model.StateInstance;
 import com.yesman.akythera.core.math.model.StateModel;
-import net.minecraft.world.entity.Entity;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 
 /// A state machine that runs on the [#owner]'s lifecycle to play its locomotion.
-public final class AnimationStateMachine<O extends EntityPatch<Entity>>
+public final class AnimationStateMachine<O extends ComponentAttachable>
     implements FiniteStateMachine<O, FSMAnimationState, AnimationStateMachine<O>.AnimationStateInstance, AnimationStateTransition<O>>, AnimationDriver
 {
     private final O owner;
@@ -87,7 +86,7 @@ public final class AnimationStateMachine<O extends EntityPatch<Entity>>
 
     /// Implementation of [AnimationDriver]: tick the machine as driver
     @Override
-    public void tick(final EntityPatch<Entity> owner) {
+    public void tick(final ComponentAttachable owner) {
         tick();
 
         // The driver a transition blends out of is owned by no state, so no state ticks it.
@@ -158,14 +157,14 @@ public final class AnimationStateMachine<O extends EntityPatch<Entity>>
             : EmptyAnimationDriver.INSTANCE;
     }
 
-    public static <O extends EntityPatch<Entity>> StateModel.StateModelBuilder<O, FSMAnimationState, AnimationStateMachine<O>.AnimationStateInstance, AnimationStateTransition<O>, AnimationStateMachine<O>> stateModelBuilder() {
+    public static <O extends ComponentAttachable> StateModel.StateModelBuilder<O, FSMAnimationState, AnimationStateMachine<O>.AnimationStateInstance, AnimationStateTransition<O>, AnimationStateMachine<O>> stateModelBuilder() {
         return StateModel.builder(
             new AnimationInstanceStateBuilder<>(AkytheraAnimationState.ENTRY, EmptyAnimationDriver.INSTANCE),
             new AnimationInstanceStateBuilder<>(AkytheraAnimationState.EXIT, EmptyAnimationDriver.INSTANCE)
         );
     }
 
-    public static <T extends EntityPatch<Entity>> AnimationInstanceStateBuilder<T> stateInstanceBuilder(FSMAnimationState state, AnimationDriver animDriver) {
+    public static <T extends ComponentAttachable> AnimationInstanceStateBuilder<T> stateInstanceBuilder(FSMAnimationState state, AnimationDriver animDriver) {
         return new AnimationInstanceStateBuilder<>(state, animDriver);
     }
 
@@ -232,7 +231,7 @@ public final class AnimationStateMachine<O extends EntityPatch<Entity>>
         }
     }
 
-    public static final class AnimationInstanceStateBuilder<O extends EntityPatch<Entity>>
+    public static final class AnimationInstanceStateBuilder<O extends ComponentAttachable>
         extends StateModel.StateInstanceBuilder<FSMAnimationState, AnimationStateMachine<O>.AnimationStateInstance, AnimationStateTransition<O>, AnimationStateMachine<O>>
     {
         private final FSMAnimationState state;

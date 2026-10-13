@@ -1,12 +1,11 @@
 package com.yesman.akythera.core.animation.animator;
 
 import com.yesman.akythera.api.animation.animator.Animator;
-import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.animation.driver.AnimationMontagePlayer;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.playable.AnimationMontage;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.world.entity.Entity;
 import org.jspecify.annotations.NonNull;
 
 /// An animator that only accommodates [AnimationMontage]. Mainly to optimize
@@ -16,12 +15,12 @@ import org.jspecify.annotations.NonNull;
 /// need to use [BlendingAnimator] in servers too.
 public final class MontageOnlyAnimator implements Animator {
     private final AnimationMontagePlayer montagePlayer = new AnimationMontagePlayer();
-    private final EntityPatch<Entity> owner;
+    private ComponentAttachable owner;
 
     public boolean isHardPaused = false;
     public boolean isSoftPaused = false;
 
-    public MontageOnlyAnimator(final EntityPatch<Entity> owner) {
+    public MontageOnlyAnimator(final ComponentAttachable owner) {
         this.owner = owner;
     }
 
@@ -64,8 +63,13 @@ public final class MontageOnlyAnimator implements Animator {
         return montagePlayer.getPose();
     }
 
+    @SuppressWarnings("unchecked") @Override
+    public <O> O getOwner() {
+        return (O)owner;
+    }
+
     @Override
-    public EntityPatch<Entity> getOwner() {
-        return owner;
+    public void setOwner(final ComponentAttachable owner) {
+        this.owner = owner;
     }
 }

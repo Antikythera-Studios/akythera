@@ -2,10 +2,11 @@ package com.yesman.akythera.api.data.modularize.node.animgraph;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import com.yesman.akythera.api.data.modularize.node.ExecutionRecord;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.api.data.modularize.node.PureNode;
+import com.yesman.akythera.api.data.modularize.node.ScriptCaller;
 import com.yesman.akythera.api.data.modularize.node.ScriptNode;
-import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.api.data.modularize.node.ScriptRecorder;
 import com.yesman.akythera.core.animation.animator.BlendingAnimator;
 import com.yesman.akythera.core.animation.driver.AnimationDriver;
 import com.yesman.akythera.core.animation.driver.AnimationStateMachine;
@@ -15,7 +16,6 @@ import com.yesman.akythera.core.blueprint.script.ScriptVariables;
 import com.yesman.akythera.core.math.model.StateInstance;
 import com.yesman.akythera.core.math.model.StateModel;
 import com.yesman.akythera.core.reflection.DataDrivenScript;
-import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.function.BiFunction;
@@ -92,7 +92,7 @@ public record AnimationStateMachineNode(
     @Override
     public <T> T execute(final DataDrivenScript<?, ?> script, final ExecutionContext context) {
         BlendingAnimator animator = context.locals().getValue("animator");
-        EntityPatch<?> owner = animator.getOwner();
+        ComponentAttachable owner = animator.getOwner();
         StateModel.StateModelBuilder builder = AnimationStateMachine.stateModelBuilder();
 
         // Entry transitions attach to the entry state (the builder cursor starts there).
@@ -116,28 +116,35 @@ public record AnimationStateMachineNode(
         return (T) new AnimationStateMachine(owner, builder);
     }
 
-    /// A live transition check running `entry`'s condition through [#evaluate], unrecorded.
+    /// A live transition check running `entry`'s condition through [#evaluate].
     @SuppressWarnings("rawtypes")
     private static BiFunction<AnimationStateMachine.AnimationStateInstance, AnimationStateMachine.AnimationStateInstance, Boolean> check(
         final DataDrivenScript<?, ?> script, final TransitionEntry entry
     ) {
-        return (from, _) -> evaluate(script, entry, from, null);
+        return (from, _) -> evaluate(script, entry, from);
     }
 
     /// Evaluates `entry`'s condition against the script's current variables, with the driver of the
     /// state being left bound to [#SOURCE_DRIVER]. An empty / non-boolean condition (nothing wired)
-    /// reads as an unconditional (always-true) transition.
+    /// reads as an unconditional (always-true) transition, a throwing one as false.
     ///
-    /// @param record where the condition's node executions are written, or null to run unrecorded
+    /// Sited at [TransitionEntry#canvas], and recorded into that canvas' live record.
     public static boolean evaluate(
-        final DataDrivenScript<?, ?> script, final TransitionEntry entry,
-        final StateInstance<?, ?> from, final @Nullable ExecutionRecord record
+        final DataDrivenScript<?, ?> script, final TransitionEntry entry, final StateInstance<?, ?> from
     ) {
         ScriptVariables variables = script.getScriptVariable();
         variables.setValue(SOURCE_DRIVER, AnimationStateMachine.driverOf(from));
 
-        Object value = entry.condition().execute(script, new ExecutionContext(variables, record));
+        ExecutionContext context = ScriptRecorder.liveContext(ScriptCaller.of(script, entry.canvas()), variables);
 
-        return !(value instanceof Boolean bool) || bool;
+        try {
+            Object value = entry.condition().execute(script, context);
+
+            return !(value instanceof Boolean bool) || bool;
+        } catch (Throwable throwable) {
+            ScriptRecorder.recordFailure(context, throwable);
+
+            return false;
+        }
     }
 }

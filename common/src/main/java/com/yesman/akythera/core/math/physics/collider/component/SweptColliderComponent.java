@@ -23,7 +23,7 @@ public final class SweptColliderComponent extends ColliderComponent<Collider> {
     private final ColliderComponent<?> to;
 
     public SweptColliderComponent(final ColliderComponent<?> from, final ColliderComponent<?> to) {
-        super(from.getCollider());
+        super(from.getCollider(), null);
 
         this.from = from;
         this.to = to;

@@ -1,6 +1,7 @@
 package com.yesman.akythera.api.world.ability;
 
 import com.mojang.serialization.MapCodec;
+import com.yesman.akythera.core.reflection.ScriptType;
 import com.yesman.akythera.core.util.EnumerableDataBlock;
 import com.yesman.akythera.core.util.EnumerableDataBlockManager;
 import net.minecraft.resources.Identifier;
@@ -11,6 +12,7 @@ import org.jspecify.annotations.Nullable;
 /// A tag's identity is its path, under one fixed namespace: `akythera:activation/combo_attack` and
 /// `epicfight:activation/combo_attack` are the same tag, so an addon extends the base tree rather
 /// than forking it.
+@ScriptType(autoRegister = false)
 public interface AbilityTag extends EnumerableDataBlock {
     EnumerableDataBlockManager<AbilityTag> ENUM_MANAGER = new EnumerableDataBlockManager<>(
         "ability_tag", MapCodec.unit(AbilityTag::create), AbilityTag::create

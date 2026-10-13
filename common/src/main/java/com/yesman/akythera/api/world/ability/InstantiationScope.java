@@ -1,6 +1,9 @@
 package com.yesman.akythera.api.world.ability;
 
+import com.yesman.akythera.core.reflection.ScriptType;
+
 /// Which sides an [Ability] exists on.
+@ScriptType(autoRegister = false)
 public enum InstantiationScope {
     /// Nothing is sent. No [AbilityInstance] exists on any client.
     SERVER_ONLY,

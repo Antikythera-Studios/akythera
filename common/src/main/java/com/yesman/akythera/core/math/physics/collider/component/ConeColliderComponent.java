@@ -1,9 +1,11 @@
 package com.yesman.akythera.core.math.physics.collider.component;
 
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.math.Transform;
 import com.yesman.akythera.core.math.physics.collider.ConeCollider;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import org.jspecify.annotations.Nullable;
 
 /// Component of [ConeCollider]
 public final class ConeColliderComponent extends ColliderComponent<ConeCollider> {
@@ -18,8 +20,11 @@ public final class ConeColliderComponent extends ColliderComponent<ConeCollider>
     /// Unit vector from [#baseCenter] to [#apex]
     private Vec3 axis;
 
-    public ConeColliderComponent(final ConeCollider collider, final Transform initTransform) {
-        super(collider);
+    /// [ConeCollider]'s base radius, grown by [#radiusScale]
+    private double radius;
+
+    public ConeColliderComponent(final ConeCollider collider, final @Nullable ComponentAttachable host, final Transform initTransform) {
+        super(collider, host);
         applyTransform(initTransform);
     }
 
@@ -35,11 +40,19 @@ public final class ConeColliderComponent extends ColliderComponent<ConeCollider>
         return axis;
     }
 
+    public double getRadius() {
+        return radius;
+    }
+
     @Override
     public void applyTransform(final Transform transform) {
-        apex = transform.mul(getCollider().getLocalApex());
-        baseCenter = transform.mul(getCollider().getLocalBaseCenter());
+        Transform pivot = transformInheritPolicy().inherit(transform, localTransform());
+        double halfHeight = getCollider().getHeight() * 0.5D;
+
+        apex = pivot.mul(new Vec3(0.0D, halfHeight, 0.0D));
+        baseCenter = pivot.mul(new Vec3(0.0D, -halfHeight, 0.0D));
         axis = apex.subtract(baseCenter).normalize();
+        radius = getCollider().getRadius() * radiusScale(transform);
 
         // Update outer AABB after updating the world coordinate
         outerAABB = makeOuterAABB();
@@ -51,7 +64,7 @@ public final class ConeColliderComponent extends ColliderComponent<ConeCollider>
     public Vec3 support(final Vec3 direction) {
         Vec3 radial = direction.subtract(axis.scale(direction.dot(axis)));
         Vec3 basePoint = radial.lengthSqr() > PARALLEL_TO_AXIS
-            ? baseCenter.add(radial.normalize().scale(getCollider().getRadius()))
+            ? baseCenter.add(radial.normalize().scale(radius))
             : baseCenter;
 
         return direction.dot(apex) >= direction.dot(basePoint) ? apex : basePoint;
@@ -59,8 +72,6 @@ public final class ConeColliderComponent extends ColliderComponent<ConeCollider>
 
     @Override
     public AABB makeOuterAABB() {
-        double radius = getCollider().getRadius();
-
         // The base disc projected onto a world axis: the full radius when the disc faces it head on,
         // shrinking to zero as the cone's axis turns to meet it.
         double extentX = radius * Math.sqrt(Math.max(0.0D, 1.0D - axis.x() * axis.x()));

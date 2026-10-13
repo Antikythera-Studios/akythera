@@ -8,30 +8,36 @@ import com.yesman.akythera.api.animation.animator.Animator;
 import com.yesman.akythera.api.asset.AssetAccessor;
 import com.yesman.akythera.api.asset.armature.ArmatureManager;
 import com.yesman.akythera.api.component.ComponentAttachable;
+import com.yesman.akythera.api.component.TransformInheritPolicy;
 import com.yesman.akythera.api.data.modularize.ScriptType;
 import com.yesman.akythera.api.lifecycle.ComponentsFactory;
-import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.asset.armature.Armature;
-import com.yesman.akythera.core.asset.armature.BoneSocket;
 import com.yesman.akythera.core.blueprint.script.AnimatorScript;
 import com.yesman.akythera.core.blueprint.script.DataDrivenAnimatorScript;
+import com.yesman.akythera.core.math.Transform;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
 import net.minecraft.core.Holder;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.world.entity.Entity;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.Map;
 
-/// @param sockets the [BoneSocket]s attached under the armature, keyed by the name the
-///                [ArmatureComponent] exposes them under ([ComponentAttachable#getComponent])
+/// @param transform              where the skeleton sits in its owner's space
+/// @param transformInheritPolicy the elements of its owner's space the skeleton takes on
+/// @param childBlueprints        what the armature builds its children from, keyed by the name the
+///                               [ArmatureComponent] exposes them under
+///                               ([ComponentAttachable#getComponent])
+/// @param enabled                whether the built [ArmatureComponent] starts switched on
 public record ArmatureComponentBlueprint(
     AssetAccessor<? extends Armature> armature,
     AnimatorScriptFactory scriptFactory,
     boolean useRootMotion,
-    Map<String, BoneSocket> sockets
-) implements ComponentBlueprint<ArmatureComponent, EntityPatch<Entity>>
+    Transform transform,
+    TransformInheritPolicy transformInheritPolicy,
+    Map<String, ComponentBlueprint<?, ?>> childBlueprints,
+    boolean enabled
+) implements ComponentBlueprint<ArmatureComponent, ComponentAttachable>
 {
     public static final MapCodec<ArmatureComponentBlueprint> CODEC = RecordCodecBuilder.mapCodec(
         instance ->
@@ -39,36 +45,47 @@ public record ArmatureComponentBlueprint(
                 ArmatureManager.CODEC.fieldOf("armature").forGetter(ArmatureComponentBlueprint::armature),
                 AnimatorScriptFactory.CODEC.fieldOf("script").forGetter(ArmatureComponentBlueprint::scriptFactory),
                 Codec.BOOL.fieldOf("use_root_motion").forGetter(ArmatureComponentBlueprint::useRootMotion),
-                // Sockets are the armature's attached child components; a blueprint written before
-                // sockets existed (or one that simply has none) decodes to an empty map.
-                Codec.unboundedMap(Codec.STRING, BoneSocket.DIRECT_CODEC)
-                    .optionalFieldOf("sockets", Map.of()).forGetter(ArmatureComponentBlueprint::sockets)
+                TRANSFORM_CODEC.forGetter(ArmatureComponentBlueprint::transform),
+                TRANSFORM_INHERIT_POLICY_CODEC.forGetter(ArmatureComponentBlueprint::transformInheritPolicy),
+                // The same field [TransformSocket] declares for its own children, dispatching
+                // through the same registry. A childless armature decodes to an empty map.
+                ComponentBlueprint.componentMapCodec(() -> AkytheraRegistries.Frozen.ENTITY_PATCH_COMPONENT_TYPES)
+                    .optionalFieldOf("components", Map.of())
+                    .forGetter(ArmatureComponentBlueprint::childBlueprints),
+                ENABLED_CODEC.forGetter(ArmatureComponentBlueprint::enabled)
             )
             .apply(instance, ArmatureComponentBlueprint::new)
     );
 
-    /// Socket-less armature — the shape every call site used before sockets were attachable.
+    /// Childless, switched-on armature—the shape every call site used before components were
+    /// attachable.
     public ArmatureComponentBlueprint(
         final AssetAccessor<? extends Armature> armature,
         final AnimatorScriptFactory scriptFactory,
         final boolean useRootMotion
     ) {
-        this(armature, scriptFactory, useRootMotion, Map.of());
+        this(armature, scriptFactory, useRootMotion, Transform.IDENTITY, TransformInheritPolicy.LOC_ROT_SCA, Map.of(), true);
     }
 
     @Override
-    public ArmatureComponent instantiate(final EntityPatch<Entity> armatureOwner) {
-        return new ArmatureComponent(
+    public ArmatureComponent instantiate(final ComponentAttachable armatureOwner) {
+        ArmatureComponent component = new ArmatureComponent(
             armatureOwner,
             armature,
             ComponentsFactory.getImpl().getAnimator(armatureOwner, scriptFactory::instantiate),
             useRootMotion,
-            sockets
+            transform,
+            transformInheritPolicy,
+            childBlueprints
         );
+
+        component.setEnabled(enabled);
+
+        return component;
     }
 
     @Override
-    public MapCodec<? extends ComponentBlueprint<ArmatureComponent, EntityPatch<Entity>>> mapCodec() {
+    public MapCodec<? extends ComponentBlueprint<ArmatureComponent, ComponentAttachable>> mapCodec() {
         return CODEC;
     }
 

@@ -2,7 +2,7 @@ package com.yesman.akythera.api.animation.notify;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
-import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.LogicalSide;
@@ -14,7 +14,7 @@ import java.util.function.Function;
 ///
 /// Inspired by Unreal Engine 5 [Animation Notify](https://dev.epicgames.com/documentation/unreal-engine/animation-notifies-in-unreal-engine)
 /// system
-public abstract class AnimationNotify<T extends EntityPatch<?>> {
+public abstract class AnimationNotify<T extends ComponentAttachable> {
     public static final Codec<AnimationNotify<?>> CODEC = AkytheraRegistries.Frozen.ANIM_NOTIFY_TYPES
         .byNameCodec()
         .dispatch(AnimationNotify::mapCodec, Function.identity());
@@ -26,17 +26,17 @@ public abstract class AnimationNotify<T extends EntityPatch<?>> {
     }
 
     /// Tries activating notify after the logical side validation, receives current and previous elapsed times.
-    /// Notify won't be triggered if `entityPatch` is not a assignable from <T>
+    /// Notify won't be triggered if `owner` is not assignable to <T>.
     @ApiStatus.Internal @SuppressWarnings("unchecked")
-    public final void tryActivate(PlayableAnimation owner, final EntityPatch<?> entityPatch, float prevElapsedTime, float currentElapsedTime) {
-        if (!logicalSide.isEntityOnValidSide(entityPatch.getOriginal())) {
+    public final void tryActivate(PlayableAnimation animation, final ComponentAttachable owner, float prevElapsedTime, float currentElapsedTime) {
+        if (!logicalSide.accepts(owner.logicalSide())) {
             return;
         }
 
         try {
-            T casted = (T)entityPatch;
+            T casted = (T)owner;
 
-            this.onNotified(casted, owner, prevElapsedTime, currentElapsedTime);
+            this.onNotified(casted, animation, prevElapsedTime, currentElapsedTime);
         } catch(ClassCastException _) {
         }
     }
@@ -46,7 +46,7 @@ public abstract class AnimationNotify<T extends EntityPatch<?>> {
     }
 
     /// A task that is executed once an animation playback time reaches the timestamp
-    public abstract void onNotified(T entityPatch, PlayableAnimation owner, float prevElapsedTime, float currentElapsedTime);
+    public abstract void onNotified(T owner, PlayableAnimation animation, float prevElapsedTime, float currentElapsedTime);
 
     /// Returns map codec for serializing this notify
     public abstract MapCodec<? extends AnimationNotify<?>> mapCodec();

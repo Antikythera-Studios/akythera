@@ -6,6 +6,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.List;
 
 public interface ScriptNode {
     /// [#nodeId] of a node no editor row produced — a compiler-generated container, a shared
@@ -43,7 +44,10 @@ public interface ScriptNode {
     ///                while local variables are volatile and be reset in the next execution.
     <T> T execute(final DataDrivenScript<?, ?> script, final ExecutionContext context);
 
+    /// The state of one run. Built by [ScriptRecorder], which is what every run site asks for one.
     class ExecutionContext {
+        private final ScriptCaller caller;
+
         private final ScriptVariables locals;
 
         /// Where node executions are written, or null to run unrecorded.
@@ -52,20 +56,24 @@ public interface ScriptNode {
         /// Frames entered but not yet closed, innermost last.
         private final Deque<CallStack> openFrames = new ArrayDeque<>();
 
+        /// Nodes entered but not yet closed, innermost last. Kept whether or not this context records,
+        /// so a throw can name the node it left.
+        private final Deque<ScriptNode> openNodes = new ArrayDeque<>();
+
         /// Whether a [ReturnNode] has fired, which stops every flow still unwinding.
         private boolean returning;
 
         /// What that [ReturnNode] carried.
         private @Nullable Object returnedValue;
 
-        /// A context that runs without recording.
-        public ExecutionContext(final ScriptVariables locals) {
-            this(locals, null);
-        }
-
-        public ExecutionContext(final ScriptVariables locals, final @Nullable ExecutionRecord record) {
+        ExecutionContext(final ScriptCaller caller, final ScriptVariables locals, final @Nullable ExecutionRecord record) {
+            this.caller = caller;
             this.locals = locals;
             this.record = record;
+        }
+
+        public ScriptCaller caller() {
+            return caller;
         }
 
         public ScriptVariables locals() {
@@ -128,6 +136,8 @@ public interface ScriptNode {
         }
 
         public void enter(final ScriptNode scriptNode) {
+            openNodes.addLast(scriptNode);
+
             if (record == null) return;
 
             CallStack frame = new CallStack(scriptNode);
@@ -167,6 +177,8 @@ public interface ScriptNode {
         }
 
         private void closeFrame(final @Nullable Object returnValue, final CallStack.Outcome outcome) {
+            openNodes.pollLast();
+
             if (record == null) return;
 
             CallStack frame = openFrames.pollLast();
@@ -175,5 +187,20 @@ public interface ScriptNode {
                 frame.close(returnValue, outcome);
             }
         }
+
+        /// Captures the nodes still open as the failure `cause` left, writes it to [#record], and
+        /// closes them.
+        ScriptFailure fail(final Throwable cause) {
+            ScriptFailure failure = new ScriptFailure(caller, List.copyOf(openNodes), cause);
+
+            openNodes.clear();
+            openFrames.clear();
+
+            if (record != null) {
+                record.setFailure(failure);
+            }
+
+            return failure;
+        }
     }
-}
+}

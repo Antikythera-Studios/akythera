@@ -1,8 +1,8 @@
 package com.yesman.akythera.core.animation.driver;
 
 import com.mojang.datafixers.util.Pair;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.api.component.impl.RootMotionComponent;
-import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.playable.BlendSpace2D;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
@@ -12,7 +12,6 @@ import com.yesman.akythera.core.math.algorithm.DelaunayTriangulation.Triangle;
 import com.yesman.akythera.core.util.helper.MathUtils;
 import com.yesman.akythera.core.util.helper.PoseOperators;
 import net.minecraft.core.Holder;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.NonNull;
 
@@ -246,7 +245,7 @@ public final class BlendSpace2DDriver implements AnimationDriver {
     }
 
     @Override
-    public void tick(final EntityPatch<Entity> owner) {
+    public void tick(final ComponentAttachable owner) {
         // Drive only the winner's notify track.
         PlayableAnimation winner = switch (winnerDot) {
             case 0 -> cachedAnim1;

@@ -2,44 +2,91 @@ package com.yesman.akythera.client.api.component.impl;
 
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import com.yesman.akythera.api.asset.AssetAccessor;
 import com.yesman.akythera.api.component.ComponentAttachable;
+import com.yesman.akythera.api.component.TransformInheritPolicy;
 import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.data.modularize.node.PureNode;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
-import com.yesman.akythera.core.asset.armature.BoneSocket;
+import com.yesman.akythera.client.api.mesh.MeshManager;
+import com.yesman.akythera.client.core.asset.mesh.Mesh;
+import com.yesman.akythera.core.asset.armature.TransformSocket;
 import com.yesman.akythera.core.blueprint.ComponentBlueprint;
+import com.yesman.akythera.core.math.Transform;
 import com.yesman.akythera.core.util.helper.ParseUtils;
 import org.jspecify.annotations.Nullable;
 
 /// Builds one [MeshComponent] per host. Attachable under anything that hosts components; the host is
-/// read only to find the [EntityPatch] the mesh getter runs against.
-public record MeshComponentBlueprint(@Nullable PureNode meshGetter)
+/// read for the [EntityPatch] the render type getter runs against, the [ArmatureComponent] that poses
+/// the mesh, and the space it is drawn in.
+///
+/// @param transform              where the mesh sits in its host's space, or in its armature's for a skeletal mesh
+/// @param transformInheritPolicy the elements of that space the mesh takes on
+public record MeshComponentBlueprint(
+    @Nullable AssetAccessor<? extends Mesh<?>> mesh,
+    @Nullable PureNode renderTypeGetter,
+    Transform transform,
+    TransformInheritPolicy transformInheritPolicy,
+    boolean enabled
+)
     implements ComponentBlueprint<MeshComponent, ComponentAttachable>
 {
     public static final MapCodec<MeshComponentBlueprint> CODEC = RecordCodecBuilder.mapCodec(
         instance ->
             instance.group(
-                PureNode.CODEC.optionalFieldOf("mesh_getter")
-                    .forGetter(ParseUtils.provideOptional(MeshComponentBlueprint::meshGetter))
+                MeshManager.CODEC.optionalFieldOf("mesh")
+                    .forGetter(ParseUtils.provideOptional(MeshComponentBlueprint::mesh)),
+                PureNode.CODEC.optionalFieldOf("render_type_getter")
+                    .forGetter(ParseUtils.provideOptional(MeshComponentBlueprint::renderTypeGetter)),
+                TRANSFORM_CODEC.forGetter(MeshComponentBlueprint::transform),
+                TRANSFORM_INHERIT_POLICY_CODEC.forGetter(MeshComponentBlueprint::transformInheritPolicy),
+                ENABLED_CODEC.forGetter(MeshComponentBlueprint::enabled)
             )
-            .apply(instance, meshGetter -> new MeshComponentBlueprint(meshGetter.orElse(null)))
+            .apply(instance, (mesh, renderTypeGetter, transform, transformInheritPolicy, enabled) ->
+                new MeshComponentBlueprint(mesh.orElse(null), renderTypeGetter.orElse(null), transform, transformInheritPolicy, enabled))
     );
 
     @Override
     public MeshComponent instantiate(final ComponentAttachable host) {
-        return new MeshComponent(meshGetter, ownerOf(host));
+        MeshComponent component = new MeshComponent(
+            mesh,
+            renderTypeGetter,
+            ownerOf(host),
+            armatureOf(host),
+            host,
+            transform,
+            transformInheritPolicy
+        );
+
+        component.setEnabled(enabled);
+
+        return component;
     }
 
-    /// The patch `host` belongs to: the patch itself, or the owner of the armature a socket rides.
+    /// The patch `host` belongs to: the patch itself, the armature's owner, or the owner of the
+    /// armature a socket rides. Null when that owner is not a patch.
     private static @Nullable EntityPatch<?> ownerOf(final ComponentAttachable host) {
-        if (host instanceof EntityPatch<?> patch) return patch;
+        return switch (host) {
+            case EntityPatch<?> patch -> patch;
+            case ArmatureComponent armature -> armature.getOwner() instanceof EntityPatch<?> patch ? patch : null;
+            case TransformSocket socket -> socket.getArmature() != null && socket.getArmature().getOwner() instanceof EntityPatch<?> patch ? patch : null;
+            default -> null;
+        };
+    }
 
-        if (host instanceof BoneSocket socket) {
-            ArmatureComponent armature = socket.getArmature();
-            return armature == null ? null : armature.getOwner();
-        }
+    /// The armature that poses this mesh: the host itself, the one a socket rides, or a patch's first.
+    private static @Nullable ArmatureComponent armatureOf(final ComponentAttachable host) {
+        return switch (host) {
+            case ArmatureComponent armature -> armature;
+            case TransformSocket socket -> socket.getArmature();
+            case EntityPatch<?> patch -> patch.getArmatureComponent();
+            default -> null;
+        };
+    }
 
-        return null;
+    @Override
+    public boolean buildsFor(final boolean logicalClient) {
+        return logicalClient;
     }
 
     @Override

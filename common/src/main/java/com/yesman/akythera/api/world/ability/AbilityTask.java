@@ -1,10 +1,12 @@
 package com.yesman.akythera.api.world.ability;
 
+import com.yesman.akythera.core.reflection.ScriptType;
 import org.jetbrains.annotations.ApiStatus;
 import org.jspecify.annotations.Nullable;
 
 /// One unit of work an [Ability] runs over time: play an animation and wait, count down, watch for
 /// a hit. Server side only.
+@ScriptType
 public abstract class AbilityTask {
     private @Nullable AbilityInstance owner;
 
@@ -44,7 +46,7 @@ public abstract class AbilityTask {
     public abstract void tick(final AbilitySystemComponent abilitySystemComponent);
 
     /// Whether the task finished its work.
-    public abstract boolean isEnd();
+    public abstract boolean isEnd(final AbilitySystemComponent abilitySystemComponent);
 
     /// Called when the task finished its own work.
     public void onEnd(final AbilitySystemComponent abilitySystemComponent) {

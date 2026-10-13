@@ -84,8 +84,10 @@ public interface ModPlatform {
         }
     }
 
+    /// @param displayName the name the mod's metadata declares, as mod lists show it
     record ModInfo(
         String modId,
+        String displayName,
         String versionString,
         File modFile
     ) {

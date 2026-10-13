@@ -9,6 +9,8 @@ import com.yesman.akythera.client.core.shader.backend.program.BarrierFlags;
 import com.yesman.akythera.client.core.shader.backend.program.ComputeProgram;
 import com.yesman.akythera.client.core.shader.backend.program.ComputeUniform;
 import it.unimi.dsi.fastutil.ints.IntList;
+import it.unimi.dsi.fastutil.longs.LongArrayList;
+import it.unimi.dsi.fastutil.longs.LongList;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.KHRSynchronization2;
@@ -229,12 +231,17 @@ final class VulkanComputeProgram implements ComputeProgram {
         private final long[] boundOffsets = new long[storageBindings.size()];
         private final long[] boundRanges = new long[storageBindings.size()];
 
+        /// Every descriptor set this scope wrote, released together on [#close].
+        private final LongList takenSets = new LongArrayList();
+
         private VkCommandBuffer commandBuffer;
-        private long descriptorSet;
+
+        /// Whether a binding moved since the last set was written and bound.
+        private boolean bindingsChanged;
 
         VulkanDispatch open() {
             commandBuffer = device.createCommandEncoder().allocateAndBeginTransientCommandBuffer();
-            descriptorSet = descriptorSets.acquire();
+            bindingsChanged = true;
 
             VK12.vkCmdBindPipeline(commandBuffer, VK12.VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
 
@@ -254,40 +261,42 @@ final class VulkanComputeProgram implements ComputeProgram {
         @Override
         public void dispatch(final int countX, final int countY, final int countZ) {
             try (MemoryStack stack = MemoryStack.stackPush()) {
-                VkDescriptorBufferInfo.Buffer bufferInfos = VkDescriptorBufferInfo.calloc(boundBuffers.length, stack);
-                VkWriteDescriptorSet.Buffer writes = VkWriteDescriptorSet.calloc(boundBuffers.length, stack);
+                if (bindingsChanged) {
+                    long descriptorSet = descriptorSets.acquire();
+                    takenSets.add(descriptorSet);
 
-                for (int i = 0; i < boundBuffers.length; i++) {
-                    if (boundBuffers[i] == VK12.VK_NULL_HANDLE) {
-                        throw new IllegalStateException("Storage buffer binding " + storageBindings.getInt(i) + " was left unbound");
+                    VkDescriptorBufferInfo.Buffer bufferInfos = VkDescriptorBufferInfo.calloc(boundBuffers.length, stack);
+                    VkWriteDescriptorSet.Buffer writes = VkWriteDescriptorSet.calloc(boundBuffers.length, stack);
+
+                    for (int i = 0; i < boundBuffers.length; i++) {
+                        if (boundBuffers[i] == VK12.VK_NULL_HANDLE) {
+                            throw new IllegalStateException("Storage buffer binding " + storageBindings.getInt(i) + " was left unbound");
+                        }
+
+                        bufferInfos.get(i).buffer(boundBuffers[i]).offset(boundOffsets[i]).range(boundRanges[i]);
+                        writes.get(i)
+                            .sType$Default()
+                            .dstSet(descriptorSet)
+                            .dstBinding(storageBindings.getInt(i))
+                            .descriptorCount(1)
+                            .descriptorType(VK12.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+                            .pBufferInfo(VkDescriptorBufferInfo.create(bufferInfos.address(i), 1));
                     }
 
-                    bufferInfos.get(i).buffer(boundBuffers[i]).offset(boundOffsets[i]).range(boundRanges[i]);
-                    writes.get(i)
-                        .sType$Default()
-                        .dstSet(descriptorSet)
-                        .dstBinding(storageBindings.getInt(i))
-                        .descriptorCount(1)
-                        .descriptorType(VK12.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-                        .pBufferInfo(VkDescriptorBufferInfo.create(bufferInfos.address(i), 1));
-                }
+                    VK12.vkUpdateDescriptorSets(device.vkDevice(), writes, null);
+                    VK12.vkCmdBindDescriptorSets(
+                        commandBuffer, VK12.VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, stack.longs(descriptorSet), null
+                    );
 
-                VK12.vkUpdateDescriptorSets(device.vkDevice(), writes, null);
-                VK12.vkCmdBindDescriptorSets(
-                    commandBuffer, VK12.VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, stack.longs(descriptorSet), null
-                );
+                    bindingsChanged = false;
+                }
 
                 if (pushConstantBlock != null) {
                     VK12.vkCmdPushConstants(commandBuffer, pipelineLayout, VK12.VK_SHADER_STAGE_COMPUTE_BIT, 0, pushConstantBlock);
                 }
 
                 VK12.vkCmdDispatch(commandBuffer, countX, countY, countZ);
-            }
-        }
 
-        @Override
-        public void close() {
-            try (MemoryStack stack = MemoryStack.stackPush()) {
                 VkMemoryBarrier2.Buffer memoryBarrier = VkMemoryBarrier2.calloc(1, stack).sType$Default();
                 memoryBarrier.get(0)
                     .srcStageMask(KHRSynchronization2.VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT_KHR)
@@ -300,10 +309,18 @@ final class VulkanComputeProgram implements ComputeProgram {
 
                 KHRSynchronization2.vkCmdPipelineBarrier2KHR(commandBuffer, dependencyInfo);
             }
+        }
 
+        @Override
+        public void close() {
             VulkanUtils.crashIfFailure(device, VK12.vkEndCommandBuffer(commandBuffer), "Failed to end the compute VkCommandBuffer");
             device.createCommandEncoder().execute(commandBuffer);
-            descriptorSets.release(descriptorSet);
+
+            for (int i = 0; i < takenSets.size(); i++) {
+                descriptorSets.release(takenSets.getLong(i));
+            }
+
+            takenSets.clear();
 
             java.util.Arrays.fill(boundBuffers, VK12.VK_NULL_HANDLE);
             commandBuffer = null;
@@ -319,6 +336,7 @@ final class VulkanComputeProgram implements ComputeProgram {
             boundBuffers[index] = vkBuffer;
             boundOffsets[index] = offset;
             boundRanges[index] = range;
+            bindingsChanged = true;
 
             return this;
         }

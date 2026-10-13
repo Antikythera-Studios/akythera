@@ -1,10 +1,9 @@
 package com.yesman.akythera.core.animation.driver;
 
-import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.animation.animator.BlendingAnimator;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
-import net.minecraft.world.entity.Entity;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -47,7 +46,7 @@ public final class CachedPoseReference implements AnimationDriver {
     }
 
     @Override
-    public void tick(EntityPatch<Entity> owner) {
+    public void tick(ComponentAttachable owner) {
         ref().tick(owner);
     }
 

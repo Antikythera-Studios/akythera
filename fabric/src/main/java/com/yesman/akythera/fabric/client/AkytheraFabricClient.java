@@ -2,6 +2,7 @@ package com.yesman.akythera.fabric.client;
 
 import com.yesman.akythera.api.asset.animation.AnimationManager;
 import com.yesman.akythera.api.asset.armature.ArmatureManager;
+import com.yesman.akythera.api.asset.physics.ArmaturePhysicsManager;
 import com.yesman.akythera.client.api.mesh.MeshManager;
 import com.yesman.akythera.client.core.AkytheraClient;
 import com.yesman.akythera.client.input.AkytheraKeyMappings;
@@ -9,6 +10,7 @@ import com.yesman.akythera.client.config.AkytheraClientConfig;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.fabric.client.networking.ClientBoundNetworkReceiverRegistrar;
 import com.yesman.akythera.fabric.networking.ClientBoundPayloadTypes;
+import fuzs.forgeconfigapiport.fabric.api.v5.ConfigRegistry;
 import fuzs.forgeconfigapiport.fabric.api.v5.ModConfigEvents;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
@@ -36,6 +38,7 @@ public final class AkytheraFabricClient implements ClientModInitializer {
         clientResourceLoader.registerReloadListener(Akythera.identifier("anim_manager_dynamic"), AnimationManager.getInstance());
         clientResourceLoader.registerReloadListener(Akythera.identifier("armature_manager_dynamic"), ArmatureManager.getInstance());
         clientResourceLoader.registerReloadListener(Akythera.identifier("mesh_manager_dynamic"), MeshManager.getInstance());
+        clientResourceLoader.registerReloadListener(Akythera.identifier("armature_physics_manager_dynamic"), ArmaturePhysicsManager.getInstance());
 
         ModConfigEvents.loading(Akythera.MODID).register(modConfig -> {
             if (modConfig.getType() == ModConfig.Type.CLIENT) {
@@ -48,5 +51,7 @@ public final class AkytheraFabricClient implements ClientModInitializer {
                 AkytheraClientConfig.initConfigValues();
             }
         });
+
+        ConfigRegistry.INSTANCE.register(Akythera.MODID, ModConfig.Type.CLIENT, AkytheraClientConfig.SPEC);
     }
 }

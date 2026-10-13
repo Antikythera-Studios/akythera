@@ -8,11 +8,11 @@ import com.yesman.akythera.client.core.asset.loader.VertexBuilder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import net.minecraft.client.model.geom.ModelPart;
-import org.jetbrains.annotations.NotNull;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
+import org.jspecify.annotations.NonNull;
 
 import java.util.List;
 import java.util.Map;
@@ -71,7 +71,7 @@ public class StaticMesh implements Mesh<StaticMesh.StaticMeshPart> {
             uvs.writeFloat(f);
         }
 
-        ImmutableMap.Builder<@NotNull String, @NotNull StaticMeshPart> meshPartBuilder = ImmutableMap.builder();
+        ImmutableMap.Builder<@NonNull String, @NonNull StaticMeshPart> meshPartBuilder = ImmutableMap.builder();
 
         for (Map.Entry<String, List<VertexBuilder>> entry : meshBuilder.partBuilders.entrySet()) {
             meshPartBuilder.put(entry.getKey(), new StaticMeshPart(entry.getValue(), entry.getKey()));

@@ -29,6 +29,11 @@ public final class VectorUtils {
         return new Vec3(src.x(), src.y(), src.z());
     }
 
+    @ScriptFunction(pure = true, label = "Make Vector", desc = "Makes a vector from its three components")
+    public static Vec3 vec3(final double x, final double y, final double z) {
+        return new Vec3(x, y, z);
+    }
+
     @ScriptFunction(pure = true, label = "Rotate Vector", desc = """
         Rotates a vector by a quaternion
     """)

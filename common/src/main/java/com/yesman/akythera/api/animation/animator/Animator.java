@@ -1,6 +1,7 @@
 package com.yesman.akythera.api.animation.animator;
 
 import com.yesman.akythera.api.asset.AssetAccessor;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.component.impl.RootMotionComponent;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
@@ -14,9 +15,10 @@ import com.yesman.akythera.core.asset.loader.ArmatureLoader;
 import com.yesman.akythera.core.networking.NetworkingHelper;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayAnimMontage;
 import com.yesman.akythera.core.reflection.ScriptFunction;
+import com.yesman.akythera.core.util.StaticRegistryAccess;
 import net.minecraft.core.Holder;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.world.entity.Entity;
 import org.jetbrains.annotations.ApiStatus;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -35,10 +37,13 @@ public interface Animator {
     /// Plays an [AnimationMontage] starting in a specific section
     /// Ensure synchronization if it's called in a server side
     default AnimationMontagePlayer.@Nullable MontageCallbackHandle playAnimMontage(
-        @NonNull final ResourceKey<@NonNull AnimationMontage> animMontageKey, String section
+        @NonNull final ResourceKey<@NonNull AnimationMontage> animMontageKey, final String section
     ) {
-        // Can't play montage for non-entity object.
-        var montageOptional = getOwner().getLevel().registryAccess().get(animMontageKey);
+        ComponentAttachable owner = getOwner();
+        RegistryAccess registryAccess = owner instanceof EntityPatch<?> entityPatch
+            ? entityPatch.getLevel().registryAccess()
+            : StaticRegistryAccess.getRegistryAccess();
+        var montageOptional = registryAccess.get(animMontageKey);
 
         if (montageOptional.isPresent()) {
             Holder.Reference<AnimationMontage> animMontage = montageOptional.get();
@@ -46,16 +51,18 @@ public interface Animator {
                 .playAnimation(animMontage, section);
 
             // Montage authority is on server side, so if it's played in client side manual networking is required.
-            if (!getOwner().isLogicalClient()) {
+            if (owner instanceof EntityPatch<?> entityPatch && entityPatch.isLogicalServer()) {
                 NetworkingHelper.getInstance().sendToPlayersTrackingEntityWithSelfIfPlayer(
-                    getOwner().getOriginal(),
-                    new ClientBoundPlayAnimMontage(animMontageKey.identifier(), section, getOwner().getId())
+                    entityPatch.getOriginal(),
+                    new ClientBoundPlayAnimMontage(animMontageKey.identifier(), section, entityPatch.getId())
                 );
             }
 
+            ArmatureComponent armatureComponent = owner.findComponent(ArmatureComponent.class);
+
             // Play root motion if enabled.
-            if (animMontage.value().rootMotion() && getOwner().getArmatureComponent() != null) {
-                RootMotionComponent rootMotionComponent = getOwner().getArmatureComponent().getRootMotionComponent();
+            if (animMontage.value().rootMotion() && armatureComponent != null) {
+                RootMotionComponent rootMotionComponent = armatureComponent.getRootMotionComponent();
                 // Important: used merged clip, the `getPose` method will remove root motion.
                 AnimationClip montageClip = animMontage.value().getMergedAnimClip();
 
@@ -83,11 +90,13 @@ public interface Animator {
     ///
     /// @return true when paused any of anim montage was being played
     default boolean stopPlayingMontage(@Nullable final ResourceKey<@NonNull AnimationMontage> animMontageKey) {
-        // Can't play montage for non-entity object.
         Holder.Reference<@NonNull AnimationMontage> montageHolder = null;
 
         if (animMontageKey != null) {
-            montageHolder = getOwner().getLevel().registryAccess().get(animMontageKey).orElse(null);
+            RegistryAccess registryAccess = getOwner() instanceof EntityPatch<?> entityPatch
+                ? entityPatch.getLevel().registryAccess()
+                : StaticRegistryAccess.getRegistryAccess();
+            montageHolder = registryAccess.get(animMontageKey).orElse(null);
 
             if (montageHolder == null) {
                 Akythera.LOGGER.error("No anim montage found: {}", animMontageKey.identifier());
@@ -144,13 +153,21 @@ public interface Animator {
     @ApiStatus.Internal
     Pose getPose();
 
-    /// Returns the owner of this component
-    @ScriptFunction(pure = true, label = "Get Owner Entity")
-    EntityPatch<Entity> getOwner();
+    /// Returns the owner of this component, cast to whatever the call site asks for. The cast is
+    /// unchecked: a call site that needs a specific owner type tests it first.
+    @ScriptFunction(pure = true, label = "Get Owner")
+    <O> O getOwner();
 
-    /// Returns the owner of this component
+    /// Moves this animator to `owner`, the way [ArmatureComponent#getRenewed] moves its armature.
+    ///
+    /// @throws UnsupportedOperationException always, unless the animator overrides this
+    default void setOwner(final ComponentAttachable owner) {
+        throw new UnsupportedOperationException(getClass().getSimpleName() + " can't change its owner");
+    }
+
+    /// Returns the armature the owner's first [ArmatureComponent] holds
     @ScriptFunction(pure = true, label = "Get Armature")
     default AssetAccessor<? extends Armature> getArmature() {
-        return getOwner().getArmatureComponent().getArmature();
+        return this.<ComponentAttachable>getOwner().findComponent(ArmatureComponent.class).getArmature();
     }
 }

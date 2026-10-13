@@ -1,10 +1,7 @@
 package com.yesman.akythera.api.component;
 
-/// A component that listens to the ticking event
-public interface TickableDynamicComponent<T> extends DynamicPatchComponent<T> {
-    /// Called in fixed tick
-    void tick();
-
+/// A [TickableComponent] bound to its owner, also updated every frame on the client.
+public interface TickableDynamicComponent<T> extends DynamicPatchComponent<T>, TickableComponent {
     /// Called in each frame update. Only called in client side.
     /// (Server entities are only updated by [#tick])
     ///

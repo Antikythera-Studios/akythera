@@ -1,6 +1,6 @@
 package com.yesman.akythera.core.animation.driver;
 
-import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.notify.AnimationNotifyTrack;
@@ -11,7 +11,7 @@ import com.yesman.akythera.core.math.TimeWindow;
 import com.yesman.akythera.core.util.helper.MathUtils;
 import com.yesman.akythera.core.util.helper.PoseOperators;
 import net.minecraft.core.Holder;
-import net.minecraft.world.entity.Entity;
+import net.minecraft.util.StringUtil;
 import org.jetbrains.annotations.ApiStatus;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -59,7 +59,7 @@ public final class AnimationMontagePlayer implements AnimationDriver {
     private MontageCallbackHandle montageCallbackHandle;
 
     /// Plays an animation montage starting in a specific section
-    public MontageCallbackHandle playAnimation(Holder.@NonNull Reference<@NonNull AnimationMontage> animMontage, String sectionName) {
+    public MontageCallbackHandle playAnimation(final Holder.@NonNull Reference<@NonNull AnimationMontage> animMontage, @Nullable final String sectionName) {
         if (currentPlaying != null) {
             // Cache the current pose of the montage played lastly
             cachedLastMontagePose = getPose();
@@ -120,6 +120,10 @@ public final class AnimationMontagePlayer implements AnimationDriver {
     /// Jump the playback time to the section beginning time without triggering any playback
     /// listeners like animation notifies.
     private void jumpToSection(String sectionName) {
+        if (StringUtil.isNullOrEmpty(sectionName)) {
+            return;
+        }
+
         if (currentPlaying == null) {
             return;
         }
@@ -136,7 +140,7 @@ public final class AnimationMontagePlayer implements AnimationDriver {
 
     /// Called by fixed tick both in client and server.
     @Override
-    public void tick(final EntityPatch<Entity> owner) {
+    public void tick(final ComponentAttachable owner) {
         if (currentPlaying != null) currentPlaying.value().tick(owner, lastUpdatedTime, elapsedTime);
         lastUpdatedTime = elapsedTime;
     }

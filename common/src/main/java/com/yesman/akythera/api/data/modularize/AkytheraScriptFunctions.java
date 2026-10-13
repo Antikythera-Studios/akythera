@@ -3,15 +3,27 @@ package com.yesman.akythera.api.data.modularize;
 import com.yesman.akythera.api.animation.animator.AnimationInterfaceKey;
 import com.yesman.akythera.api.animation.animator.AnimationLayer;
 import com.yesman.akythera.api.animation.animator.Animator;
+import com.yesman.akythera.api.component.ComponentAttachable;
+import com.yesman.akythera.api.component.PatchComponent;
+import com.yesman.akythera.api.world.ability.Ability;
+import com.yesman.akythera.api.world.ability.AbilityState;
+import com.yesman.akythera.api.world.ability.AbilityTask;
+import com.yesman.akythera.api.world.ability.impl.PlayMontageTask;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
+import com.yesman.akythera.api.world.ability.AbilityCue;
+import com.yesman.akythera.api.world.ability.AbilityCueScript;
 import com.yesman.akythera.api.world.ability.AbilityEffectInstance;
 import com.yesman.akythera.api.world.ability.AbilityInstance;
 import com.yesman.akythera.api.world.ability.AbilitySystemComponent;
+import com.yesman.akythera.api.world.ability.AbilityTagSet;
 import com.yesman.akythera.api.world.ability.AbilityTaskHandle;
 import com.yesman.akythera.api.world.ability.DataDrivenAbility;
 import com.yesman.akythera.api.world.ability.SystematicAbility;
 import com.yesman.akythera.api.world.patch.entity.PlayerPatch;
+import com.yesman.akythera.api.world.patch.item.ItemPatch;
+import com.yesman.akythera.client.api.data.modularize.AkytheraClientScriptFunctions;
+import com.yesman.akythera.compat.CompatibleMod;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.animation.animator.BlendingAnimator;
 import com.yesman.akythera.core.animation.driver.AdditiveBlendDriver;
@@ -20,7 +32,9 @@ import com.yesman.akythera.core.animation.driver.EmptyAnimationDriver;
 import com.yesman.akythera.core.animation.driver.LayeredBlendPerBoneDriver;
 import com.yesman.akythera.core.animation.driver.PoseBlendDriver;
 import com.yesman.akythera.core.animation.keyframe.Pose;
+import com.yesman.akythera.core.animation.playable.AnimationMontage;
 import com.yesman.akythera.core.blueprint.script.AnimatorScript;
+import com.yesman.akythera.core.math.Transform;
 import com.yesman.akythera.core.reflection.FunctionSignature;
 import com.yesman.akythera.core.reflection.ScriptModularizeHelper;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
@@ -41,10 +55,13 @@ import net.minecraft.world.entity.player.PlayerSkin;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
+import java.lang.reflect.TypeVariable;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -58,29 +75,72 @@ public final class AkytheraScriptFunctions {
     public static final ModPlatform.Registrar<ScriptFunction> AKYTHERA_REGISTRAR =
         ModPlatformProvider.get().getRegistrar(AkytheraRegistries.Frozen.SCRIPT_FUNCTION_KEY, Akythera.MODID);
 
+    /// Element and entry slots of the collection functions, bound by the collection they are read from.
+    private static final TypeVariable<?> LIST_ELEMENT = List.class.getTypeParameters()[0];
+    private static final TypeVariable<?> SET_ELEMENT = Set.class.getTypeParameters()[0];
+    private static final TypeVariable<?> MAP_KEY = Map.class.getTypeParameters()[0];
+    private static final TypeVariable<?> MAP_VALUE = Map.class.getTypeParameters()[1];
+
     static {
         try {
             // Utils
-            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, MathUtils.class, "Math", ScriptFunction.Usage.SCRIPT);
-            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, Matrix4fUtils.class, "Math/Matrix", ScriptFunction.Usage.SCRIPT);
-            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, ParseUtils.class, "Parse", ScriptFunction.Usage.SCRIPT);
-            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, QuaternionUtils.class, "Math/Quaternion", ScriptFunction.Usage.SCRIPT);
-            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, VectorUtils.class, "Math/Vector", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, MathUtils.class, "Math", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, Matrix4fUtils.class, "Math/Matrix", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, ParseUtils.class, "Parse", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, QuaternionUtils.class, "Math/Quaternion", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, VectorUtils.class, "Math/Vector", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, Transform.class, "Math/Transform", ScriptFunction.Usage.SCRIPT);
 
             // Animation
-            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AnimationLayer.class, "Animation/Animation Layer", ScriptFunction.Usage.SCRIPT);
-            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, Animator.class, "Animation/Animator", ScriptFunction.Usage.SCRIPT);
-            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AnimationDriver.class, "Animation/Animation Driver", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, AnimationLayer.class, "Animation/Animation Layer", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, Animator.class, "Animation/Animator", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, AnimationDriver.class, "Animation/Animation Driver", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, Pose.class, "Animation/Pose", ScriptFunction.Usage.SCRIPT);
 
             // Entity & Entity patches
-            ScriptModularizeHelper.scanScriptModulesAndRegister(MINECRAFT_REGISTRAR, EntityPatch.class, "World/Entity", ScriptFunction.Usage.SCRIPT);
-            ScriptModularizeHelper.scanScriptModulesAndRegister(MINECRAFT_REGISTRAR, LivingEntityPatch.class, "World/Entity", ScriptFunction.Usage.SCRIPT);
-            ScriptModularizeHelper.scanScriptModulesAndRegister(MINECRAFT_REGISTRAR, PlayerPatch.class, "World/Entity", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(MINECRAFT_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, EntityPatch.class, "World/Entity", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(MINECRAFT_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, LivingEntityPatch.class, "World/Entity", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(MINECRAFT_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, PlayerPatch.class, "World/Entity", ScriptFunction.Usage.SCRIPT);
 
-            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AbilitySystemComponent.class, "Ability", ScriptFunction.Usage.SCRIPT);
-            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AbilityInstance.class, "Ability", ScriptFunction.Usage.SCRIPT);
-            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AbilityEffectInstance.class, "Ability/Effect", ScriptFunction.Usage.SCRIPT);
-            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AbilityTaskHandle.class, "Ability/Task", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(MINECRAFT_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, ItemPatch.class, "World/Item", ScriptFunction.Usage.SCRIPT);
+
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, AbilitySystemComponent.class, "Ability", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, Ability.class, "Ability", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, AbilityState.class, "Ability", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, AbilityTask.class, "Ability/Task", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, AbilityInstance.class, "Ability", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, AbilityEffectInstance.class, "Ability/Effect", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, AbilityTaskHandle.class, "Ability/Task", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, AbilityCue.class, "Ability/Cue", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, AbilityTagSet.class, "Ability/Tag", ScriptFunction.Usage.SCRIPT);
+
+            // Widgets, client-only
+            ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.gui.AkytheraButton", "Widget/Button", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.gui.CheckBox", "Widget/Check Box", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.gui.ComboBox", "Widget/Combo Box", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.gui.AkytheraEditBox", "Widget/Edit Box", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.gui.DragValueBox", "Widget/Drag Value Box", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.gui.TextArea", "Widget/Text Area", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.gui.Image", "Widget/Image", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.gui.ProgressionBar", "Widget/Progression Bar", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.gui.ColorPickerWidget", "Widget/Color Picker", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.gui.AkytheraScreen", "Widget", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.gui.AkytheraWidget", "Widget", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.gui.AkytheraHUD", "Widget", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.gui.Grid", "Widget/Grid", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.gui.HorizontalWidgetContainer", "Widget/Container", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.gui.VerticalWidgetContainer", "Widget/Container", ScriptFunction.Usage.SCRIPT);
+
+            // Particles, client-only
+            ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.particle.AkytheraParticleSystem", "Particle", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.particle.AkytheraParticle", "Particle", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.particle.AkytheraParticles", "Particle", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.particle.AkytheraSpriteParticle", "Particle/Sprite", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.particle.AkytheraMeshParticle", "Particle/Mesh", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.particle.AkytheraStaticMeshParticle", "Particle/Mesh", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.particle.AkytheraSkeletalMeshParticle", "Particle/Mesh", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.particle.module.ParticleInitializerModule", "Particle", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.particle.module.ParticleUpdateModule", "Particle", ScriptFunction.Usage.SCRIPT);
         } catch (Throwable e) {
             throw new IllegalStateException("Failed at scanning and registering modular function", e);
         }
@@ -130,27 +190,85 @@ public final class AkytheraScriptFunctions {
     // Ability constructors
     // ***********************************************
 
+    /// A [SystematicAbility] written in a data pack. It is built as the [DataDrivenAbility] that runs the
+    /// blueprint's graphs, and laid out in the editor as the [SystematicAbility] it is.
     public static final Holder<ScriptFunction> SYSTEMATIC_ABILITY_CONSTRUCTOR = AKYTHERA_REGISTRAR.register("systematic_ability_ctor", () ->
         ScriptModularizeHelper.makeCustomScript(
-            (Function<Holder.Reference, SystematicAbility>)SystematicAbility::new,
+            (Function<Holder.Reference, SystematicAbility>)DataDrivenAbility::new,
             FunctionSignature.create(SystematicAbility.class, List.of("blueprint"), Holder.Reference.class),
             "Systematic Ability",
             "Ability",
-            "Activation type, cost, cooldown, tags and triggers, filled in by the editor",
+            "Activation type, cost, cooldown, tags and triggers, and the graphs, filled in by the editor",
             true,
             ScriptFunction.Usage.ABILITY_CTOR
         )
     );
 
-    public static final Holder<ScriptFunction> DATA_DRIVEN_ABILITY_CONSTRUCTOR = AKYTHERA_REGISTRAR.register("data_driven_ability_ctor", () ->
+    // ***********************************************
+    // Ability task
+    // ***********************************************
+
+    public static final Holder<ScriptFunction> PLAY_MONTAGE_TASK_CONSTRUCTOR = AKYTHERA_REGISTRAR.register("play_montage_task_ctor", () ->
         ScriptModularizeHelper.makeCustomScript(
-            (Function<Holder.Reference, DataDrivenAbility>)DataDrivenAbility::new,
-            FunctionSignature.create(DataDrivenAbility.class, List.of("blueprint"), Holder.Reference.class),
-            "Data Driven Ability",
+            (BiFunction<ResourceKey, String, PlayMontageTask>) PlayMontageTask::new,
+            FunctionSignature.create(
+                PlayMontageTask.class, List.of("montageId", "section"),
+                ParseUtils.parameterized(ResourceKey.class, AnimationMontage.class), String.class
+            ),
+            "Play Montage Task",
             "Ability",
-            "Runs the blueprint's graphs instead of Java",
+            "A task that accompanies the lifecycle with a played montage",
             true,
-            ScriptFunction.Usage.ABILITY_CTOR
+            ScriptFunction.Usage.ABILITY_TASK
+        )
+    );
+
+    // ***********************************************
+    // Ability cue
+    // ***********************************************
+
+    public static final Holder<ScriptFunction> PLAY_ABILITY_CUE = AKYTHERA_REGISTRAR.register("play_ability_cue", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (ScriptFunction.QuintFunction<AbilitySystemComponent, String, AbilityInstance, Boolean, Boolean, AbilityCue>)
+                (component, cueId, source, withState, endsWithAbility) -> component.playCue(
+                    ResourceKey.create(AkytheraRegistries.DataPack.ABILITY_CUE_KEY, Identifier.parse(cueId)),
+                    source,
+                    Boolean.TRUE.equals(withState),
+                    Boolean.TRUE.equals(endsWithAbility)
+                ),
+            FunctionSignature.create(
+                AbilityCue.class, List.of("component", "cueId", "source", "withState", "endsWithAbility"),
+                AbilitySystemComponent.class, String.class, AbilityInstance.class, Boolean.class, Boolean.class
+            ),
+            "Play Ability Cue",
+            "Ability/Cue",
+            "Plays an ability cue by id",
+            false,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> PLAY_ABILITY_CUE_SCRIPT = AKYTHERA_REGISTRAR.register("play_ability_cue_script", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (ScriptFunction.QuintFunction<AbilitySystemComponent, String, AbilityInstance, Boolean, Boolean, AbilityCue>)
+                (component, scriptId, source, withState, endsWithAbility) -> component.playCue(
+                    AkytheraRegistries.Frozen.SCRIPT_TYPE.getOptional(Identifier.parse(scriptId))
+                        .orElseThrow(() -> new IllegalArgumentException("No script type " + scriptId))
+                        .type()
+                        .asSubclass(AbilityCueScript.class),
+                    source,
+                    Boolean.TRUE.equals(withState),
+                    Boolean.TRUE.equals(endsWithAbility)
+                ),
+            FunctionSignature.create(
+                AbilityCue.class, List.of("component", "scriptId", "source", "withState", "endsWithAbility"),
+                AbilitySystemComponent.class, String.class, AbilityInstance.class, Boolean.class, Boolean.class
+            ),
+            "Play Ability Cue Script",
+            "Ability/Cue",
+            "Plays a Java ability cue by its script type id",
+            false,
+            ScriptFunction.Usage.SCRIPT
         )
     );
 
@@ -158,7 +276,7 @@ public final class AkytheraScriptFunctions {
     // Player skin
     // ***********************************************
 
-    public static final Holder<ScriptFunction> PLAYER_SKIN_MODEL = MINECRAFT_REGISTRAR.register("player_skin_model", () ->
+    public static final Holder<ScriptFunction> PLAYER_SKIN_MODEL_TYPE = MINECRAFT_REGISTRAR.register("player_skin_model_type", () ->
         ScriptModularizeHelper.makeCustomScript(
             (Function<PlayerSkin, PlayerModelType>) skin -> skin == null ? PlayerModelType.WIDE : skin.model(),
             FunctionSignature.create(PlayerModelType.class, List.of("playerSkin"), PlayerSkin.class),
@@ -182,6 +300,164 @@ public final class AkytheraScriptFunctions {
         )
     );
 
+    public static final Holder<ScriptFunction> PLAYER_SKIN_HAS_CAPE = MINECRAFT_REGISTRAR.register("player_skin_has_cape", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (Function<PlayerSkin, Boolean>) skin -> skin != null && skin.cape() != null,
+            FunctionSignature.create(Boolean.class, List.of("playerSkin"), PlayerSkin.class),
+            "Has Cape",
+            "Online",
+            "Whether the skin carries a cape. A skin that has not resolved yet has none",
+            true,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> PLAYER_SKIN_CAPE_TEXTURE = MINECRAFT_REGISTRAR.register("player_skin_cape_texture", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (Function<PlayerSkin, Identifier>) skin -> skin == null || skin.cape() == null ? null : skin.cape().texturePath(),
+            FunctionSignature.create(Identifier.class, List.of("playerSkin"), PlayerSkin.class),
+            "Cape Texture",
+            "Online",
+            "The texture id of the skin's cape, or null when it has none",
+            true,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    // ***********************************************
+    // Components
+    // ***********************************************
+
+    public static final Holder<ScriptFunction> GET_COMPONENT = AKYTHERA_REGISTRAR.register("get_component", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (BiFunction<ComponentAttachable, String, PatchComponent>) (host, path) ->
+                host == null || path == null ? null : host.getComponentAt(path),
+            FunctionSignature.create(PatchComponent.class, List.of("host", "path"), ComponentAttachable.class, String.class),
+            "Get Component",
+            "Component",
+            "The component at a path of names joined by '/', switched on or off. Null when none sits there",
+            true,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> IS_COMPONENT_ENABLED = AKYTHERA_REGISTRAR.register("is_component_enabled", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (Function<PatchComponent, Boolean>) component -> component != null && component.isEnabled(),
+            FunctionSignature.create(Boolean.class, List.of("component"), PatchComponent.class),
+            "Is Component Enabled",
+            "Component",
+            "Whether the component is switched on. False for a null component",
+            true,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> SET_COMPONENT_ENABLED = AKYTHERA_REGISTRAR.register("set_component_enabled", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (BiConsumer<PatchComponent, Boolean>) (component, enabled) -> {
+                if (component != null) component.setEnabled(Boolean.TRUE.equals(enabled));
+            },
+            FunctionSignature.create(Void.class, List.of("component", "enabled"), PatchComponent.class, Boolean.class),
+            "Set Component Enabled",
+            "Component",
+            "Switches the component on or off. Does nothing for a null component",
+            false,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    // ***********************************************
+    // Animation driver
+    // ***********************************************
+
+    public static final Holder<ScriptFunction> IS_PLAYER_ANIMATION_LIBRARY_LOADED = AKYTHERA_REGISTRAR.register("is_player_animation_library_loaded", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (Supplier<Boolean>) () -> ModPlatformProvider.get().isModLoaded(CompatibleMod.PLAYER_ANIMATION_LIBRARY.getModId()),
+            FunctionSignature.create(Boolean.class, List.of()),
+            "Is Player Animation Library Loaded",
+            "Mod Loader",
+            "Whether Player Animation Library is installed on this side",
+            true,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    /// The client registers [AkytheraClientScriptFunctions#prefersPlayerAnimationLibrary]. A dedicated
+    /// server, which has no client config, registers a placeholder under the same id that answers false.
+    public static final Holder<ScriptFunction> PREFERS_PLAYER_ANIMATION_LIBRARY = AKYTHERA_REGISTRAR.register("prefers_player_animation_library", () ->
+        ModPlatformProvider.get().getPhysicalSide().isClient()
+            ? AkytheraClientScriptFunctions.prefersPlayerAnimationLibrary()
+            : ScriptModularizeHelper.makeCustomScript(
+                (Supplier<Boolean>) () -> false,
+                FunctionSignature.create(Boolean.class, List.of()),
+                "Prefers Player Animation Library",
+                "Configs",
+                "Whether the client config picks Player Animation Library over the skinned mesh",
+                true,
+                ScriptFunction.Usage.SCRIPT
+            )
+    );
+
+    // ***********************************************
+    // Render
+    // ***********************************************
+
+    /// The client registers [AkytheraClientScriptFunctions#entityRenderType]. A dedicated server, which has
+    /// no render types, registers a placeholder under the same id and parameters that answers null, so a
+    /// blueprint naming the function still decodes there.
+    public static final Holder<ScriptFunction> ENTITY_RENDER_TYPE = AKYTHERA_REGISTRAR.register("entity_render_type", () ->
+        ModPlatformProvider.get().getPhysicalSide().isClient()
+            ? AkytheraClientScriptFunctions.entityRenderType()
+            : ScriptModularizeHelper.makeCustomScript(
+                (BiFunction<String, Boolean, Object>) (texture, translucent) -> null,
+                FunctionSignature.create(Object.class, List.of("texture", "translucent"), String.class, Boolean.class),
+                "Entity Render Type",
+                "Render",
+                "The entity render type drawing a texture",
+                true,
+                ScriptFunction.Usage.SCRIPT
+            )
+    );
+
+    // ***********************************************
+    // Widget
+    // ***********************************************
+
+    public static final Holder<ScriptFunction> SCREEN_CONSTRUCTOR = registerClientOnly(
+        "screen_ctor", AkytheraClientScriptFunctions::screenConstructor, List.of("blueprint", "owner"), ScriptFunction.Usage.WIDGET_CTOR);
+
+    public static final Holder<ScriptFunction> WIDGET_CONSTRUCTOR = registerClientOnly(
+        "widget_ctor", AkytheraClientScriptFunctions::widgetConstructor, List.of("blueprint", "owner"), ScriptFunction.Usage.WIDGET_CTOR);
+
+    public static final Holder<ScriptFunction> HUD_CONSTRUCTOR = registerClientOnly(
+        "hud_ctor", AkytheraClientScriptFunctions::hudConstructor, List.of("blueprint", "owner"), ScriptFunction.Usage.WIDGET_CTOR);
+
+    public static final Holder<ScriptFunction> OPEN_SCREEN = registerClientOnly(
+        "open_screen", AkytheraClientScriptFunctions::openScreen, List.of("blueprint"), ScriptFunction.Usage.SCRIPT);
+
+    public static final Holder<ScriptFunction> ADD_HUD = registerClientOnly(
+        "add_hud", AkytheraClientScriptFunctions::addHud, List.of("blueprint"), ScriptFunction.Usage.SCRIPT);
+
+    public static final Holder<ScriptFunction> REMOVE_HUD = registerClientOnly(
+        "remove_hud", AkytheraClientScriptFunctions::removeHud, List.of("hud"), ScriptFunction.Usage.SCRIPT);
+
+    public static final Holder<ScriptFunction> SCREEN_TITLE = registerClientOnly(
+        "screen_title", AkytheraClientScriptFunctions::screenTitle, List.of("screen"), ScriptFunction.Usage.SCRIPT);
+
+    public static final Holder<ScriptFunction> WIDGET_OWNER = registerClientOnly(
+        "widget_owner", AkytheraClientScriptFunctions::widgetOwner, List.of("host"), ScriptFunction.Usage.SCRIPT);
+
+    /// Registers `client` on a physical client. A dedicated server, which lacks the client classes `client` names,
+    /// registers a [ScriptModularizeHelper#placeholder] taking `parameterNames` under the same id.
+    private static Holder<ScriptFunction> registerClientOnly(
+        final String name, final Supplier<ScriptFunction> client, final List<String> parameterNames, final ScriptFunction.Usage usage
+    ) {
+        return AKYTHERA_REGISTRAR.register(name, () -> ModPlatformProvider.get().getPhysicalSide().isClient()
+            ? client.get()
+            : ScriptModularizeHelper.placeholder(parameterNames, false, false, name, usage));
+    }
+
     // ***********************************************
     // Selection
     // ***********************************************
@@ -197,6 +473,18 @@ public final class AkytheraScriptFunctions {
             "Select",
             "Logic",
             "Yields one of two values by a boolean",
+            true,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> IS_NULL = AKYTHERA_REGISTRAR.register("is_null", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (Function<Object, Boolean>) value -> value == null,
+            FunctionSignature.create(Boolean.class, List.of("value"), Object.class),
+            "Is Null",
+            "Logic",
+            "Whether the value is null",
             true,
             ScriptFunction.Usage.SCRIPT
         )
@@ -465,7 +753,7 @@ public final class AkytheraScriptFunctions {
     public static final Holder<ScriptFunction> VEC3_DOT = MINECRAFT_REGISTRAR.register("vec3_dot", () ->
         ScriptModularizeHelper.makeCustomScript(
             (BiFunction<Vec3, Vec3, Double>) Vec3::dot,
-            FunctionSignature.create(Vec3.class, List.of("a", "b"), Vec3.class, double.class),
+            FunctionSignature.create(Double.class, List.of("a", "b"), Vec3.class, Vec3.class),
             "Vector Dot",
             "Math/Vector",
             null,
@@ -475,16 +763,216 @@ public final class AkytheraScriptFunctions {
     );
 
     // ***********************************************
-    // java.lang.Map
+    // java.util.List
+    // ***********************************************
+
+    public static final Holder<ScriptFunction> LIST_GET = MINECRAFT_REGISTRAR.register("list_get", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (BiFunction<List, Integer, Object>) List::get,
+            FunctionSignature.create(LIST_ELEMENT, List.of("list", "index"), ParseUtils.parameterized(List.class, LIST_ELEMENT), Integer.class),
+            "Get",
+            "List",
+            "The element at an index",
+            true,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> LIST_SET = MINECRAFT_REGISTRAR.register("list_set", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (ScriptFunction.TriConsumer<List, Integer, Object>) List::set,
+            FunctionSignature.create(Void.class, List.of("list", "index", "element"), ParseUtils.parameterized(List.class, LIST_ELEMENT), Integer.class, LIST_ELEMENT),
+            "Set",
+            "List",
+            "Replaces the element at an index",
+            false,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> LIST_ADD = MINECRAFT_REGISTRAR.register("list_add", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (BiConsumer<List, Object>) List::add,
+            FunctionSignature.create(Void.class, List.of("list", "element"), ParseUtils.parameterized(List.class, LIST_ELEMENT), LIST_ELEMENT),
+            "Add",
+            "List",
+            "Appends an element to the end",
+            false,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> LIST_REMOVE_AT = MINECRAFT_REGISTRAR.register("list_remove_at", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (BiConsumer<List, Integer>) (list, index) -> list.remove((int) index),
+            FunctionSignature.create(Void.class, List.of("list", "index"), ParseUtils.parameterized(List.class, LIST_ELEMENT), Integer.class),
+            "Remove at Index",
+            "List",
+            "Removes the element at an index, shifting the later ones down",
+            false,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> LIST_CONTAINS = MINECRAFT_REGISTRAR.register("list_contains", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (BiFunction<List, Object, Boolean>) List::contains,
+            FunctionSignature.create(Boolean.class, List.of("list", "element"), ParseUtils.parameterized(List.class, LIST_ELEMENT), LIST_ELEMENT),
+            "Contains",
+            "List",
+            "Whether an equal element is in the list",
+            true,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> LIST_INDEX_OF = MINECRAFT_REGISTRAR.register("list_index_of", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (BiFunction<List, Object, Integer>) List::indexOf,
+            FunctionSignature.create(Integer.class, List.of("list", "element"), ParseUtils.parameterized(List.class, LIST_ELEMENT), LIST_ELEMENT),
+            "Index Of",
+            "List",
+            "The index of the first equal element, or -1 when none",
+            true,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> LIST_SIZE = MINECRAFT_REGISTRAR.register("list_size", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (Function<List, Integer>) List::size,
+            FunctionSignature.create(Integer.class, List.of("list"), ParseUtils.parameterized(List.class, LIST_ELEMENT)),
+            "Size",
+            "List",
+            "The number of elements",
+            true,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> LIST_IS_EMPTY = MINECRAFT_REGISTRAR.register("list_is_empty", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (Function<List, Boolean>) List::isEmpty,
+            FunctionSignature.create(Boolean.class, List.of("list"), ParseUtils.parameterized(List.class, LIST_ELEMENT)),
+            "Is Empty",
+            "List",
+            "Whether the list has no elements",
+            true,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> LIST_CLEAR = MINECRAFT_REGISTRAR.register("list_clear", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (Consumer<List>) List::clear,
+            FunctionSignature.create(Void.class, List.of("list"), ParseUtils.parameterized(List.class, LIST_ELEMENT)),
+            "Clear",
+            "List",
+            "Removes every element",
+            false,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    // ***********************************************
+    // java.util.Set
+    // ***********************************************
+
+    public static final Holder<ScriptFunction> SET_ADD = MINECRAFT_REGISTRAR.register("set_add", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (BiConsumer<Set, Object>) Set::add,
+            FunctionSignature.create(Void.class, List.of("set", "element"), ParseUtils.parameterized(Set.class, SET_ELEMENT), SET_ELEMENT),
+            "Add",
+            "Set",
+            "Adds an element unless an equal one is already in",
+            false,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> SET_REMOVE = MINECRAFT_REGISTRAR.register("set_remove", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (BiConsumer<Set, Object>) Set::remove,
+            FunctionSignature.create(Void.class, List.of("set", "element"), ParseUtils.parameterized(Set.class, SET_ELEMENT), SET_ELEMENT),
+            "Remove",
+            "Set",
+            "Removes the equal element",
+            false,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> SET_CONTAINS = MINECRAFT_REGISTRAR.register("set_contains", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (BiFunction<Set, Object, Boolean>) Set::contains,
+            FunctionSignature.create(Boolean.class, List.of("set", "element"), ParseUtils.parameterized(Set.class, SET_ELEMENT), SET_ELEMENT),
+            "Contains",
+            "Set",
+            "Whether an equal element is in the set",
+            true,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> SET_SIZE = MINECRAFT_REGISTRAR.register("set_size", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (Function<Set, Integer>) Set::size,
+            FunctionSignature.create(Integer.class, List.of("set"), ParseUtils.parameterized(Set.class, SET_ELEMENT)),
+            "Size",
+            "Set",
+            "The number of elements",
+            true,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> SET_IS_EMPTY = MINECRAFT_REGISTRAR.register("set_is_empty", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (Function<Set, Boolean>) Set::isEmpty,
+            FunctionSignature.create(Boolean.class, List.of("set"), ParseUtils.parameterized(Set.class, SET_ELEMENT)),
+            "Is Empty",
+            "Set",
+            "Whether the set has no elements",
+            true,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> SET_CLEAR = MINECRAFT_REGISTRAR.register("set_clear", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (Consumer<Set>) Set::clear,
+            FunctionSignature.create(Void.class, List.of("set"), ParseUtils.parameterized(Set.class, SET_ELEMENT)),
+            "Clear",
+            "Set",
+            "Removes every element",
+            false,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    // ***********************************************
+    // java.util.Map
     // ***********************************************
 
     public static final Holder<ScriptFunction> MAP_GET = MINECRAFT_REGISTRAR.register("map_get", () ->
         ScriptModularizeHelper.makeCustomScript(
             (BiFunction<Map, Object, Object>) Map::get,
-            FunctionSignature.create(Object.class, List.of("map", "key"), Map.class, Object.class),
+            FunctionSignature.create(MAP_VALUE, List.of("map", "key"), ParseUtils.parameterized(Map.class, MAP_KEY, MAP_VALUE), MAP_KEY),
             "Get",
             "Map",
-            null,
+            "The value under a key, or null when none",
+            true,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> MAP_GET_OR_DEFAULT = MINECRAFT_REGISTRAR.register("map_get_or_default", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (ScriptFunction.TriFunction<Map, Object, Object, Object>) Map::getOrDefault,
+            FunctionSignature.create(MAP_VALUE, List.of("map", "key", "defaultValue"), ParseUtils.parameterized(Map.class, MAP_KEY, MAP_VALUE), MAP_KEY, MAP_VALUE),
+            "Get or Default",
+            "Map",
+            "The value under a key, or the default when none",
             true,
             ScriptFunction.Usage.SCRIPT
         )
@@ -493,10 +981,22 @@ public final class AkytheraScriptFunctions {
     public static final Holder<ScriptFunction> MAP_PUT = MINECRAFT_REGISTRAR.register("map_put", () ->
         ScriptModularizeHelper.makeCustomScript(
             (ScriptFunction.TriConsumer<Map, Object, Object>) Map::put,
-            FunctionSignature.create(Void.class, List.of("map", "key", "value"), Map.class, Object.class, Object.class),
+            FunctionSignature.create(Void.class, List.of("map", "key", "value"), ParseUtils.parameterized(Map.class, MAP_KEY, MAP_VALUE), MAP_KEY, MAP_VALUE),
             "Put",
             "Map",
-            null,
+            "Stores a value under a key, replacing the old one",
+            false,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> MAP_REMOVE = MINECRAFT_REGISTRAR.register("map_remove", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (BiConsumer<Map, Object>) Map::remove,
+            FunctionSignature.create(Void.class, List.of("map", "key"), ParseUtils.parameterized(Map.class, MAP_KEY, MAP_VALUE), MAP_KEY),
+            "Remove",
+            "Map",
+            "Removes the entry under a key",
             false,
             ScriptFunction.Usage.SCRIPT
         )
@@ -505,11 +1005,47 @@ public final class AkytheraScriptFunctions {
     public static final Holder<ScriptFunction> MAP_CONTAINS = MINECRAFT_REGISTRAR.register("map_contains", () ->
         ScriptModularizeHelper.makeCustomScript(
             (BiFunction<Map, Object, Boolean>) Map::containsKey,
-            FunctionSignature.create(Boolean.class, List.of("map", "key"), Map.class, Object.class),
+            FunctionSignature.create(Boolean.class, List.of("map", "key"), ParseUtils.parameterized(Map.class, MAP_KEY, MAP_VALUE), MAP_KEY),
             "Contains",
             "Map",
-            null,
+            "Whether the map has an entry under a key",
             true,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> MAP_SIZE = MINECRAFT_REGISTRAR.register("map_size", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (Function<Map, Integer>) Map::size,
+            FunctionSignature.create(Integer.class, List.of("map"), ParseUtils.parameterized(Map.class, MAP_KEY, MAP_VALUE)),
+            "Size",
+            "Map",
+            "The number of entries",
+            true,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> MAP_IS_EMPTY = MINECRAFT_REGISTRAR.register("map_is_empty", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (Function<Map, Boolean>) Map::isEmpty,
+            FunctionSignature.create(Boolean.class, List.of("map"), ParseUtils.parameterized(Map.class, MAP_KEY, MAP_VALUE)),
+            "Is Empty",
+            "Map",
+            "Whether the map has no entries",
+            true,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> MAP_CLEAR = MINECRAFT_REGISTRAR.register("map_clear", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (Consumer<Map>) Map::clear,
+            FunctionSignature.create(Void.class, List.of("map"), ParseUtils.parameterized(Map.class, MAP_KEY, MAP_VALUE)),
+            "Clear",
+            "Map",
+            "Removes every entry",
+            false,
             ScriptFunction.Usage.SCRIPT
         )
     );
@@ -521,7 +1057,7 @@ public final class AkytheraScriptFunctions {
     public static final Holder<ScriptFunction> SUBSTR1 = MINECRAFT_REGISTRAR.register("substring1", () ->
         ScriptModularizeHelper.makeCustomScript(
             (ScriptFunction.TriFunction<String, Integer, Integer, String>)String::substring,
-            FunctionSignature.create(String.class, List.of("beginIndex", "endIndex", "string"), int.class, int.class, String.class),
+            FunctionSignature.create(String.class, List.of("string", "beginIndex", "endIndex"), String.class, int.class, int.class),
             "Substring",
             "String",
             null,
@@ -533,8 +1069,20 @@ public final class AkytheraScriptFunctions {
     public static final Holder<ScriptFunction> SUBSTR2 = MINECRAFT_REGISTRAR.register("substring2", () ->
         ScriptModularizeHelper.makeCustomScript(
             (BiFunction<String, Integer, String>)String::substring,
-            FunctionSignature.create(String.class, List.of("beginIndex", "string"), int.class, String.class),
+            FunctionSignature.create(String.class, List.of("string", "beginIndex"), String.class, int.class),
             "Substring",
+            "String",
+            null,
+            true,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> TO_STRING = MINECRAFT_REGISTRAR.register("to_string", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (Function<Object, String>) String::valueOf,
+            FunctionSignature.create(String.class, List.of("object"), Object.class),
+            "To String",
             "String",
             null,
             true,

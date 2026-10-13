@@ -6,8 +6,10 @@
 
 package com.yesman.akythera.client.config;
 
+import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
-import com.yesman.akythera.client.api.component.impl.EntityModelComponent;
+import com.yesman.akythera.client.api.component.impl.MeshComponent;
+import com.yesman.akythera.client.api.component.impl.PALPoseBinder;
 import net.neoforged.neoforge.common.ModConfigSpec;
 import org.jspecify.annotations.NonNull;
 
@@ -54,13 +56,14 @@ public final class AkytheraClientConfig {
     }
 
     public enum DefaultAnimationDriver {
-        /// Requires "Player Animation Library" mod installed.
+        /// Requires a [PALPoseBinder] on the patch's [ArmatureComponent], and so
+        /// "Player Animation Library" installed.
         ///
         /// Better compatibility with Minecraft addons that doesn't
         /// depend on Akythera, but requires dependency.
         PLAYER_ANIMATION_LIBRARY,
 
-        /// Requires [EntityModelComponent] installed in [EntityPatch].
+        /// Requires a [MeshComponent] on the [EntityPatch]'s [ArmatureComponent].
         ///
         /// Expresses the mesh deformation as seen on Blender better
         /// than PAL, but incompatible with outside addons.

@@ -9,10 +9,15 @@ import com.yesman.akythera.client.core.asset.loader.MeshLoader;
 import com.yesman.akythera.client.core.asset.mesh.Mesh;
 import com.yesman.akythera.client.core.asset.mesh.SkeletalMesh;
 import com.yesman.akythera.client.core.asset.mesh.StaticMesh;
+import com.yesman.akythera.client.core.renderer.PatchModelRenderer;
 import com.yesman.akythera.core.asset.loader.AssetLoader;
 import com.yesman.akythera.core.asset.loader.ResourceLoadingFailureException;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.packs.resources.PreparableReloadListener;
 import org.jspecify.annotations.NonNull;
+
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 
 public final class MeshManager extends DynamicAssetManager<@NonNull Mesh<?>> {
     public static final String DIRECTORY = "animmodels/meshes/";
@@ -78,6 +83,7 @@ public final class MeshManager extends DynamicAssetManager<@NonNull Mesh<?>> {
     @Override
     public void onAssetReloaded() {
         ClientComponentsFactory.getImpl().invalidateComputeShaderPrograms();
+        PatchModelRenderer.getInstance().releaseClothInstances();
 
         for (Mesh<?> mesh : loadedObjectsRegistry.values()) {
             // Explicit call to release buffers
@@ -85,6 +91,18 @@ public final class MeshManager extends DynamicAssetManager<@NonNull Mesh<?>> {
         }
 
         super.onAssetReloaded();
+    }
+
+    @Override
+    public CompletableFuture<Void> reload(
+        PreparableReloadListener.SharedState currentReload,
+        Executor taskExecutor,
+        PreparableReloadListener.PreparationBarrier preparationBarrier,
+        Executor reloadExecutor
+    ) {
+        return CompletableFuture.<Void>completedFuture(null)
+            .thenCompose(preparationBarrier::wait)
+            .thenRunAsync(this::onAssetReloaded, reloadExecutor);
     }
 
     /// A mesh accessor that tries loading both [SkeletalMesh] and [StaticMesh].

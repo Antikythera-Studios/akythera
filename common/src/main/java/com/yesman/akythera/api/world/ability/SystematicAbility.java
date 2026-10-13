@@ -3,81 +3,194 @@ package com.yesman.akythera.api.world.ability;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import com.yesman.akythera.api.data.modularize.ScriptFunction;
 import com.yesman.akythera.api.input.InputAction;
 import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
 import com.yesman.akythera.core.blueprint.AbilityBlueprint;
-import com.yesman.akythera.core.registry.AkytheraRegistries;
-import com.yesman.akythera.core.util.StaticRegistryAccess;
+import com.yesman.akythera.core.blueprint.script.BlueprintBody;
+import com.yesman.akythera.core.reflection.BlueprintFunction;
+import com.yesman.akythera.core.reflection.ScriptType;
+import com.yesman.akythera.core.util.helper.ParseUtils;
 import net.minecraft.core.Holder;
-import net.minecraft.resources.ResourceKey;
 import org.jspecify.annotations.Nullable;
 
 import java.text.MessageFormat;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 
 /// An [Ability] whose common behaviors are settings rather than code: the activation preset, the
 /// cost, the cooldown and the duration effect. A developer extends this so other developers can
 /// parent entries on that subclass and fill the settings in the editor.
+///
+/// Every setting is read through its getter, so a subclass may answer one by overriding it.
 public class SystematicAbility<S extends AbilityState> extends Ability<S> {
-    private final Settings settings;
+    private final ActivationType activationType;
 
-    public SystematicAbility(final Settings settings) {
-        this.settings = settings;
+    /// Spent on activation, and checked before it.
+    private final List<AbilityEffect> costs;
+
+    /// The recharge timer banking this ability's charges.
+    private final @Nullable AbilityEffect cooldownEffect;
+
+    /// Present only when [#activationType] is [ActivationType#DURATION], whose expiry is what
+    /// finishes the ability.
+    private final @Nullable AbilityEffect durationEffect;
+
+    /// The key this ability reads, required by the presets that stay activated by input.
+    private final @Nullable Holder<InputAction> inputAction;
+
+    private final Tags tags;
+
+    private final List<Trigger> triggers;
+
+    private final InstantiationScope instantiationScope;
+
+    public SystematicAbility(
+        final ActivationType activationType,
+        final InstantiationScope instantiationScope,
+        final List<AbilityEffect> costs,
+        final @Nullable AbilityEffect cooldownEffect,
+        final @Nullable AbilityEffect durationEffect
+    ) {
+        this(activationType, instantiationScope, costs, cooldownEffect, durationEffect, null, Tags.NONE, List.of());
     }
 
-    /// Builds from a datapack entry, resolving the named effects.
-    public SystematicAbility(final Holder.Reference<AbilityBlueprint> blueprint) {
-        this(blueprint.value().settings().resolve());
-    }
+    public SystematicAbility(
+        final ActivationType activationType,
+        final InstantiationScope instantiationScope,
+        final List<AbilityEffect> costs,
+        final @Nullable AbilityEffect cooldownEffect,
+        final @Nullable AbilityEffect durationEffect,
+        final @Nullable Holder<InputAction> inputAction,
+        final Tags tags,
+        final List<Trigger> triggers
+    ) {
+        if (activationType == ActivationType.DURATION && durationEffect == null) {
+            throw new IllegalArgumentException("A Duration ability needs a Duration Effect.");
+        }
 
-    public Settings getSettings() {
-        return settings;
-    }
+        if (activationType.requiresInputAction() && inputAction == null) {
+            throw new IllegalArgumentException(
+                "A " + activationType + " ability stays activated by its key, and names no Input Action."
+            );
+        }
 
-    public ActivationType getActivationType() {
-        return settings.activationType();
-    }
+        // The ability's lifetime is the effect's.
+        if (durationEffect != null
+            && durationEffect.getApplicationType() != AbilityEffect.ApplicationType.DURATION) {
+            throw new IllegalArgumentException(
+                "A Duration Effect must itself be Duration, and " + durationEffect.getId()
+                    + " is " + durationEffect.getApplicationType() + "."
+            );
+        }
 
-    public @Nullable AbilityEffect getCooldownEffect() {
-        return settings.cooldownEffect();
-    }
+        // A recharge timer counts down, so it needs a duration to count.
+        if (cooldownEffect != null
+            && cooldownEffect.getApplicationType() != AbilityEffect.ApplicationType.DURATION) {
+            throw new IllegalArgumentException(
+                "A Cooldown Effect must be Duration, and " + cooldownEffect.getId()
+                    + " is " + cooldownEffect.getApplicationType() + "."
+            );
+        }
 
-    public @Nullable AbilityEffect getDurationEffect() {
-        return settings.durationEffect();
-    }
+        if (activationType != ActivationType.DURATION && durationEffect != null) {
+            throw new IllegalArgumentException(
+                "A Duration Effect belongs to a Duration ability, not " + activationType + "."
+            );
+        }
 
-    public @Nullable Holder<InputAction> getInputAction() {
-        return settings.inputAction();
-    }
+        for (AbilityEffect cost : costs) {
+            if (!activationType.allowsCostType(cost.getApplicationType())) {
+                throw new IllegalArgumentException(
+                    MessageFormat.format(
+                        "A {0} ability cannot carry a {1} cost: {2}",
+                        activationType, cost.getApplicationType(), cost.getId()
+                    )
+                );
+            }
 
-    public List<AbilityEffect> getCosts() {
-        return settings.costs();
-    }
+            for (AbilityEffect.Modifier<?> modifier : cost.getModifiers()) {
+                AbilityEffect.AbilityResourceSpec resourceSpec = modifier.asAbilitySource();
 
-    public Tags getTags() {
-        return settings.tags();
-    }
-
-    public List<Trigger> getTriggers() {
-        return settings.triggers();
-    }
-
-    /// Whether any tag in `patterns` matches any tag in `candidates`, by [AbilityTag#matches].
-    public static boolean matchesAny(final Set<AbilityTag> patterns, final Set<AbilityTag> candidates) {
-        for (AbilityTag pattern : patterns) {
-            for (AbilityTag candidate : candidates) {
-                if (pattern.matches(candidate)) return true;
+                if (resourceSpec != null && resourceSpec.amount() <= 0.0F) {
+                    throw new IllegalArgumentException(
+                        "A cost amount is authored positive and subtracted by the engine. "
+                            + cost.getId() + " carries " + resourceSpec.amount()
+                    );
+                }
             }
         }
 
-        return false;
+        this.activationType = activationType;
+        this.instantiationScope = instantiationScope;
+        this.costs = List.copyOf(costs);
+        this.cooldownEffect = cooldownEffect;
+        this.durationEffect = durationEffect;
+        this.inputAction = inputAction;
+        this.tags = tags;
+        this.triggers = List.copyOf(triggers);
+    }
+
+    /// Builds from a datapack entry, reading its property values.
+    public SystematicAbility(final Holder.Reference<AbilityBlueprint> blueprint) {
+        this(blueprint.value().body());
+    }
+
+    private SystematicAbility(final BlueprintBody body) {
+        this(
+            body.property(SystematicAbility.class, "activationType", ActivationType.INSTANT),
+            body.property(SystematicAbility.class, "instantiationScope", InstantiationScope.EVERYWHERE),
+            body.property(SystematicAbility.class, "costs", List.of()),
+            body.property(SystematicAbility.class, "cooldownEffect", null),
+            body.property(SystematicAbility.class, "durationEffect", null),
+            body.property(SystematicAbility.class, "inputAction", null),
+            body.property(SystematicAbility.class, "tags", Tags.NONE),
+            body.property(SystematicAbility.class, "triggers", List.of())
+        );
+    }
+
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.PROPERTY)
+    public ActivationType getActivationType() {
+        return activationType;
+    }
+
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.PROPERTY)
+    @Override
+    public InstantiationScope getInstantiationScope() {
+        return instantiationScope;
+    }
+
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.PROPERTY)
+    public @Nullable AbilityEffect getCooldownEffect() {
+        return cooldownEffect;
+    }
+
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.PROPERTY)
+    public @Nullable AbilityEffect getDurationEffect() {
+        return durationEffect;
+    }
+
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.PROPERTY)
+    public @Nullable Holder<InputAction> getInputAction() {
+        return inputAction;
+    }
+
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.PROPERTY)
+    public List<AbilityEffect> getCosts() {
+        return costs;
+    }
+
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.PROPERTY)
+    public Tags getTags() {
+        return tags;
+    }
+
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.PROPERTY)
+    public List<Trigger> getTriggers() {
+        return triggers;
     }
 
     /// Starts the recharge timer.
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.EVENT_GRAPH)
     @Override
     public void onEquipped(
         final AbilitySystemComponent abilitySystemComponent,
@@ -86,15 +199,14 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
     ) {
         super.onEquipped(abilitySystemComponent, abilityInstance, abilityState);
 
-        AbilityEffect cooldownEffect = settings.cooldownEffect();
-
         // A client's timer arrives from the server, numbered as the server numbered it.
-        if (cooldownEffect != null && abilitySystemComponent.getOwner().isLogicalServer()) {
-            abilitySystemComponent.getOrCreateCooldown(cooldownEffect, abilityInstance);
+        if (getCooldownEffect() != null && abilitySystemComponent.getOwner().isLogicalServer()) {
+            abilitySystemComponent.getOrCreateCooldown(getCooldownEffect(), abilityInstance);
         }
     }
 
     /// Refuses the activation when no charge is banked, or when the owner cannot pay every cost.
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.FUNCTION)
     @Override
     public boolean canActivate(
         final AbilitySystemComponent abilitySystemComponent,
@@ -103,15 +215,8 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
     ) {
         if (!super.canActivate(abilitySystemComponent, abilityInstance, abilityState)) return false;
 
-        Tags tags = settings.tags();
-
-        for (AbilityTag required : tags.activationRequiredTags()) {
-            if (!abilitySystemComponent.hasAbilityTag(required)) return false;
-        }
-
-        for (AbilityTag blocked : tags.activationBlockedTags()) {
-            if (abilitySystemComponent.hasAbilityTag(blocked)) return false;
-        }
+        if (!abilitySystemComponent.hasAllAbilityTags(getTags().activationRequiredTags())) return false;
+        if (abilitySystemComponent.hasAnyAbilityTags(getTags().activationBlockedTags())) return false;
 
         // Server side only: this reads instances, which a client holds only partially.
         if (abilitySystemComponent.getOwner().isLogicalServer()
@@ -119,11 +224,9 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
             return false;
         }
 
-        AbilityEffect cooldownEffect = settings.cooldownEffect();
-
-        if (cooldownEffect != null) {
+        if (getCooldownEffect() != null) {
             AbilityEffectInstance cooldown =
-                abilitySystemComponent.getCooldown(cooldownEffect, abilityInstance);
+                abilitySystemComponent.getCooldown(getCooldownEffect(), abilityInstance);
 
             // Nothing has started the timer, so no charge can have been banked.
             if (cooldown == null || !cooldown.hasStack()) return false;
@@ -147,7 +250,7 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
             if (held == self || !held.isActivated()) continue;
 
             if (held.getAbility() instanceof SystematicAbility<?> other
-                && matchesAny(other.getTags().blockAbilitiesWithTag(), settings.tags().idTags())) {
+                && getTags().idTags().hasAny(other.getTags().blockAbilitiesWithTag())) {
                 return true;
             }
         }
@@ -195,7 +298,7 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
     private Map<AbilityResource, Float> totalCosts(final AbilityEffect.ApplicationType applicationType) {
         Map<AbilityResource, Float> totals = new LinkedHashMap<>();
 
-        for (AbilityEffect cost : settings.costs()) {
+        for (AbilityEffect cost : getCosts()) {
             if (cost.getApplicationType() != applicationType) continue;
 
             for (AbilityEffect.Modifier<?> modifier : cost.getModifiers()) {
@@ -211,6 +314,7 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
     }
 
     /// Spends the charge and the costs, then applies the duration effect.
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.EVENT_GRAPH)
     @Override
     public void onActivated(
         final AbilitySystemComponent abilitySystemComponent,
@@ -226,11 +330,9 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
         // and granting a tag can fire a trigger, either of which moves the resource this reads.
         chargeCosts(abilitySystemComponent.getOwner(), AbilityEffect.ApplicationType.INSTANT);
 
-        AbilityEffect cooldownEffect = settings.cooldownEffect();
-
-        if (cooldownEffect != null) {
+        if (getCooldownEffect() != null) {
             AbilityEffectInstance cooldown =
-                abilitySystemComponent.getOrCreateCooldown(cooldownEffect, abilityInstance);
+                abilitySystemComponent.getOrCreateCooldown(getCooldownEffect(), abilityInstance);
 
             // Sent ahead of the clash cancelling and the tag grants below, which both run callbacks.
             if (cooldown.consumeStack()) abilitySystemComponent.syncEffect(cooldown);
@@ -238,19 +340,18 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
 
         cancelClashingAbilities(abilitySystemComponent, abilityInstance);
 
-        for (AbilityTag acquired : settings.tags().ownerAcquiredTags()) {
+        for (AbilityTag acquired : getTags().ownerAcquiredTags()) {
             abilitySystemComponent.addAbilityTag(acquired);
         }
 
-        AbilityEffect durationEffect = settings.durationEffect();
-
-        if (durationEffect != null) {
+        if (getDurationEffect() != null) {
             abilitySystemComponent.applyEffect(
-                durationEffect, AbilityEffectInstance.Role.DURATION, abilityInstance
+                getDurationEffect(), AbilityEffectInstance.Role.DURATION, abilityInstance
             );
         }
     }
 
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.EVENT_GRAPH)
     @Override
     public void onRecast(
         final AbilitySystemComponent abilitySystemComponent,
@@ -260,6 +361,7 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
 
     }
 
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.EVENT_GRAPH)
     @Override
     public void onCanceled(
         final AbilitySystemComponent abilitySystemComponent,
@@ -275,6 +377,7 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
         releaseOwnerAcquiredTags(abilitySystemComponent);
     }
 
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.EVENT_GRAPH)
     @Override
     public void onFinished(
         final AbilitySystemComponent abilitySystemComponent,
@@ -295,7 +398,7 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
         final AbilitySystemComponent abilitySystemComponent,
         final AbilityInstance self
     ) {
-        Set<AbilityTag> patterns = settings.tags().cancelAbilitiesWithTag();
+        AbilityTagSet patterns = getTags().cancelAbilitiesWithTag();
 
         if (patterns.isEmpty()) return;
 
@@ -306,7 +409,7 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
             if (held == self || !held.isActivated()) continue;
 
             if (held.getAbility() instanceof SystematicAbility<?> other
-                && matchesAny(patterns, other.getTags().idTags())) {
+                && other.getTags().idTags().hasAny(patterns)) {
                 abilitySystemComponent.cancelAbility(entry.getKey());
             }
         }
@@ -314,7 +417,7 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
 
     /// Releases the tags this ability granted its owner while it ran.
     private void releaseOwnerAcquiredTags(final AbilitySystemComponent abilitySystemComponent) {
-        for (AbilityTag acquired : settings.tags().ownerAcquiredTags()) {
+        for (AbilityTag acquired : getTags().ownerAcquiredTags()) {
             abilitySystemComponent.removeAbilityTag(acquired);
         }
     }
@@ -325,12 +428,10 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
         final AbilitySystemComponent abilitySystemComponent,
         final AbilityInstance abilityInstance
     ) {
-        AbilityEffect durationEffect = settings.durationEffect();
-
-        if (durationEffect == null) return;
+        if (getDurationEffect() == null) return;
 
         for (AbilityEffectInstance live
-            : List.copyOf(abilitySystemComponent.getEffectInstances(durationEffect.getId()))) {
+            : List.copyOf(abilitySystemComponent.getEffectInstances(getDurationEffect().getId()))) {
             if (live.getSource() == abilityInstance) abilitySystemComponent.cancelEffect(live);
         }
     }
@@ -348,16 +449,19 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
     /// @param ownerAcquiredTags      granted to the owner while activated
     /// @param activationRequiredTags the owner must carry all of these
     /// @param activationBlockedTags  the owner must carry none of these
+    @ScriptType(autoRegister = false)
     public record Tags(
-        Set<AbilityTag> idTags,
-        Set<AbilityTag> cancelAbilitiesWithTag,
-        Set<AbilityTag> blockAbilitiesWithTag,
-        Set<AbilityTag> ownerAcquiredTags,
-        Set<AbilityTag> activationRequiredTags,
-        Set<AbilityTag> activationBlockedTags
+        AbilityTagSet idTags,
+        AbilityTagSet cancelAbilitiesWithTag,
+        AbilityTagSet blockAbilitiesWithTag,
+        AbilityTagSet ownerAcquiredTags,
+        AbilityTagSet activationRequiredTags,
+        AbilityTagSet activationBlockedTags
     ) {
-        public static final Tags NONE =
-            new Tags(Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of());
+        public static final Tags NONE = new Tags(
+            AbilityTagSet.EMPTY, AbilityTagSet.EMPTY, AbilityTagSet.EMPTY,
+            AbilityTagSet.EMPTY, AbilityTagSet.EMPTY, AbilityTagSet.EMPTY
+        );
 
         public static final Codec<Tags> CODEC =
             RecordCodecBuilder.create(
@@ -373,23 +477,13 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
                     .apply(instance, Tags::new)
             );
 
-        private static MapCodec<Set<AbilityTag>> tagSet(final String name) {
-            return AbilityTag.ENUM_MANAGER.getNameCodec().listOf()
-                .xmap(Set::copyOf, List::copyOf)
-                .optionalFieldOf(name, Set.of());
-        }
-
-        public Tags {
-            idTags = Set.copyOf(idTags);
-            cancelAbilitiesWithTag = Set.copyOf(cancelAbilitiesWithTag);
-            blockAbilitiesWithTag = Set.copyOf(blockAbilitiesWithTag);
-            ownerAcquiredTags = Set.copyOf(ownerAcquiredTags);
-            activationRequiredTags = Set.copyOf(activationRequiredTags);
-            activationBlockedTags = Set.copyOf(activationBlockedTags);
+        private static MapCodec<AbilityTagSet> tagSet(final String name) {
+            return AbilityTagSet.CODEC.optionalFieldOf(name, AbilityTagSet.EMPTY);
         }
     }
 
     /// One tag that activates the ability, and what has to happen to that tag for it to fire.
+    @ScriptType(autoRegister = false)
     public record Trigger(AbilityTag triggerTag, Source source) {
         public static final Codec<Trigger> CODEC =
             RecordCodecBuilder.create(
@@ -397,7 +491,7 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
                     instance.group(
                         AbilityTag.ENUM_MANAGER.getNameCodec().fieldOf("tag")
                             .forGetter(Trigger::triggerTag),
-                        AbilityEffect.enumCodec(Source.class).fieldOf("source")
+                        ParseUtils.enumCodec(Source.class).fieldOf("source")
                             .forGetter(Trigger::source)
                     )
                     .apply(instance, Trigger::new)
@@ -412,153 +506,6 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
 
             /// [AbilitySystemComponent#removeAbilityTag] released the trigger tag.
             ON_TAG_REMOVED
-        }
-    }
-
-    /// The datapack form of [Settings], naming its effects instead of holding them.
-    public record SettingsSpec(
-        ActivationType activationType,
-        List<ResourceKey<AbilityEffect>> costs,
-        Optional<ResourceKey<AbilityEffect>> cooldownEffect,
-        Optional<ResourceKey<AbilityEffect>> durationEffect,
-        Optional<ResourceKey<InputAction>> inputAction,
-        Tags tags,
-        List<Trigger> triggers
-    ) {
-        public static final MapCodec<SettingsSpec> MAP_CODEC =
-            RecordCodecBuilder.mapCodec(
-                instance ->
-                    instance.group(
-                        AbilityEffect.enumCodec(ActivationType.class).fieldOf("activation_type")
-                            .forGetter(SettingsSpec::activationType),
-                        effectKey().listOf().optionalFieldOf("costs", List.of())
-                            .forGetter(SettingsSpec::costs),
-                        effectKey().optionalFieldOf("cooldown_effect")
-                            .forGetter(SettingsSpec::cooldownEffect),
-                        effectKey().optionalFieldOf("duration_effect")
-                            .forGetter(SettingsSpec::durationEffect),
-                        ResourceKey.codec(AkytheraRegistries.DataPack.INPUT_ACTION_KEY)
-                            .optionalFieldOf("input_action").forGetter(SettingsSpec::inputAction),
-                        Tags.CODEC.optionalFieldOf("tags", Tags.NONE).forGetter(SettingsSpec::tags),
-                        Trigger.CODEC.listOf().optionalFieldOf("triggers", List.of())
-                            .forGetter(SettingsSpec::triggers)
-                    )
-                    .apply(instance, SettingsSpec::new)
-            );
-
-        public static final Codec<SettingsSpec> CODEC = MAP_CODEC.codec();
-
-        private static Codec<ResourceKey<AbilityEffect>> effectKey() {
-            return ResourceKey.codec(AkytheraRegistries.DataPack.ABILITY_EFFECT_KEY);
-        }
-
-        /// Resolves every named effect against the loaded registry.
-        public Settings resolve() {
-            return new Settings(
-                activationType,
-                costs.stream().map(SettingsSpec::lookUp).toList(),
-                cooldownEffect.map(SettingsSpec::lookUp).orElse(null),
-                durationEffect.map(SettingsSpec::lookUp).orElse(null),
-                inputAction.map(SettingsSpec::lookUpInput).orElse(null),
-                tags,
-                triggers
-            );
-        }
-
-        private static AbilityEffect lookUp(final ResourceKey<AbilityEffect> key) {
-            return StaticRegistryAccess.getRegistryAccess().getOrThrow(key).value();
-        }
-
-        private static Holder<InputAction> lookUpInput(final ResourceKey<InputAction> key) {
-            return StaticRegistryAccess.getRegistryAccess().getOrThrow(key);
-        }
-    }
-
-    /// What the editor fills in.
-    ///
-    /// @param costs          spent on activation, and checked before it
-    /// @param cooldownEffect the recharge timer banking this ability's charges
-    /// @param durationEffect present only when `activationType` is [ActivationType#DURATION], whose
-    ///                       expiry is what finishes the ability
-    /// @param inputAction    the key this ability reads, required by the presets that stay
-    ///                       activated by input
-    public record Settings(
-        ActivationType activationType,
-        List<AbilityEffect> costs,
-        @Nullable AbilityEffect cooldownEffect,
-        @Nullable AbilityEffect durationEffect,
-        @Nullable Holder<InputAction> inputAction,
-        Tags tags,
-        List<Trigger> triggers
-    ) {
-        public Settings(
-            final ActivationType activationType,
-            final List<AbilityEffect> costs,
-            final @Nullable AbilityEffect cooldownEffect,
-            final @Nullable AbilityEffect durationEffect
-        ) {
-            this(activationType, costs, cooldownEffect, durationEffect, null, Tags.NONE, List.of());
-        }
-
-        public Settings {
-            if (activationType == ActivationType.DURATION && durationEffect == null) {
-                throw new IllegalArgumentException("A Duration ability needs a Duration Effect.");
-            }
-
-            if (activationType.requiresInputAction() && inputAction == null) {
-                throw new IllegalArgumentException(
-                    "A " + activationType + " ability stays activated by its key, and names no Input Action."
-                );
-            }
-
-            // The ability's lifetime is the effect's.
-            if (durationEffect != null
-                && durationEffect.getApplicationType() != AbilityEffect.ApplicationType.DURATION) {
-                throw new IllegalArgumentException(
-                    "A Duration Effect must itself be Duration, and " + durationEffect.getId()
-                        + " is " + durationEffect.getApplicationType() + "."
-                );
-            }
-
-            // A recharge timer counts down, so it needs a duration to count.
-            if (cooldownEffect != null
-                && cooldownEffect.getApplicationType() != AbilityEffect.ApplicationType.DURATION) {
-                throw new IllegalArgumentException(
-                    "A Cooldown Effect must be Duration, and " + cooldownEffect.getId()
-                        + " is " + cooldownEffect.getApplicationType() + "."
-                );
-            }
-
-            if (activationType != ActivationType.DURATION && durationEffect != null) {
-                throw new IllegalArgumentException(
-                    "A Duration Effect belongs to a Duration ability, not " + activationType + "."
-                );
-            }
-
-            for (AbilityEffect cost : costs) {
-                if (!activationType.allowsCostType(cost.getApplicationType())) {
-                    throw new IllegalArgumentException(
-                        MessageFormat.format(
-                            "A {0} ability cannot carry a {1} cost: {2}",
-                            activationType, cost.getApplicationType(), cost.getId()
-                        )
-                    );
-                }
-
-                for (AbilityEffect.Modifier<?> modifier : cost.getModifiers()) {
-                    AbilityEffect.AbilityResourceSpec resourceSpec = modifier.asAbilitySource();
-
-                    if (resourceSpec != null && resourceSpec.amount() <= 0.0F) {
-                        throw new IllegalArgumentException(
-                            "A cost amount is authored positive and subtracted by the engine. "
-                                + cost.getId() + " carries " + resourceSpec.amount()
-                        );
-                    }
-                }
-            }
-
-            costs = List.copyOf(costs);
-            triggers = List.copyOf(triggers);
         }
     }
 }

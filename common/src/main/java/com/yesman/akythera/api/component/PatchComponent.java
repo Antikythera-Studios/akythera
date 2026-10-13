@@ -1,5 +1,6 @@
 package com.yesman.akythera.api.component;
 
+import com.yesman.akythera.core.blueprint.ComponentBlueprint;
 import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
@@ -11,6 +12,28 @@ import java.util.Set;
 
 /// A static, non-instantiated per owners component. Shared throughout blueprint instances.
 public interface PatchComponent {
+    /// Whether this component takes part in its host's behavior: answered by
+    /// [ComponentAttachable#getComponent], ticked, and drawn. Always true for a component that holds
+    /// no switch, which is the default.
+    ///
+    /// A component that is off keeps its slot in [ComponentAttachable#getComponents] and its
+    /// persisted data—the structure a file declares is the structure the host holds either way, and
+    /// the serialization walks are the one place that does not test this.
+    default boolean isEnabled() {
+        return true;
+    }
+
+    /// Switches this component on or off.
+    ///
+    /// An interface holds no state, so a component carries the flag itself, starting from its
+    /// blueprint's [ComponentBlueprint#enabled]. One that carries none refuses, the way an immutable
+    /// list refuses `add`.
+    ///
+    /// @throws UnsupportedOperationException always, unless the component overrides this
+    default void setEnabled(final boolean enabled) {
+        throw new UnsupportedOperationException(getClass().getSimpleName() + " holds no switch");
+    }
+
     /// Merges `overwrite` into this component, both being the same type. The default keeps nothing
     /// of this component and returns `overwrite`.
     default PatchComponent overwrite(final PatchComponent overwrite) {

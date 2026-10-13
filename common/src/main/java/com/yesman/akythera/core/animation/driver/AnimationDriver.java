@@ -1,11 +1,10 @@
 package com.yesman.akythera.core.animation.driver;
 
-import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.animation.animator.BlendingAnimator;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.reflection.ScriptFunction;
-import net.minecraft.world.entity.Entity;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -32,7 +31,7 @@ public interface AnimationDriver {
     /// Tick the driver
     ///
     /// Called on each fixed update (0.05 sec)
-    default void tick(final EntityPatch<Entity> owner) {
+    default void tick(final ComponentAttachable owner) {
     }
 
     /// Returns the current frame time being simulated

@@ -4,9 +4,9 @@ import com.yesman.akythera.api.animation.animator.AbstractAnimationInterface;
 import com.yesman.akythera.api.animation.animator.AnimationInterfaceKey;
 import com.yesman.akythera.api.animation.animator.AnimationLayer;
 import com.yesman.akythera.api.animation.animator.Animator;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.api.event.BuiltInEventHooks;
 import com.yesman.akythera.api.event.entity.animation.InitBlendingAnimatorEvent;
-import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.animation.AnimationLayerSignature;
 import com.yesman.akythera.core.animation.driver.*;
 import com.yesman.akythera.core.animation.keyframe.Pose;
@@ -16,7 +16,6 @@ import com.yesman.akythera.core.blueprint.script.AnimatorScript;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
 import net.minecraft.core.Holder;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.world.entity.Entity;
 import org.jetbrains.annotations.ApiStatus;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -35,7 +34,7 @@ import java.util.function.Function;
 ///
 /// Detailed logics should be implemented in [AnimatorScript].
 public final class BlendingAnimator implements Animator {
-    private final EntityPatch<Entity> owner;
+    private ComponentAttachable owner;
 
     /// Defines how this animator is controlled in each event trigger
     private final AnimatorScript animScript;
@@ -59,7 +58,7 @@ public final class BlendingAnimator implements Animator {
     public boolean isSoftPaused = false;
 
     /// @param owner Owner of the animator, must match the type with animator script
-    public BlendingAnimator(final EntityPatch<Entity> owner, final Function<Animator, AnimatorScript> animScriptProvider)
+    public BlendingAnimator(final ComponentAttachable owner, final Function<Animator, AnimatorScript> animScriptProvider)
         throws RuntimeException
     {
         this.owner = owner;
@@ -176,8 +175,13 @@ public final class BlendingAnimator implements Animator {
         cachedPoses.put(cacheName, pose);
     }
 
+    @SuppressWarnings("unchecked") @Override
+    public <O> O getOwner() {
+        return (O)owner;
+    }
+
     @Override
-    public EntityPatch<Entity> getOwner() {
-        return owner;
+    public void setOwner(final ComponentAttachable owner) {
+        this.owner = owner;
     }
 }

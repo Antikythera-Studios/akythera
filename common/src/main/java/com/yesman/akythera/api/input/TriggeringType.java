@@ -9,7 +9,7 @@ package com.yesman.akythera.api.input;
 /// | Down       | every tick the key is down  | never                            | never                           |
 /// | Release    | release edge                | never                            | never                           |
 /// | Hold       | every tick the key is down  | release                          | never                           |
-/// | Hold Until | every tick the key is down  | release at or above the threshold | release below the threshold     |
+/// | Hold Until | every tick the key is down  | release at or above the threshold | release below the threshold    |
 public enum TriggeringType {
     PRESS,
     DOWN,

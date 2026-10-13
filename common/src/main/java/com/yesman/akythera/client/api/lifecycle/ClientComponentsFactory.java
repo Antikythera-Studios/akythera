@@ -4,8 +4,16 @@ import com.mojang.blaze3d.systems.DeviceInfo;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.yesman.akythera.api.lifecycle.ComponentsFactory;
 import com.yesman.akythera.client.core.asset.mesh.SkeletalMesh;
+import com.yesman.akythera.client.core.physics.cloth.ClothColliderPacker;
+import com.yesman.akythera.client.core.renderer.TrailRenderer;
+import com.yesman.akythera.client.core.shader.backend.ComputeBackends;
 import com.yesman.akythera.client.core.shader.backend.setup.AnimationComputeShader;
+import com.yesman.akythera.client.core.shader.backend.setup.ClothComputeShader;
+import com.yesman.akythera.client.core.shader.backend.setup.ClothProgram;
+import com.yesman.akythera.client.core.shader.backend.setup.TriangleDepthSort;
 import com.yesman.akythera.core.Akythera;
+import com.yesman.akythera.core.math.physics.collider.Collider;
+import com.yesman.akythera.core.math.physics.collider.ColliderType;
 import com.yesman.akythera.core.util.ClientOnly;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.AbstractClientPlayer;
@@ -16,6 +24,8 @@ import org.jspecify.annotations.Nullable;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GLCapabilities;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.function.Function;
 
 /// *Physical client*(commonly refers Minecraft launcher) side components factory.
@@ -109,6 +119,9 @@ public final class ClientComponentsFactory extends ComponentsFactory {
     /// reloaded resource pack.
     public void invalidateComputeShaderPrograms() {
         programInvalidator.run();
+        ClothProgram.invalidateAll();
+        TriangleDepthSort.invalidateProgram();
+        TrailRenderer.invalidateProgram();
     }
 
     public boolean supportComputeShader() {
@@ -126,6 +139,40 @@ public final class ClientComponentsFactory extends ComponentsFactory {
         }
 
         return factory.apply(skeletalMesh);
+    }
+
+    // *********************************************************
+    //  Cloth Simulation Part
+    // *********************************************************
+    private final Map<ColliderType, ClothColliderPacker<?>> clothColliderPackers = new HashMap<>();
+
+    /// Whether this run simulates cloth: compute support, the vanilla shader backend, and at least
+    /// [ClothComputeShader#REQUIRED_STORAGE_BLOCKS] storage buffers per compute stage.
+    public boolean supportClothSimulation() {
+        return supportComputeShader()
+            && shaderBackend == ShaderBackend.VANILLA
+            && ComputeBackends.get().maxComputeStorageBlocks() >= ClothComputeShader.REQUIRED_STORAGE_BLOCKS;
+    }
+
+    /// The cloth residency of `mesh`, or null when cloth is unsupported or `mesh` has no skinning
+    /// residency to borrow.
+    public @Nullable ClothComputeShader createClothComputeShader(final SkeletalMesh mesh, final float[] weights, final int[] offsetPairs) {
+        if (!supportClothSimulation() || mesh.getAnimationComputeShader() == null) {
+            return null;
+        }
+
+        return new ClothComputeShader(mesh, weights, offsetPairs);
+    }
+
+    /// Registers how a collider type reaches the cloth solver. Registering a type twice replaces it.
+    public <T extends Collider> void registerClothColliderPacker(final ColliderType type, final ClothColliderPacker<T> packer) {
+        clothColliderPackers.put(type, packer);
+    }
+
+    /// The packer of `collider`'s type, or null when cloth ignores that type.
+    @SuppressWarnings("unchecked")
+    public @Nullable ClothColliderPacker<Collider> getClothColliderPacker(final Collider collider) {
+        return (ClothColliderPacker<Collider>) clothColliderPackers.get(collider.type());
     }
 
     public ShaderBackend getShaderBackend() {

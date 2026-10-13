@@ -52,6 +52,7 @@ public final class FabricModPlatform implements ModPlatform {
 
         return new ModInfo(
             id,
+            modContainer.getMetadata().getName(),
             modContainer.getMetadata().getVersion().getFriendlyString(),
             modContainer.getOrigin().getPaths().getFirst().toFile()
         );
@@ -62,6 +63,7 @@ public final class FabricModPlatform implements ModPlatform {
         return FabricLoader.getInstance().getAllMods().stream().map(modContainer ->
             new ModInfo(
                 modContainer.getMetadata().getId(),
+                modContainer.getMetadata().getName(),
                 modContainer.getMetadata().getVersion().getFriendlyString(),
                 modContainer.getOrigin().getPaths().getFirst().toFile()
             )

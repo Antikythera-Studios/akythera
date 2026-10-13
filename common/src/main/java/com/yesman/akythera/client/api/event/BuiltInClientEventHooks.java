@@ -3,8 +3,10 @@ package com.yesman.akythera.client.api.event;
 
 import com.yesman.akythera.api.event.BuiltInEventHooks;
 import com.yesman.akythera.api.event.entity.EntityPatchEvent;
+import com.yesman.akythera.client.api.event.gui.ModalEvent;
 import com.yesman.akythera.core.event.CancelableEventHook;
 import com.yesman.akythera.core.event.EventHook;
+import com.yesman.akythera.core.util.LogicalSide;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.api.world.patch.entity.component.EntityEventListener;
 
@@ -21,6 +23,13 @@ import com.yesman.akythera.api.world.patch.entity.component.EntityEventListener;
 public final class BuiltInClientEventHooks {
     public static final class Entity {
         private Entity() {}
+    }
+
+    public static final class Gui {
+        public static final EventHook<ModalEvent.Opened> MODAL_OPENED = EventHook.createSidedEventHook(LogicalSide.CLIENT);
+        public static final EventHook<ModalEvent.Closed> MODAL_CLOSED = EventHook.createSidedEventHook(LogicalSide.CLIENT);
+
+        private Gui() {}
     }
 
     private BuiltInClientEventHooks() {}

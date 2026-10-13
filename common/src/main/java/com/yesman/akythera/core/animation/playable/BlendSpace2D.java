@@ -3,7 +3,7 @@ package com.yesman.akythera.core.animation.playable;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.animation.driver.BlendSpace2DDriver;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.math.algorithm.DelaunayTriangulation;
@@ -11,7 +11,6 @@ import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
 import com.yesman.akythera.core.util.helper.MathUtils;
 import net.minecraft.core.Holder;
-import net.minecraft.world.entity.Entity;
 import org.jspecify.annotations.NonNull;
 
 import java.util.ArrayList;
@@ -119,7 +118,7 @@ public final class BlendSpace2D implements PlayableAnimation {
     }
 
     @Override
-    public void tick(EntityPatch<Entity> owner, float prevElapsedTime, float currentElapsedTime) {
+    public void tick(ComponentAttachable owner, float prevElapsedTime, float currentElapsedTime) {
     }
 
     public float smoothX() {

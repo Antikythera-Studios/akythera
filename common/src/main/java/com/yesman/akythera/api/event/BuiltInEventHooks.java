@@ -6,6 +6,7 @@ import com.yesman.akythera.api.event.entity.animation.InitBlendingAnimatorEvent;
 import com.yesman.akythera.api.event.entity.animation.PlayAnimMontageEvent;
 import com.yesman.akythera.api.event.registry.GatherScriptModuleEvent;
 import com.yesman.akythera.api.event.registry.RegistryAccessEvent;
+import com.yesman.akythera.api.event.registry.RegistryEntryLookupEvent;
 import com.yesman.akythera.core.event.CancelableEventHook;
 import com.yesman.akythera.core.event.EventHook;
 import com.yesman.akythera.core.util.LogicalSide;
@@ -52,6 +53,8 @@ public final class BuiltInEventHooks {
         public static final EventHook<RegistryAccessEvent.Load> REGISTRY_ACCESS_LOAD = EventHook.createEventHook();
         public static final EventHook<RegistryAccessEvent.Unload> REGISTRY_ACCESS_UNLOAD = EventHook.createEventHook();
         public static final EventHook<GatherScriptModuleEvent> GATHER_SCRIPT_MODULE = EventHook.createEventHook();
+        public static final CancelableEventHook<RegistryEntryLookupEvent.ByKey<?>> LOOKUP_ENTRY_BY_KEY = CancelableEventHook.createCancelableEventHook();
+        public static final CancelableEventHook<RegistryEntryLookupEvent.ByValue<?>> LOOKUP_ENTRY_BY_VALUE = CancelableEventHook.createCancelableEventHook();
 
         private Registry() {}
     }

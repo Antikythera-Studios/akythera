@@ -1,6 +1,7 @@
 package com.yesman.akythera.mixin.client;
 
 import com.yesman.akythera.client.core.renderer.PatchModelRenderer;
+import com.yesman.akythera.client.core.renderer.TrailRenderer;
 import com.yesman.akythera.client.input.InputManager;
 import com.yesman.akythera.mixinaccessor.client.KeyMappingAccessor;
 import net.minecraft.client.KeyMapping;
@@ -26,5 +27,6 @@ public abstract class MixinMinecraft {
     @Inject(at = @At("TAIL"), method = "renderFrame(Z)V")
     private void akythera$endSkinnedMeshFrame(boolean advanceGameTime, CallbackInfo callbackInfo) {
         PatchModelRenderer.getInstance().endFrame();
+        TrailRenderer.getInstance().endFrame();
     }
 }

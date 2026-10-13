@@ -43,6 +43,9 @@ public abstract class AnimationComputeShader implements AutoCloseable {
 
     private final int vertexCount;
 
+    /// Orders [#output]'s triangles for a translucent draw. Created on the first one.
+    private @Nullable TriangleDepthSort depthSort;
+
     /// Part indices written into [#vertices] are the ordinal of the part in
     /// `SkeletalMeshBuilder#partBuilders`' iteration order. `SkeletalMesh`'s constructor walks the
     /// same map into the `ImmutableMap` behind `SkeletalMesh#getParts`, so part index *n* here and
@@ -120,6 +123,14 @@ public abstract class AnimationComputeShader implements AutoCloseable {
         return null;
     }
 
+    public final TriangleDepthSort depthSort() {
+        if (depthSort == null) {
+            depthSort = new TriangleDepthSort(vertexCount);
+        }
+
+        return depthSort;
+    }
+
     public final int vertexCount() {
         return vertexCount;
     }
@@ -141,5 +152,7 @@ public abstract class AnimationComputeShader implements AutoCloseable {
         vertices.close();
         boneWeightMapping.close();
         output.close();
+
+        if (depthSort != null) depthSort.close();
     }
 }

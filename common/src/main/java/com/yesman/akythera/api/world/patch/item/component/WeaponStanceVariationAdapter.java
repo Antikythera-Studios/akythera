@@ -6,7 +6,9 @@ import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.api.component.PatchComponent;
 import com.yesman.akythera.api.component.UniqueComponent;
 import com.yesman.akythera.api.data.modularize.node.PureNode;
+import com.yesman.akythera.api.data.modularize.node.ScriptCaller;
 import com.yesman.akythera.api.data.modularize.node.ScriptNode;
+import com.yesman.akythera.api.data.modularize.node.ScriptRecorder;
 import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
 import com.yesman.akythera.api.world.patch.item.ItemPatch;
 import com.yesman.akythera.api.world.patch.item.WeaponStance;
@@ -14,6 +16,7 @@ import com.yesman.akythera.core.blueprint.ComponentBlueprint;
 import com.yesman.akythera.core.blueprint.ItemPatchBlueprint;
 import com.yesman.akythera.core.blueprint.script.ScriptVariables;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
+import com.yesman.akythera.core.util.LogicalSide;
 import net.minecraft.world.entity.EquipmentSlot;
 import org.jspecify.annotations.Nullable;
 
@@ -52,7 +55,8 @@ public final class WeaponStanceVariationAdapter
                 PureNode.CODEC
                     .fieldOf("condition").forGetter(WeaponStanceVariationAdapter::getCondition),
                 ComponentBlueprint.componentMapCodec(() -> AkytheraRegistries.Frozen.ITEM_PATCH_COMPONENT_TYPES)
-                    .optionalFieldOf("components", Map.of()).forGetter(WeaponStanceVariationAdapter::getChildBlueprints)
+                    .optionalFieldOf("components", Map.of()).forGetter(WeaponStanceVariationAdapter::getChildBlueprints),
+                ENABLED_CODEC.forGetter(WeaponStanceVariationAdapter::enabled)
             )
             .apply(instance, WeaponStanceVariationAdapter::new)
     );
@@ -72,15 +76,21 @@ public final class WeaponStanceVariationAdapter
     /// [#components] indexed by [UniqueComponent] type.
     private final Map<Class<? extends UniqueComponent>, ? extends UniqueComponent> uniqueComponents;
 
+    /// Whether this adapter takes part, see [PatchComponent#isEnabled]. On the authored adapter, the
+    /// state its copy starts in.
+    private boolean enabled;
+
     /// The authored form, as the data file declares it. Its own child map stays empty.
     public WeaponStanceVariationAdapter(
         final WeaponStance stance,
         final PureNode condition,
-        final Map<String, ComponentBlueprint<?, ?>> childBlueprints
+        final Map<String, ComponentBlueprint<?, ?>> childBlueprints,
+        final boolean enabled
     ) {
         this.stance = stance;
         this.condition = condition;
         this.childBlueprints = childBlueprints;
+        this.enabled = enabled;
         this.uniqueComponents = Map.of();
     }
 
@@ -90,18 +100,20 @@ public final class WeaponStanceVariationAdapter
         this.stance = blueprint.stance;
         this.condition = blueprint.condition;
         this.childBlueprints = blueprint.childBlueprints;
+        this.enabled = blueprint.enabled;
 
         blueprint.childBlueprints.forEach((name, child) -> components.put(name, ((ComponentBlueprint<?, Object>)child).instantiate(blueprintOwner)));
 
         this.uniqueComponents = ComponentAttachable.indexUnique(components);
     }
 
-    /// A copy of `overlay` whose children are `base` with `overlay`'s own laid over them. The stance
-    /// and the condition are `overlay`'s.
+    /// A copy of `overlay` whose children are `base` with `overlay`'s own laid over them. The stance,
+    /// the condition and the switch are `overlay`'s.
     private WeaponStanceVariationAdapter(final WeaponStanceVariationAdapter overlay, final Map<String, ? extends PatchComponent> base) {
         this.stance = overlay.stance;
         this.condition = overlay.condition;
         this.childBlueprints = overlay.childBlueprints;
+        this.enabled = overlay.enabled;
 
         components.putAll(PatchComponent.fold(List.of(base, overlay.components)));
 
@@ -143,17 +155,43 @@ public final class WeaponStanceVariationAdapter
     }
 
     /// Whether the equipper's current state establishes this stance while the item is held in `slot`.
+    /// A throwing condition establishes nothing.
     public boolean matches(final LivingEntityPatch<?> equipper, final EquipmentSlot slot) {
         ScriptVariables variables = new ScriptVariables();
         variables.setValue(EQUIPPER_PARAM, equipper);
         variables.setValue(SLOT_PARAM, slot);
 
-        return condition.execute(null, new ScriptNode.ExecutionContext(variables));
+        ScriptNode.ExecutionContext context = ScriptRecorder.newContext(
+            new ScriptCaller(equipper, null, "stance " + stance.identifier()), variables);
+
+        try {
+            return condition.execute(null, context);
+        } catch (Throwable throwable) {
+            ScriptRecorder.recordFailure(context, throwable);
+
+            return false;
+        }
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    @Override
+    public void setEnabled(final boolean enabled) {
+        this.enabled = enabled;
     }
 
     @Override
     public Map<String, PatchComponent> getComponents() {
         return components;
+    }
+
+    /// An adapter lives in an [ItemPatch], shared by both sides.
+    @Override
+    public LogicalSide logicalSide() {
+        return LogicalSide.BOTH;
     }
 
     @SuppressWarnings("unchecked")
@@ -165,6 +203,11 @@ public final class WeaponStanceVariationAdapter
     @Override
     public WeaponStanceVariationAdapter instantiate(final ItemPatch blueprintOwner) {
         return new WeaponStanceVariationAdapter(this, blueprintOwner);
+    }
+
+    @Override
+    public boolean enabled() {
+        return enabled;
     }
 
     @Override

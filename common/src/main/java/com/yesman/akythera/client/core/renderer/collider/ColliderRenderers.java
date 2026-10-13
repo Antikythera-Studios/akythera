@@ -2,9 +2,12 @@ package com.yesman.akythera.client.core.renderer.collider;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.yesman.akythera.core.math.Transform;
 import com.yesman.akythera.core.math.physics.collider.AkytheraColliderType;
 import com.yesman.akythera.core.math.physics.collider.Collider;
 import com.yesman.akythera.core.math.physics.collider.ColliderType;
+
+import org.joml.Matrix4f;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -31,6 +34,12 @@ public final class ColliderRenderers {
         if (renderer == null) return;
 
         renderer.emitWireframe(consumer, pose, collider, color);
+    }
+
+    /// The pose [#emitWireframe] draws `collider` under so the shape lands at `transform`, the collider's own
+    /// transform. The wireframe carries [Collider#getPivotTransform] already, so the pose takes it back out.
+    public static Matrix4f placement(final Collider collider, final Transform transform) {
+        return transform.toMatrix().mul(collider.getPivotTransform().toMatrix().invert());
     }
 
     /// Built-in shape renderers. Called once the collider types are loaded.

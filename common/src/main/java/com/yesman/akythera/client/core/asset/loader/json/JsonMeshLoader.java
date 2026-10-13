@@ -10,6 +10,7 @@ import com.yesman.akythera.client.core.asset.loader.binary.BinaryMeshLoader;
 import com.yesman.akythera.client.core.asset.mesh.Mesh;
 import com.yesman.akythera.client.core.asset.mesh.SkeletalMesh;
 import com.yesman.akythera.client.core.asset.mesh.StaticMesh;
+import com.yesman.akythera.client.core.asset.physics.ClothPhysicsData;
 import com.yesman.akythera.core.asset.loader.ResourceLoadingFailureException;
 import com.yesman.akythera.core.asset.loader.json.JsonAssetLoader;
 import com.yesman.akythera.core.util.helper.ParseUtils;
@@ -17,6 +18,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.util.GsonHelper;
 import org.joml.Vector3f;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
 
@@ -28,15 +30,25 @@ public final class JsonMeshLoader implements MeshLoader, JsonAssetLoader {
     private final Identifier resourcePath;
     private final JsonObject jsonObject;
     private final Metadata metadata;
+    private final @Nullable ClothPhysicsData clothPhysics;
 
     /// @param resourcePath a resource path identifier
     /// @param resource     a resource object
-    public JsonMeshLoader(Identifier resourcePath, Resource resource, Metadata metadata)
+    public JsonMeshLoader(Identifier resourcePath, Resource resource, Metadata metadata, @Nullable ClothPhysicsData clothPhysics)
         throws ResourceLoadingFailureException
     {
         this.resourcePath = resourcePath;
         jsonObject = readJsonObject(resource);
         this.metadata = metadata;
+        this.clothPhysics = clothPhysics;
+    }
+
+    /// Loads from a tree the caller already parsed — one it edited before baking, for example.
+    public JsonMeshLoader(Identifier resourcePath, JsonObject jsonObject, Metadata metadata, @Nullable ClothPhysicsData clothPhysics) {
+        this.resourcePath = resourcePath;
+        this.jsonObject = jsonObject;
+        this.metadata = metadata;
+        this.clothPhysics = clothPhysics;
     }
 
     @Override
@@ -47,6 +59,11 @@ public final class JsonMeshLoader implements MeshLoader, JsonAssetLoader {
     @Override
     public Metadata metadata() {
         return metadata;
+    }
+
+    @Override
+    public @Nullable ClothPhysicsData clothPhysics() {
+        return clothPhysics;
     }
 
     @Override
@@ -153,6 +170,7 @@ public final class JsonMeshLoader implements MeshLoader, JsonAssetLoader {
             }
 
             skeletalMeshBuilder.metadata(metadata);
+            skeletalMeshBuilder.clothPhysics(clothPhysics);
 
             return meshConstructor.construct(skeletalMeshBuilder);
         } catch (Exception e) {

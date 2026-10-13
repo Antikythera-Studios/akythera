@@ -2,7 +2,7 @@ package com.yesman.akythera.api.animation.notify;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
-import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.math.TimeWindow;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
@@ -16,7 +16,7 @@ import java.util.function.Function;
 /// Ensures [#onEnd] to be called no matter the notify ends
 ///
 /// Inspired by Unreal Engine 5 [Notify State](https://dev.epicgames.com/documentation/en-us/unreal-engine/animation-notifies-in-unreal-engine#notifystate)
-public abstract class AnimationNotifyState<T extends EntityPatch<?>> {
+public abstract class AnimationNotifyState<T extends ComponentAttachable> {
     public static final Codec<AnimationNotifyState<?>> CODEC = AkytheraRegistries.Frozen.ANIM_NOTIFY_STATE_TYPES
         .byNameCodec()
         .dispatch(AnimationNotifyState::mapCodec, Function.identity());
@@ -29,37 +29,37 @@ public abstract class AnimationNotifyState<T extends EntityPatch<?>> {
 
     /// Checks elapsed times and activate notify in condition
     @ApiStatus.Internal @SuppressWarnings("unchecked")
-    public final void tryActivate(PlayableAnimation owner, final EntityPatch<?> entityPatch, TimeWindow timeWindow, float prevElapsedTime, float currentElapsedTime) {
-        if (!logicalSide.isEntityOnValidSide(entityPatch.getOriginal())) {
+    public final void tryActivate(PlayableAnimation animation, final ComponentAttachable owner, TimeWindow timeWindow, float prevElapsedTime, float currentElapsedTime) {
+        if (!logicalSide.accepts(owner.logicalSide())) {
             return;
         }
 
         try {
-            T casted = (T)entityPatch;
+            T casted = (T)owner;
 
             if (prevElapsedTime < timeWindow.from() && timeWindow.from() <= currentElapsedTime) {
-                this.onBegin(casted, owner);
+                this.onBegin(casted, animation);
             }
 
             if (timeWindow.from() < currentElapsedTime && prevElapsedTime <= timeWindow.to()) {
-                this.onTick(casted, owner, prevElapsedTime, currentElapsedTime);
+                this.onTick(casted, animation, prevElapsedTime, currentElapsedTime);
             }
 
             if (prevElapsedTime < timeWindow.to() && timeWindow.to() <= currentElapsedTime) {
-                this.onEnd(casted, owner);
+                this.onEnd(casted, animation);
             }
         } catch(ClassCastException _) {
         }
     }
 
     /// Called when notify triggered at first. Note that [#onTick] is triggered in the same tick
-    public abstract void onBegin(T entityPatch, PlayableAnimation owner);
+    public abstract void onBegin(T owner, PlayableAnimation animation);
 
     /// Called in each tick when notify is in time window
-    public abstract void onTick(T entityPatch, PlayableAnimation owner, float prevElapsedTime, float currentElapsedTime);
+    public abstract void onTick(T owner, PlayableAnimation animation, float prevElapsedTime, float currentElapsedTime);
 
     /// Called when the playback time gets through the last time window. Note that [#onTick] is triggered in the same tick
-    public abstract void onEnd(T entityPatch, PlayableAnimation owner);
+    public abstract void onEnd(T owner, PlayableAnimation animation);
 
     public final LogicalSide logicalSide() {
         return logicalSide;

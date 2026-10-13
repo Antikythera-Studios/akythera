@@ -1,11 +1,10 @@
 package com.yesman.akythera.core.animation.playable;
 
 import com.yesman.akythera.api.asset.AssetAccessor;
-import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.animation.driver.AnimationDriver;
 import com.yesman.akythera.core.animation.keyframe.AnimationClip;
 import com.yesman.akythera.core.animation.keyframe.Pose;
-import net.minecraft.world.entity.Entity;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -47,7 +46,7 @@ public final class BlendSpace1D implements PlayableAnimation {
     }
 
     @Override
-    public void tick(EntityPatch<Entity> owner, float prevElapsedTime, float currentElapsedTime) {
+    public void tick(ComponentAttachable owner, float prevElapsedTime, float currentElapsedTime) {
     }
 
     /// Instantiated version of [BlendSpace2D]. To keep the design intention of [PlayableAnimation] and [AnimationDriver]

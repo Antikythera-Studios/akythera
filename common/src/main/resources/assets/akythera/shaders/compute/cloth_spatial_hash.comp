@@ -1,0 +1,231 @@
+// No `#version` line: the backend prepends its own preamble, along with the `AKYTHERA_GL` or
+// `AKYTHERA_VULKAN` define that selects the uniform declarations below.
+
+layout(local_size_x = 128) in;
+
+const uint STAGE_KEYS = 0u;
+const uint STAGE_SORT = 1u;
+const uint STAGE_CLEAR_CELLS = 2u;
+const uint STAGE_BUILD_CELLS = 3u;
+const uint STAGE_NEIGHBORS = 4u;
+
+const uint MAX_NEIGHBORS = 16u;
+const uint EMPTY = 0xFFFFFFFFu;
+
+struct Particle {
+    vec4 rest;
+    int bone_from;
+    int bone_to;
+    float weight;
+    int tether_anchor;
+    float tether_length;
+    uint adjacency_start;
+    uint adjacency_count;
+    int root;
+};
+
+struct ParticleState {
+    vec4 position;
+    vec4 previous;
+    vec4 target;
+    vec4 previous_target;
+    vec4 delta;
+    vec4 axis_x;            // x column of the turn from the animated surface to the simulated one
+    vec4 axis_y;            // y column of it; z is their cross product
+};
+
+struct Key {
+    uint cell;
+    uint index;
+};
+
+struct Cell {
+    uint start;
+    uint end;
+};
+
+layout(std430, binding = 0) readonly buffer ParamsBuffer {
+    mat4 armature_to_simulation;
+    mat4 frame_correction;
+    vec4 gravity;
+    vec4 solver;
+    vec4 limits;
+    vec4 hashing;
+    uint particle_count;
+    uint collider_count;
+    uint substep_count;
+    uint reset;
+    uint key_count;
+    uint table_size;
+    uint offset_count;
+    uint params_pad1;
+};
+
+layout(std430, binding = 1) readonly buffer ParticleBuffer {
+    Particle particles[];
+};
+
+layout(std430, binding = 2) readonly buffer StateBuffer {
+    ParticleState states[];
+};
+
+layout(std430, binding = 3) buffer KeyBuffer {
+    Key keys[];
+};
+
+layout(std430, binding = 4) buffer CellBuffer {
+    Cell cells[];
+};
+
+layout(std430, binding = 5) buffer NeighborBuffer {
+    uint neighbors[];
+};
+
+#ifdef AKYTHERA_VULKAN
+layout(push_constant, std430) uniform Uniforms {
+    uint stage;
+    uint sort_k;
+    uint sort_j;
+    uint uniforms_pad;
+};
+#else
+uniform uint stage;
+uniform uint sort_k;
+uniform uint sort_j;
+#endif
+
+ivec3 cellOf(vec3 x) {
+    return ivec3(floor(x / hashing.x));
+}
+
+uint hashCell(ivec3 cell) {
+    uint h = (uint(cell.x) * 92837111u) ^ (uint(cell.y) * 689287499u) ^ (uint(cell.z) * 283923481u);
+    return h & (table_size - 1u);
+}
+
+void writeKey(uint i) {
+    if (i >= key_count) {
+        return;
+    }
+
+    keys[i] = i < particle_count ? Key(hashCell(cellOf(states[i].position.xyz)), i) : Key(EMPTY, EMPTY);
+}
+
+void sortStep(uint i) {
+    if (i >= key_count) {
+        return;
+    }
+
+    uint partner = i ^ sort_j;
+
+    if (partner <= i) {
+        return;
+    }
+
+    Key own = keys[i];
+    Key other = keys[partner];
+    bool ascending = (i & sort_k) == 0u;
+
+    if (ascending ? own.cell > other.cell : own.cell < other.cell) {
+        keys[i] = other;
+        keys[partner] = own;
+    }
+}
+
+void clearCell(uint i) {
+    if (i < table_size) {
+        cells[i] = Cell(EMPTY, 0u);
+    }
+}
+
+void buildCell(uint i) {
+    if (i >= particle_count) {
+        return;
+    }
+
+    uint cell = keys[i].cell;
+
+    if (i == 0u || keys[i - 1u].cell != cell) {
+        cells[cell].start = i;
+    }
+
+    if (i + 1u == particle_count || keys[i + 1u].cell != cell) {
+        cells[cell].end = i + 1u;
+    }
+}
+
+void gatherNeighbors(uint i) {
+    if (i >= particle_count) {
+        return;
+    }
+
+    uint base = i * (MAX_NEIGHBORS + 1u);
+
+    if (particles[i].rest.w == 0.0) {
+        neighbors[base] = 0u;
+        return;
+    }
+
+    vec3 x = states[i].position.xyz;
+    vec3 rest = particles[i].rest.xyz;
+    ivec3 center = cellOf(x);
+    uint count = 0u;
+
+    for (int dz = -1; dz <= 1; ++dz) {
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                Cell cell = cells[hashCell(center + ivec3(dx, dy, dz))];
+
+                if (cell.start == EMPTY) {
+                    continue;
+                }
+
+                for (uint s = cell.start; s < cell.end && count < MAX_NEIGHBORS; ++s) {
+                    uint j = keys[s].index;
+
+                    if (j == i || distance(x, states[j].position.xyz) >= hashing.y) {
+                        continue;
+                    }
+
+                    // Particles that already touch at rest are held apart by the distance constraints
+                    if (distance(rest, particles[j].rest.xyz) < limits.w) {
+                        continue;
+                    }
+
+                    // Two neighboring cells may hash alike and list one particle twice
+                    bool listed = false;
+
+                    for (uint n = 0u; n < count; ++n) {
+                        if (neighbors[base + 1u + n] == j) {
+                            listed = true;
+                            break;
+                        }
+                    }
+
+                    if (!listed) {
+                        neighbors[base + 1u + count] = j;
+                        count++;
+                    }
+                }
+            }
+        }
+    }
+
+    neighbors[base] = count;
+}
+
+void main() {
+    uint id = gl_GlobalInvocationID.x;
+
+    if (stage == STAGE_KEYS) {
+        writeKey(id);
+    } else if (stage == STAGE_SORT) {
+        sortStep(id);
+    } else if (stage == STAGE_CLEAR_CELLS) {
+        clearCell(id);
+    } else if (stage == STAGE_BUILD_CELLS) {
+        buildCell(id);
+    } else if (stage == STAGE_NEIGHBORS) {
+        gatherNeighbors(id);
+    }
+}

@@ -63,7 +63,7 @@ public interface Mesh<T extends Mesh.MeshPart> extends AutoCloseable {
                     (pose, buffer) -> draw(
                         pose,
                         buffer,
-                        Mesh.DrawingFunction.NEW_ENTITY,
+                        Mesh.DrawingFunction.trianglesAsQuads(Mesh.DrawingFunction.NEW_ENTITY),
                         packedLight,
                         1.0F,
                         1.0F,
@@ -166,6 +166,21 @@ public interface Mesh<T extends Mesh.MeshPart> extends AutoCloseable {
         };
 
         void draw(VertexConsumer vertexConsumer, float posX, float posY, float posZ, float normX, float normY, float normZ, int packedLight, float r, float g, float b, float a, float u, float v, int overlay);
+
+        /// `function` writing a mesh's triangle list into a buffer of a quad render type, such as the entity render
+        /// types a submit node collector stages: every third vertex is written twice, so each triangle becomes a quad
+        /// whose second half is degenerate. It counts the vertices it writes, so take a new one for every draw.
+        static DrawingFunction trianglesAsQuads(final DrawingFunction function) {
+            int[] written = {0};
+
+            return (builder, posX, posY, posZ, normX, normY, normZ, packedLight, r, g, b, a, u, v, overlay) -> {
+                function.draw(builder, posX, posY, posZ, normX, normY, normZ, packedLight, r, g, b, a, u, v, overlay);
+
+                if (++written[0] % 3 == 0) {
+                    function.draw(builder, posX, posY, posZ, normX, normY, normZ, packedLight, r, g, b, a, u, v, overlay);
+                }
+            };
+        }
     }
 
     MeshLoader.Metadata getMetadata();

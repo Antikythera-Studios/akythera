@@ -178,7 +178,10 @@ public interface BinaryAssetLoader {
 
         ANIM_BONE_TRACK          (0x0200),
 
-        META_FPS                 (0x0300)
+        META_FPS                 (0x0300),
+
+        CLOTH_WEIGHTS            (0x0400),
+        CLOTH_OFFSET_PAIRS       (0x0401)
         ;
 
         final int typeId;

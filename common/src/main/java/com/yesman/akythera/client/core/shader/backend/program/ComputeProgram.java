@@ -23,14 +23,14 @@ public interface ComputeProgram extends AutoCloseable {
     @Override
     void close();
 
-    /// The program-current scope. Closing it raises the barriers the program was linked with, drops
-    /// the storage buffer bindings it took, and hands the previously bound graphics program back.
+    /// The program-current scope. Closing it drops the storage buffer bindings it took and hands the
+    /// previously bound graphics program back.
     interface Dispatch extends AutoCloseable {
         Dispatch bindStorageBuffer(int binding, GpuBuffer buffer);
 
         Dispatch bindStorageBuffer(int binding, GpuBufferSlice slice);
 
-        /// Runs `countX * countY * countZ` work groups.
+        /// Runs `countX * countY * countZ` work groups, then raises the barriers the program was linked with.
         void dispatch(int countX, int countY, int countZ);
 
         @Override

@@ -70,14 +70,16 @@ public final class NeoForgedModPlatform implements ModPlatform {
             return null;
         }
 
-        return new ModInfo(id, modFileInfo.versionString(), modFileInfo.getFile().getFilePath().toFile());
+        String displayName = ModList.get().getModContainerById(id).orElseThrow().getModInfo().getDisplayName();
+
+        return new ModInfo(id, displayName, modFileInfo.versionString(), modFileInfo.getFile().getFilePath().toFile());
     }
 
     @Override
     public Collection<ModInfo> getLoadedMods() {
         return ModList.get().getMods().stream().map(iModInfo -> {
             IModFileInfo modFileInfo = ModList.get().getModFileById(iModInfo.getModId());
-            return new ModInfo(iModInfo.getModId(), iModInfo.getVersion().getQualifier(), modFileInfo.getFile().getFilePath().toFile());
+            return new ModInfo(iModInfo.getModId(), iModInfo.getDisplayName(), iModInfo.getVersion().getQualifier(), modFileInfo.getFile().getFilePath().toFile());
         }).toList();
     }
 

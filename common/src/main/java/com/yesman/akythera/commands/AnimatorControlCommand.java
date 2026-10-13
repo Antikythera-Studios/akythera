@@ -16,7 +16,7 @@ import net.minecraft.commands.arguments.ResourceKeyArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.Entity;
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
 
 import java.util.Collection;
 
@@ -73,7 +73,7 @@ public class AnimatorControlCommand {
         );
     }
 
-    public static int playAnimation(Collection<? extends Entity> targetEntities, ResourceKey<@NotNull AnimationMontage> montageKey, String section) {
+    public static int playAnimation(Collection<? extends Entity> targetEntities, ResourceKey<@NonNull AnimationMontage> montageKey, String section) {
         int successEntityNum = 0;
 
         for (Entity entity : targetEntities) {

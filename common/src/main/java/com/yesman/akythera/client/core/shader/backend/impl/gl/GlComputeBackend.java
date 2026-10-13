@@ -56,8 +56,18 @@ public final class GlComputeBackend implements ComputeBackend {
     }
 
     @Override
+    public GpuBuffer createIndexStorageBuffer(final Supplier<String> label, final long size) {
+        return RenderSystem.getDevice().createBuffer(label, GpuBuffer.USAGE_INDEX, size);
+    }
+
+    @Override
     public GpuBuffer createMappedStorageBuffer(final Supplier<String> label, final long size) {
         return RenderSystem.getDevice().createBuffer(label, GpuBuffer.USAGE_MAP_WRITE, size);
+    }
+
+    @Override
+    public GpuBuffer createComputeStorageBuffer(final Supplier<String> label, final long size) {
+        return RenderSystem.getDevice().createBuffer(label, 0, size);
     }
 
     @Override
@@ -68,6 +78,11 @@ public final class GlComputeBackend implements ComputeBackend {
     @Override
     public long maxStorageBlockSize() {
         return glGetInteger64(ARBShaderStorageBufferObject.GL_MAX_SHADER_STORAGE_BLOCK_SIZE);
+    }
+
+    @Override
+    public int maxComputeStorageBlocks() {
+        return glGetInteger(ARBShaderStorageBufferObject.GL_MAX_COMPUTE_SHADER_STORAGE_BLOCKS);
     }
 
     private static int toGlBits(final BarrierFlags... barriers) {

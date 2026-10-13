@@ -38,7 +38,7 @@ public final class StaticRegistryAccess {
     /// a world that player joined.
     public static @NonNull RegistryAccess getRegistryAccess() throws IllegalStateException {
         if (registryAccess == null) {
-            throw new IllegalStateException("Tried to build ItemPatch before any registry access loaded. You must join a world.");
+            throw new IllegalStateException("Tried to access registries before loaded. You must join a world.");
         }
 
         return registryAccess;

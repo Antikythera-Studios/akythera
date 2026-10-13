@@ -3,6 +3,7 @@ package com.yesman.akythera.api.animation.notify.impl;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.animation.notify.AnimationNotify;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.util.LogicalSide;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
@@ -10,8 +11,8 @@ import net.minecraft.core.Holder;
 import net.minecraft.sounds.SoundEvent;
 import org.jspecify.annotations.NonNull;
 
-/// A simple [AnimationNotify] implementation that plays a sound in a client
-public final class PlaySoundNotify extends AnimationNotify<EntityPatch<?>> {
+/// A simple [AnimationNotify] implementation that plays a sound at an entity in a client
+public final class PlaySoundNotify extends AnimationNotify<ComponentAttachable> {
     public static final MapCodec<PlaySoundNotify> CODEC =
         RecordCodecBuilder.mapCodec(inst ->
             inst.group(
@@ -30,8 +31,10 @@ public final class PlaySoundNotify extends AnimationNotify<EntityPatch<?>> {
     }
 
     @Override
-    public void onNotified(EntityPatch<?> entityPatch, PlayableAnimation owner, float prevElapsedTime, float currentElapsedTime) {
-        entityPatch.getOriginal().playSound(soundEvent.value());
+    public void onNotified(ComponentAttachable owner, PlayableAnimation animation, float prevElapsedTime, float currentElapsedTime) {
+        if (owner instanceof EntityPatch<?> entityPatch) {
+            entityPatch.getOriginal().playSound(soundEvent.value());
+        }
     }
 
     public Holder<@NonNull SoundEvent> soundEvent() {

@@ -1,8 +1,7 @@
 package com.yesman.akythera.core.animation.driver;
 
-import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.animation.keyframe.Pose;
-import net.minecraft.world.entity.Entity;
 
 /// Transit from a [AnimationDriver] to another [AnimationDriver]
 ///
@@ -32,7 +31,7 @@ public final class DriverToDriverTransfer extends DriverTransfer {
     }
 
     /// Drives the notify track of the animation this transfer is blending out of.
-    public void tickFrom(final EntityPatch<Entity> owner) {
+    public void tickFrom(final ComponentAttachable owner) {
         from.tick(owner);
     }
 }

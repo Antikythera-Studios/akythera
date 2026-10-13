@@ -1,18 +1,19 @@
 package com.yesman.akythera.api.animation.animator;
 
-import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.animation.driver.AnimationDriver;
 import com.yesman.akythera.core.animation.driver.AnimationMontagePlayer;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.reflection.ScriptFunction;
+import com.yesman.akythera.core.reflection.ScriptType;
 import com.yesman.akythera.core.util.helper.PoseOperators;
-import net.minecraft.world.entity.Entity;
 
 /// Each animation layer has independent playing sequence and
 /// total pose in determined by blending each layer in [Animator]
 ///
 /// Specifically used on combining lower & upper body poses for
 /// aiming, blocking shields, etc.
+@ScriptType
 public final class AnimationLayer {
     private final AnimationDriver animDriver;
     private final AnimationMontagePlayer montagePlayer = new AnimationMontagePlayer();
@@ -33,7 +34,7 @@ public final class AnimationLayer {
         return new AnimationLayer(animDriver);
     }
 
-    public void tick(final EntityPatch<Entity> owner) {
+    public void tick(final ComponentAttachable owner) {
         animDriver.tick(owner);
         montagePlayer.tick(owner);
     }

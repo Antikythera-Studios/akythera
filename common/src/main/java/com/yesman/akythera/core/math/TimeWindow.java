@@ -2,7 +2,7 @@ package com.yesman.akythera.core.math;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
 
 import java.util.List;
 
@@ -45,7 +45,7 @@ public final class TimeWindow implements Comparable<TimeWindow> {
 
     /// Compare by `from`, since `to` is ignorable in ordering
     @Override
-    public int compareTo(final @NotNull TimeWindow o) {
+    public int compareTo(final @NonNull TimeWindow o) {
         return Float.compare(from, o.from);
     }
 

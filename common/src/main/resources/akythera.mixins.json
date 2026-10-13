@@ -7,20 +7,25 @@
     "client.MixinClientCommonPacketListenerImpl",
     "client.MixinClientConfigurationPacketListenerImpl",
     "client.MixinClientLevel",
+    "client.MixinEntityRenderDispatcher",
     "client.MixinGpuDevice",
     "client.MixinGuiGraphicsExtractor",
+    "client.MixinHud",
     "client.MixinKeyMapping",
     "client.MixinLevelExtractor",
     "client.MixinLivingEntityRenderer",
     "client.MixinLivingEntityRenderState",
     "client.MixinMinecraft",
+    "client.MixinParticle",
+    "client.MixinParticleEngine",
     "client.MixinPreparedFrame",
     "client.MixinRenderSystem"
   ],
   "mixins": [
     "common.MixinEntity",
     "common.MixinMinecraftServer",
-    "common.MixinPersistentEntitySectionManager"
+    "common.MixinPersistentEntitySectionManager",
+    "common.MixinRegistryLoadTask"
   ],
   "injectors": {
     "defaultRequire": 1

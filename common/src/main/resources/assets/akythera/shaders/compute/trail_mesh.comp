@@ -1,0 +1,120 @@
+// No `#version` line: the backend prepends its own preamble, along with the `AKYTHERA_GL` or
+// `AKYTHERA_VULKAN` define.
+//
+// Builds every queued trail's quads from its control edges. One work group row per trail
+// (`gl_WorkGroupID.y`), one invocation per quad. A trail's visible range, from `tail` to its last
+// control edge, is cut into `quadCount` equal steps along a Catmull-Rom curve through the edges,
+// drawn as cubic Bezier segments.
+
+layout(local_size_x = 64) in;
+
+struct Header {
+    uint controlOffset;
+    uint controlCount;
+    uint vertexOffset;
+    uint quadCount;
+    uint color;    // RGBA, red in the low byte
+    uint light;    // packed light coordinates
+    float tail;    // where the visible range starts, in segments from the first control edge
+    uint pad;
+};
+
+// One edge across the trail, camera-relative: the origin side and the far side.
+struct Control {
+    float sx, sy, sz;
+    float ex, ey, ez;
+};
+
+// DefaultVertexFormat.PARTICLE, 28 bytes: Position(3×float) UV0(2×float) Color(4×ubyte) UV2(2×short).
+struct VertexAttr {
+    float px, py, pz;
+    float u0, v0;
+    uint color;
+    uint uv2;
+};
+
+layout(std430, binding = 0) readonly buffer HeaderBuffer {
+    Header headers[];
+};
+
+layout(std430, binding = 1) readonly buffer ControlBuffer {
+    Control controls[];
+};
+
+layout(std430, binding = 2) writeonly buffer VertexOut {
+    VertexAttr out_vert[];
+};
+
+vec3 bezier(vec3 p0, vec3 p1, vec3 p2, vec3 p3, float t) {
+    vec3 b1 = p1 + (p2 - p0) / 6.0;
+    vec3 b2 = p2 - (p3 - p1) / 6.0;
+    float s = 1.0 - t;
+
+    return s * s * s * p1 + 3.0 * s * s * t * b1 + 3.0 * s * t * t * b2 + t * t * t * p2;
+}
+
+vec3 controlStart(uint index) {
+    return vec3(controls[index].sx, controls[index].sy, controls[index].sz);
+}
+
+vec3 controlEnd(uint index) {
+    return vec3(controls[index].ex, controls[index].ey, controls[index].ez);
+}
+
+// The edge at `along`, in segments from the first control edge. The curve's ends are extended by
+// mirroring the next edge in.
+void edgeAt(Header h, float along, out vec3 start, out vec3 end) {
+    uint last = h.controlCount - 1u;
+    uint segment = min(uint(floor(along)), last - 1u);
+    float t = clamp(along - float(segment), 0.0, 1.0);
+    uint i1 = h.controlOffset + segment;
+    uint i2 = i1 + 1u;
+
+    vec3 s1 = controlStart(i1);
+    vec3 s2 = controlStart(i2);
+    vec3 e1 = controlEnd(i1);
+    vec3 e2 = controlEnd(i2);
+    vec3 s0 = segment > 0u ? controlStart(i1 - 1u) : 2.0 * s1 - s2;
+    vec3 e0 = segment > 0u ? controlEnd(i1 - 1u) : 2.0 * e1 - e2;
+    vec3 s3 = segment + 2u <= last ? controlStart(i2 + 1u) : 2.0 * s2 - s1;
+    vec3 e3 = segment + 2u <= last ? controlEnd(i2 + 1u) : 2.0 * e2 - e1;
+
+    start = bezier(s0, s1, s2, s3, t);
+    end = bezier(e0, e1, e2, e3, t);
+}
+
+void writeVertex(uint index, vec3 position, float u, float v, vec4 color, uint light) {
+    out_vert[index].px = position.x;
+    out_vert[index].py = position.y;
+    out_vert[index].pz = position.z;
+    out_vert[index].u0 = u;
+    out_vert[index].v0 = v;
+    out_vert[index].color = packUnorm4x8(color);
+    out_vert[index].uv2 = light;
+}
+
+void main() {
+    Header h = headers[gl_WorkGroupID.y];
+    uint quad = gl_GlobalInvocationID.x;
+
+    if (quad >= h.quadCount) return;
+
+    float span = float(h.controlCount - 1u) - h.tail;
+    float u0 = float(quad) / float(h.quadCount);
+    float u1 = float(quad + 1u) / float(h.quadCount);
+    vec3 start0, end0, start1, end1;
+
+    edgeAt(h, h.tail + span * u0, start0, end0);
+    edgeAt(h, h.tail + span * u1, start1, end1);
+
+    // The tail fades in: alpha grows from 0 at the oldest end to the trail's own at the newest
+    vec4 color = unpackUnorm4x8(h.color);
+    vec4 color0 = vec4(color.rgb, color.a * u0);
+    vec4 color1 = vec4(color.rgb, color.a * u1);
+    uint base = h.vertexOffset + quad * 4u;
+
+    writeVertex(base, start0, u0, 1.0, color0, h.light);
+    writeVertex(base + 1u, end0, u0, 0.0, color0, h.light);
+    writeVertex(base + 2u, end1, u1, 0.0, color1, h.light);
+    writeVertex(base + 3u, start1, u1, 1.0, color1, h.light);
+}

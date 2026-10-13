@@ -32,7 +32,16 @@ public record CallbackAdapterNode(FlowNode child, String canvas) implements Pure
     @Override
     public <T> T execute(final DataDrivenScript<?, ?> script, final ExecutionContext context) {
         ScriptVariables callbackLocals = context.callbackLocals();
+        ScriptCaller caller = context.caller().at(canvas);
 
-        return (T) (Runnable) () -> child.execute(script, new ExecutionContext(callbackLocals));
+        return (T) (Runnable) () -> {
+            ExecutionContext callback = ScriptRecorder.newContext(caller, callbackLocals);
+
+            try {
+                child.execute(script, callback);
+            } catch (Throwable throwable) {
+                ScriptRecorder.recordFailure(callback, throwable);
+            }
+        };
     }
 }

@@ -112,6 +112,6 @@ public interface AssetAccessor<T> extends Supplier<T> {
     }
 
     enum Type {
-        STATIC_MESH, SKELETAL_MESH, ARMATURE, ANIMATION
+        STATIC_MESH, SKELETAL_MESH, ARMATURE, ANIMATION, ARMATURE_PHYSICS
     }
 }

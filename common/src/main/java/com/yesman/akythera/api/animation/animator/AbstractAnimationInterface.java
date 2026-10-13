@@ -1,6 +1,6 @@
 package com.yesman.akythera.api.animation.animator;
 
-import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.animation.animator.BlendingAnimator;
 import com.yesman.akythera.core.animation.driver.AnimationDriver;
@@ -9,7 +9,6 @@ import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.blueprint.script.AnimatorScript;
 import com.yesman.akythera.core.util.helper.PoseOperators;
 import net.minecraft.core.Holder;
-import net.minecraft.world.entity.Entity;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -103,7 +102,7 @@ public abstract class AbstractAnimationInterface implements AnimationDriver {
     /// Drives the notify tracks of whatever this interface is playing, the outgoing animation included
     /// while it still has weight.
     @Override
-    public final void tick(final EntityPatch<Entity> owner) {
+    public final void tick(final ComponentAttachable owner) {
         if (animDriverO != null) {
             animDriverO.tick(owner);
         }

@@ -4,8 +4,8 @@ import com.yesman.akythera.client.compat.IClientModPlugin;
 import com.yesman.akythera.client.compat.playeranimlibrary.PlayerAnimationLibraryPlugin;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.platform.ModPlatformProvider;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
 
@@ -17,12 +17,12 @@ public enum CompatibleMod {
     PLAYER_ANIMATION_LIBRARY("player_animation_library", null, PlayerAnimationLibraryPlugin.class),
     ;
 
-    private final @NotNull String modId;
+    private final @NonNull String modId;
     private final @Nullable Class<? extends IModPlugin> compatibilityModule;
     private final @Nullable Class<? extends IClientModPlugin> clientCompatibilityModule;
 
     CompatibleMod(
-        @NotNull String modId,
+        @NonNull String modId,
         @Nullable Class<? extends IModPlugin> compatibilityModule,
         @Nullable Class<? extends IClientModPlugin> clientCompatibilityModule
     ) {
@@ -35,7 +35,7 @@ public enum CompatibleMod {
         }
     }
 
-    public @NotNull String getModId() {
+    public @NonNull String getModId() {
         return modId;
     }
 
@@ -71,7 +71,7 @@ public enum CompatibleMod {
     /// Integer minor = mod.getVersionComponent(VersionComponent.MINOR); // 4
     /// Integer patch = mod.getVersionComponent(VersionComponent.PATCH); // 11
     ///```
-    public @Nullable Integer getVersionComponent(@NotNull VersionComponent component) {
+    public @Nullable Integer getVersionComponent(@NonNull VersionComponent component) {
         final String version = versionString();
 
         try {

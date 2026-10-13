@@ -1,0 +1,101 @@
+// No `#version` line: the backend prepends its own preamble.
+
+layout(local_size_x = 128) in;
+
+struct Particle {
+    vec4 rest;              // xyz armature-space rest position, w inverse mass
+    int bone_from;
+    int bone_to;
+    float weight;
+    int tether_anchor;
+    float tether_length;
+    uint adjacency_start;
+    uint adjacency_count;
+    int root;               // particle an offset particle rides, -1 for a particle
+};
+
+struct ParticleState {
+    vec4 position;
+    vec4 previous;
+    vec4 target;
+    vec4 previous_target;
+    vec4 delta;
+    vec4 axis_x;            // x column of the turn from the animated surface to the simulated one
+    vec4 axis_y;            // y column of it; z is their cross product
+};
+
+struct BoneWeight {
+    int boneId;
+    float weight;
+};
+
+layout(std430, binding = 0) readonly buffer ParamsBuffer {
+    mat4 armature_to_simulation;
+    mat4 frame_correction;
+    vec4 gravity;           // xyz acceleration, w substep seconds
+    vec4 solver;            // stretch compliance, bend compliance, damping, friction
+    vec4 limits;            // max distance, tether scale, collision thickness, self-collision thickness
+    vec4 hashing;           // cell size, neighbor distance
+    uint particle_count;
+    uint collider_count;
+    uint substep_count;
+    uint reset;
+    uint key_count;
+    uint table_size;
+    uint offset_count;
+    uint params_pad1;
+};
+
+layout(std430, binding = 1) readonly buffer PoseBuffer {
+    mat4 poses[];
+};
+
+layout(std430, binding = 2) readonly buffer BoneWeightPool {
+    BoneWeight boneWeights[];
+};
+
+layout(std430, binding = 3) readonly buffer ParticleBuffer {
+    Particle particles[];
+};
+
+layout(std430, binding = 4) buffer StateBuffer {
+    ParticleState states[];
+};
+
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+
+    if (i >= particle_count + offset_count) {
+        return;
+    }
+
+    Particle particle = particles[i];
+    vec4 rest = vec4(particle.rest.xyz, 1.0);
+    vec4 animated = vec4(0.0);
+
+    for (int b = particle.bone_from; b < particle.bone_to; ++b) {
+        BoneWeight bone = boneWeights[b];
+
+        if (bone.weight > 0.0) {
+            animated += (poses[bone.boneId] * rest) * bone.weight;
+        }
+    }
+
+    vec4 target = vec4((armature_to_simulation * vec4(animated.xyz, 1.0)).xyz, 1.0);
+
+    if (reset != 0u) {
+        states[i].position = target;
+        states[i].previous = target;
+        states[i].target = target;
+        states[i].previous_target = target;
+        states[i].delta = vec4(0.0);
+        states[i].axis_x = vec4(1.0, 0.0, 0.0, 0.0);
+        states[i].axis_y = vec4(0.0, 1.0, 0.0, 0.0);
+        return;
+    }
+
+    states[i].previous_target = states[i].target;
+    states[i].target = target;
+    states[i].position = vec4((frame_correction * vec4(states[i].position.xyz, 1.0)).xyz, 1.0);
+    states[i].previous = vec4((frame_correction * vec4(states[i].previous.xyz, 1.0)).xyz, 1.0);
+}

@@ -2,53 +2,34 @@ package com.yesman.akythera.core.blueprint;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
-import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.data.modularize.ScriptFunction;
-import com.yesman.akythera.api.data.modularize.node.FlowNode;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
-import com.yesman.akythera.core.blueprint.script.DataDrivenEntityPatchScript;
-import com.yesman.akythera.core.blueprint.script.ScriptVariables;
-import com.yesman.akythera.core.registry.AkytheraRegistries;
-import com.yesman.akythera.core.util.StaticRegistryAccess;
-import net.minecraft.core.Holder;
-import net.minecraft.core.Registry;
+import com.yesman.akythera.core.blueprint.script.EntityPatchScript;
 import net.minecraft.world.entity.Entity;
 
-import java.util.List;
-import java.util.Map;
-
-public record EntityPatchBlueprint(
-    Map<String, ComponentBlueprint<?, ?>> components,
-    ScriptFunction ctor,
-    FlowNode onConstruct,
-    FlowNode onJoinWorld,
-    FlowNode update,
-    List<ScriptVariables.VariableInfo> variables
-) implements Blueprint<DataDrivenEntityPatchScript, EntityPatch<Entity>>
+/// How an entity patch is built: the [EntityPatch] subclass to construct, and the [EntityPatchScript]
+/// it runs. Dispatched on `type`.
+public sealed interface EntityPatchBlueprint extends Blueprint<EntityPatchScript, EntityPatch<Entity>>
+    permits DataDrivenEntityPatchBlueprint, SourceCodeEntityPatchBlueprint
 {
-    public static final MapCodec<EntityPatchBlueprint> MAP_CODEC = RecordCodecBuilder.mapCodec(
-        instance ->
-            instance.group(
-                ComponentBlueprint.componentMapCodec(() -> AkytheraRegistries.Frozen.ENTITY_PATCH_COMPONENT_TYPES)
-                    .fieldOf("components").forGetter(EntityPatchBlueprint::components),
-                AkytheraRegistries.Frozen.SCRIPT_FUNCTION.byNameCodec().fieldOf("parent").forGetter(EntityPatchBlueprint::ctor),
-                FlowNode.CODEC.fieldOf("on_construct").forGetter(EntityPatchBlueprint::onConstruct),
-                FlowNode.CODEC.fieldOf("on_join_world").forGetter(EntityPatchBlueprint::onJoinWorld),
-                FlowNode.CODEC.fieldOf("update").forGetter(EntityPatchBlueprint::update),
-                ScriptVariables.VariableInfo.CODEC.listOf().fieldOf("variables").forGetter(EntityPatchBlueprint::variables)
-            ).apply(instance, EntityPatchBlueprint::new)
+    Codec<EntityPatchBlueprint> CODEC = Codec.STRING.dispatch(
+        "type",
+        blueprint ->
+            switch (blueprint) {
+                case DataDrivenEntityPatchBlueprint _ -> "data_driven";
+                case SourceCodeEntityPatchBlueprint _ -> "source_code_script";
+            },
+        literal ->
+            switch (literal) {
+                case "data_driven" -> DataDrivenEntityPatchBlueprint.MAP_CODEC;
+                case "source_code_script" -> SourceCodeEntityPatchBlueprint.MAP_CODEC;
+                default -> throw new IllegalArgumentException("Unsupported entity patch blueprint type " + literal);
+            }
     );
 
-    public static final Codec<EntityPatchBlueprint> CODEC = MAP_CODEC.codec();
+    /// The [ScriptFunction.Usage#ENTITY_PATCH_CTOR] function the patch is built with.
+    ScriptFunction ctor();
 
     @Override
-    public DataDrivenEntityPatchScript instantiate(final EntityPatch<Entity> blueprintOwner) {
-        Registry<EntityPatchBlueprint> registry = StaticRegistryAccess.getRegistryAccess().lookupOrThrow(AkytheraRegistries.DataPack.ENTITY_PATCH_KEY);
-        return new DataDrivenEntityPatchScript((Holder.Reference<EntityPatchBlueprint>)registry.wrapAsHolder(this), blueprintOwner);
-    }
-
-    @Override
-    public MapCodec<EntityPatchBlueprint> mapCodec() {
-        return MAP_CODEC;
-    }
+    MapCodec<? extends EntityPatchBlueprint> mapCodec();
 }

@@ -2,6 +2,7 @@ package com.yesman.akythera.core;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.yesman.akythera.api.animation.animator.AnimationInterfaceKey;
+import com.yesman.akythera.api.animation.animator.Animator;
 import com.yesman.akythera.api.world.patch.item.WeaponStance;
 import com.yesman.akythera.api.asset.animation.AnimationManager;
 import com.yesman.akythera.api.asset.armature.ArmatureManager;
@@ -10,17 +11,21 @@ import com.yesman.akythera.api.data.modularize.AkytheraScriptTypes;
 import com.yesman.akythera.api.lifecycle.ComponentsFactory;
 import com.yesman.akythera.api.lifecycle.ServerComponentsFactory;
 import com.yesman.akythera.api.world.patch.AkytheraPatches;
+import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.api.world.ability.Ability;
+import com.yesman.akythera.api.world.ability.AbilityCue;
+import com.yesman.akythera.api.world.ability.AbilityCueScript;
 import com.yesman.akythera.core.blueprint.AbilityBlueprint;
-import com.yesman.akythera.core.blueprint.AbilityCueBlueprint;
 import com.yesman.akythera.client.api.lifecycle.ClientComponentsFactory;
-import com.yesman.akythera.api.world.ability.AbilityCues;
-import com.yesman.akythera.api.world.ability.AbilityDebugScaffolding;
 import com.yesman.akythera.api.world.ability.AbilityResources;
+import com.yesman.akythera.api.world.ability.AbilitySystemComponent;
 import com.yesman.akythera.api.world.ability.AbilitySlot;
 import com.yesman.akythera.api.world.ability.AbilitySlotGroup;
 import com.yesman.akythera.api.world.ability.AbilityTag;
 import com.yesman.akythera.commands.AbilityControlCommand;
 import com.yesman.akythera.commands.AnimatorControlCommand;
+import com.yesman.akythera.commands.ParticleControlCommand;
+import com.yesman.akythera.commands.WidgetControlCommand;
 import com.yesman.akythera.compat.IModPlugin;
 import com.yesman.akythera.compat.CompatibleMod;
 import com.yesman.akythera.core.animation.AnimationLayerSignature;
@@ -28,11 +33,15 @@ import com.yesman.akythera.core.animation.FSMAnimationState;
 import com.yesman.akythera.api.animation.impl.AkytheraAnimationLayerSignature;
 import com.yesman.akythera.api.animation.impl.AkytheraAnimationState;
 import com.yesman.akythera.core.blueprint.AkytheraComponentBlueprints;
+import com.yesman.akythera.core.blueprint.script.AnimatorScript;
+import com.yesman.akythera.core.blueprint.script.EntityPatchScript;
 import com.yesman.akythera.core.math.physics.collider.AkytheraColliderType;
 import com.yesman.akythera.core.math.physics.collider.ColliderType;
 import com.yesman.akythera.core.math.physics.collider.CollisionDetectionLogics;
+import com.yesman.akythera.core.reflection.ScriptModularizeHelper;
 import com.yesman.akythera.core.registry.entry.AkytheraAnimNotifyStateTypes;
 import com.yesman.akythera.core.registry.entry.AkytheraAnimNotifyTypes;
+import com.yesman.akythera.core.registry.entry.AkytheraParticleTypes;
 import com.yesman.akythera.core.util.EnumerableDataBlockSync;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
 import com.yesman.akythera.platform.ModPlatform;
@@ -45,6 +54,7 @@ import org.apache.logging.log4j.Logger;
 import org.jspecify.annotations.NonNull;
 
 import java.lang.reflect.InvocationTargetException;
+import java.text.MessageFormat;
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -65,6 +75,20 @@ public final class Akythera {
         return Identifier.fromNamespaceAndPath(MODID, path);
     }
 
+    /// Prefix the plain path text by `Akythera` namespace
+    public static @NonNull String prefix(@NonNull final String path) {
+        return MessageFormat.format("{0}:{1}", MODID, path);
+    }
+
+    /// Accepts an error message and branch process depending on dev/prod side
+    public static void crashInDevOrWarnInProd(final String errorMessage) {
+        if (ModPlatformProvider.get().isDevelopmentEnvironment()) {
+            throw new IllegalStateException(errorMessage);
+        } else {
+            LOGGER.warn(errorMessage);
+        }
+    }
+
     /// Called on each mod loader's mod entry point class's constructor
     public static void onModConstructed() {
         ComponentsFactory.initialize(ModPlatformProvider.get().getPhysicalSide().isClient() ? new ClientComponentsFactory() : new ServerComponentsFactory());
@@ -78,6 +102,11 @@ public final class Akythera {
             AkytheraAnimNotifyStateTypes.REGISTRAR.notifyPresence();
             AkytheraComponentBlueprints.ENTITY_PATCH_REGISTRAR.notifyPresence();
             AkytheraComponentBlueprints.ITEM_PATCH_REGISTRAR.notifyPresence();
+            AkytheraComponentBlueprints.WIDGET_REGISTRAR.notifyPresence();
+            AkytheraParticleTypes.REGISTRAR.notifyPresence();
+            AkytheraParticleTypes.SPAWN_RULE_REGISTRAR.notifyPresence();
+            AkytheraParticleTypes.INITIALIZER_REGISTRAR.notifyPresence();
+            AkytheraParticleTypes.UPDATER_REGISTRAR.notifyPresence();
             AkytheraScriptFunctions.AKYTHERA_REGISTRAR.notifyPresence();
             AkytheraScriptFunctions.MINECRAFT_REGISTRAR.notifyPresence();
             AkytheraScriptTypes.AKYTHERA_REGISTRAR.notifyPresence();
@@ -90,9 +119,13 @@ public final class Akythera {
         StaticRegistryAccess.registerEvents();
         AkytheraPatches.registerEvents();
         AbilityBlueprint.registerEvents();
-        AbilityCueBlueprint.registerEvents();
+        AbilitySystemComponent.registerEvents();
 
-        if (isAbilityDebugEnabled()) AbilityDebugScaffolding.registerEvents();
+        ScriptModularizeHelper.registerBlueprintLayout(EntityPatch.class, EntityPatchScript.class);
+        ScriptModularizeHelper.registerBlueprintLayout(Animator.class, AnimatorScript.class);
+        ScriptModularizeHelper.registerBlueprintLayout(Ability.class);
+        ScriptModularizeHelper.registerBlueprintLayout(AbilityCue.class, AbilityCueScript.class);
+
         EnumerableDataBlockSync.addSyncedDataBlock(AnimationInterfaceKey.ENUM_MANAGER);
         EnumerableDataBlockSync.addSyncedDataBlock(FSMAnimationState.ENUM_MANAGER);
         EnumerableDataBlockSync.addSyncedDataBlock(AnimationLayerSignature.ENUM_MANAGER);
@@ -129,15 +162,6 @@ public final class Akythera {
         AnimationLayerSignature.ENUM_MANAGER.loadEnum();
         ColliderType.ENUM_MANAGER.loadEnum();
         WeaponStance.ENUM_MANAGER.loadEnum();
-        if (isAbilityDebugEnabled()) {
-            AbilityDebugScaffolding.loadEnums();
-            AbilityDebugScaffolding.registerTestPatchProvider();
-
-            // A cue names AbilityTags, which do not exist until the enum above has loaded.
-            AbilityDebugScaffolding.registerCues();
-        }
-
-        AbilityCues.freeze();
 
         // Pair logics reference the collider type constants, so they bind after the enum loads.
         CollisionDetectionLogics.registerBuiltInLogics();
@@ -147,20 +171,6 @@ public final class Akythera {
         FSMAnimationState.ENUM_MANAGER.registerEnumCls(MODID, AkytheraAnimationState.class);
         AnimationLayerSignature.ENUM_MANAGER.registerEnumCls(MODID, AkytheraAnimationLayerSignature.class);
         ColliderType.ENUM_MANAGER.registerEnumCls(MODID, AkytheraColliderType.class);
-
-        if (isAbilityDebugEnabled()) {
-            AbilityDebugScaffolding.registerEnums();
-            AbilityDebugScaffolding.registerScriptFunctions();
-        }
-    }
-
-    /// Whether the ability system's test scaffolding runs.
-    ///
-    /// It hardcodes entity patches that outrank every data pack one, and registers slots, tags and
-    /// cues of its own, so a shipped jar must never load it.
-    public static boolean isAbilityDebugEnabled() {
-        return ModPlatformProvider.get().isDevelopmentEnvironment()
-            && Boolean.getBoolean("akythera.debug.ability");
     }
 
     /// Called on mod loader lifecycle when the mod initializes in a dedicated server
@@ -181,7 +191,8 @@ public final class Akythera {
     /// Register in-game commands
     public static void onRegisterCommands(CommandDispatcher<CommandSourceStack> dispatcher) {
         AnimatorControlCommand.register(dispatcher);
-
-        if (isAbilityDebugEnabled()) AbilityControlCommand.register(dispatcher);
+        AbilityControlCommand.register(dispatcher);
+        WidgetControlCommand.register(dispatcher);
+        ParticleControlCommand.register(dispatcher);
     }
 }

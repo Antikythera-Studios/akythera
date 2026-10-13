@@ -1,5 +1,7 @@
 package com.yesman.akythera.api.data.modularize.node;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -15,8 +17,15 @@ import java.util.List;
 public final class ExecutionRecord {
     private final List<CallStack> roots = new ArrayList<>();
 
+    /// The throw that ended the run, or null while it has not thrown.
+    private @Nullable ScriptFailure failure;
+
     public List<CallStack> roots() {
         return Collections.unmodifiableList(roots);
+    }
+
+    public @Nullable ScriptFailure failure() {
+        return failure;
     }
 
     public boolean isEmpty() {
@@ -27,6 +36,10 @@ public final class ExecutionRecord {
         roots.add(root);
     }
 
+    void setFailure(final ScriptFailure failure) {
+        this.failure = failure;
+    }
+
     /// Renders the run the way the inline debug logging used to, one `Called` / `Returned` pair per
     /// frame at a two-space indent, with the argument values each call resolved appended to its
     /// closing line.
@@ -35,6 +48,10 @@ public final class ExecutionRecord {
 
         for (CallStack root : roots) {
             append(out, root, 0);
+        }
+
+        if (failure != null) {
+            out.append("Threw ").append(failure.cause()).append(" in ").append(failure.node()).append('\n');
         }
 
         return out.toString();

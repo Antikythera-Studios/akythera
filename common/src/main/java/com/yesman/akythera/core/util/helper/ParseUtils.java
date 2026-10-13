@@ -5,17 +5,28 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonSyntaxException;
 import com.mojang.datafixers.util.Pair;
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.DataResult;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.core.Akythera;
 import it.unimi.dsi.fastutil.floats.FloatArrayList;
 import it.unimi.dsi.fastutil.floats.FloatList;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.IntList;
+import net.minecraft.core.Holder;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.sounds.SoundEvent;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
 import java.util.*;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public class ParseUtils {
     /// Convert a [JsonArray] into primitive float array
@@ -247,5 +258,82 @@ public class ParseUtils {
         return c;
     }
 
+    /// The generic type `raw<arguments>`, e.g. `parameterized(ResourceKey.class, AnimationMontage.class)` for
+    /// `ResourceKey<AnimationMontage>`. Equal to the type reflection reports for the same declaration.
+    public static ParameterizedType parameterized(final Class<?> raw, final Type... arguments) {
+        return new Parameterized(raw, List.of(arguments));
+    }
+
+    /// The class `type` erases to: itself for a class, its raw class for a parameterized type, its first
+    /// bound for a type variable.
+    ///
+    /// @throws IllegalArgumentException for a wildcard or a generic array
+    public static Class<?> erase(final Type type) {
+        return switch (type) {
+            case Class<?> c -> c;
+            case ParameterizedType p -> (Class<?>) p.getRawType();
+            case TypeVariable<?> v -> erase(v.getBounds()[0]);
+            default -> throw new IllegalArgumentException("No single class for " + type.getTypeName());
+        };
+    }
+
+    /// The type [#parameterized] makes.
+    private record Parameterized(Class<?> raw, List<Type> arguments) implements ParameterizedType {
+        @Override
+        public Type[] getActualTypeArguments() {
+            return arguments.toArray(Type[]::new);
+        }
+
+        @Override
+        public Type getRawType() {
+            return raw;
+        }
+
+        @Override
+        public @Nullable Type getOwnerType() {
+            return raw.getDeclaringClass();
+        }
+
+        @Override
+        public boolean equals(final Object other) {
+            return other instanceof ParameterizedType parameterized
+                && raw.equals(parameterized.getRawType())
+                && Objects.equals(getOwnerType(), parameterized.getOwnerType())
+                && Arrays.equals(getActualTypeArguments(), parameterized.getActualTypeArguments());
+        }
+
+        @Override
+        public int hashCode() {
+            return Arrays.hashCode(getActualTypeArguments()) ^ Objects.hashCode(getOwnerType()) ^ raw.hashCode();
+        }
+
+        @Override
+        public String toString() {
+            return raw.getTypeName() + arguments.stream().map(Type::getTypeName).collect(Collectors.joining(", ", "<", ">"));
+        }
+    }
+
+    /// A lowercase enum name, reported as a [DataResult] error rather than thrown when unknown.
+    public static <E extends Enum<E>> Codec<E> enumCodec(final Class<E> enumCls) {
+        return Codec.STRING.comapFlatMap(
+            name -> {
+                E value = enumValueOfOrNull(enumCls, name);
+
+                return value == null
+                    ? DataResult.error(() -> "Unknown " + enumCls.getSimpleName() + ": " + name)
+                    : DataResult.success(value);
+            },
+            value -> value.name().toLowerCase(Locale.ROOT)
+        );
+    }
+
     private ParseUtils() {}
+
+    /// The registry's holder of `sound` when it is registered as is, or a direct holder carrying it.
+    public static Holder<SoundEvent> holderOf(final SoundEvent sound) {
+        return BuiltInRegistries.SOUND_EVENT.get(ResourceKey.create(Registries.SOUND_EVENT, sound.location()))
+            .filter(registered -> registered.value().equals(sound))
+            .<Holder<SoundEvent>>map(registered -> registered)
+            .orElseGet(() -> Holder.direct(sound));
+    }
 }

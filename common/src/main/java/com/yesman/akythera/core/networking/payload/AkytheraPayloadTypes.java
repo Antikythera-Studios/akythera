@@ -9,9 +9,12 @@ import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilit
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityLifecycle;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityStateSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityTagSync;
-import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundCancelAbilityCue;
+import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundClearWidgetHuds;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundDataBlockSync;
+import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundOpenWidget;
+import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayParticleSystem;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayAbilityCue;
+import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundTerminateAbilityCue;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayAnimMontage;
 import com.yesman.akythera.core.networking.payload.serverbound.ServerBoundAbilityTrigger;
 
@@ -43,7 +46,13 @@ public final class AkytheraPayloadTypes {
 
 		CLIENT_BOUND.add(new PayloadChannel<>(ClientBoundPlayAbilityCue.TYPE, ClientBoundPlayAbilityCue.STREAM_CODEC, () -> AkytheraClientBoundPayloadHandler::handlePlayAbilityCue));
 
-		CLIENT_BOUND.add(new PayloadChannel<>(ClientBoundCancelAbilityCue.TYPE, ClientBoundCancelAbilityCue.STREAM_CODEC, () -> AkytheraClientBoundPayloadHandler::handleCancelAbilityCue));
+		CLIENT_BOUND.add(new PayloadChannel<>(ClientBoundTerminateAbilityCue.TYPE, ClientBoundTerminateAbilityCue.STREAM_CODEC, () -> AkytheraClientBoundPayloadHandler::handleTerminateAbilityCue));
+
+		CLIENT_BOUND.add(new PayloadChannel<>(ClientBoundOpenWidget.TYPE, ClientBoundOpenWidget.STREAM_CODEC, () -> AkytheraClientBoundPayloadHandler::handleOpenWidget));
+
+		CLIENT_BOUND.add(new PayloadChannel<>(ClientBoundClearWidgetHuds.TYPE, ClientBoundClearWidgetHuds.STREAM_CODEC, () -> AkytheraClientBoundPayloadHandler::handleClearWidgetHuds));
+
+		CLIENT_BOUND.add(new PayloadChannel<>(ClientBoundPlayParticleSystem.TYPE, ClientBoundPlayParticleSystem.STREAM_CODEC, () -> AkytheraClientBoundPayloadHandler::handlePlayParticleSystem));
 
 		// server bound packets
 		SERVER_BOUND.add(new PayloadChannel<>(ServerBoundAbilityTrigger.TYPE, ServerBoundAbilityTrigger.STREAM_CODEC, () -> AkytheraServerBoundPayloadHandler::handleAbilityTrigger));

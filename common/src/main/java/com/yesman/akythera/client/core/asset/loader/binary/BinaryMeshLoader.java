@@ -5,11 +5,13 @@ import com.yesman.akythera.client.core.asset.loader.VertexBuilder;
 import com.yesman.akythera.client.core.asset.mesh.Mesh;
 import com.yesman.akythera.client.core.asset.mesh.SkeletalMesh;
 import com.yesman.akythera.client.core.asset.mesh.StaticMesh;
+import com.yesman.akythera.client.core.asset.physics.ClothPhysicsData;
 import com.yesman.akythera.core.asset.loader.ResourceLoadingFailureException;
 import com.yesman.akythera.core.asset.loader.binary.BinaryAssetLoader;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.Resource;
 import org.joml.Vector3f;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -20,13 +22,15 @@ public final class BinaryMeshLoader implements MeshLoader, BinaryAssetLoader {
     private final Identifier resourcePath;
     private final Resource resource;
     private final Metadata metadata;
+    private final @Nullable ClothPhysicsData clothPhysics;
 
-    public BinaryMeshLoader(Identifier resourcePath, Resource resource, Metadata metadata)
+    public BinaryMeshLoader(Identifier resourcePath, Resource resource, Metadata metadata, @Nullable ClothPhysicsData clothPhysics)
         throws ResourceLoadingFailureException
     {
         this.resourcePath = resourcePath;
         this.resource = resource;
         this.metadata = metadata;
+        this.clothPhysics = clothPhysics;
     }
 
     @Override
@@ -37,6 +41,11 @@ public final class BinaryMeshLoader implements MeshLoader, BinaryAssetLoader {
     @Override
     public Metadata metadata() {
         return metadata;
+    }
+
+    @Override
+    public @Nullable ClothPhysicsData clothPhysics() {
+        return clothPhysics;
     }
 
     @Override
@@ -208,6 +217,7 @@ public final class BinaryMeshLoader implements MeshLoader, BinaryAssetLoader {
                 .affectingBoneIdArray(affectingBoneIdArray)
                 .affectingWeightIndexArray(affectingWeightIndexArray)
                 .deformationFromToArray(deformationFromToArray)
+                .clothPhysics(clothPhysics)
             ;
 
             skeletalMeshBuilder.metadata(metadata);

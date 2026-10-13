@@ -16,14 +16,26 @@ import com.yesman.akythera.core.animation.playable.BlendSpace2D;
 import com.yesman.akythera.core.blueprint.EntityPatchBlueprint;
 import com.yesman.akythera.core.blueprint.ItemPatchBlueprint;
 import com.yesman.akythera.core.blueprint.ComponentBlueprint;
+import com.yesman.akythera.core.blueprint.particle.EmitterSpawnRule;
+import com.yesman.akythera.core.blueprint.particle.ParticleBlueprint;
+import com.yesman.akythera.core.blueprint.particle.ParticleInitializerBlueprint;
+import com.yesman.akythera.core.blueprint.particle.ParticleInitializerScriptBlueprint;
+import com.yesman.akythera.core.blueprint.particle.ParticleUpdaterBlueprint;
+import com.yesman.akythera.core.blueprint.particle.ParticleUpdaterScriptBlueprint;
+import com.yesman.akythera.core.blueprint.particle.ParticleSystemBlueprint;
+import com.yesman.akythera.core.blueprint.widget.WidgetBlueprint;
 import com.yesman.akythera.platform.ModPlatformProvider;
 import net.minecraft.core.Registry;
 import com.yesman.akythera.api.world.ability.AbilityEffect;
 import com.yesman.akythera.core.blueprint.AbilityBlueprint;
+import net.minecraft.resources.RegistryValidator;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.Item;
 import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
+
+import java.util.Map;
 
 @NullMarked
 public final class AkytheraRegistries {
@@ -44,10 +56,20 @@ public final class AkytheraRegistries {
         public static final ResourceKey<Registry<BlendSpace2D>> BLEND_SPACE_2D_KEY = createRegistryKey("blend_space_2d");
         public static final ResourceKey<Registry<EntityPatchBlueprint>> ENTITY_PATCH_KEY = createRegistryKey("script/entity_patch");
         public static final ResourceKey<Registry<ItemPatchBlueprint>> ITEM_PATCH_KEY = createRegistryKey("item_patch");
-        public static final ResourceKey<Registry<AbilityEffect>> ABILITY_EFFECT_KEY = createRegistryKey("ability_effect");
-        public static final ResourceKey<Registry<AbilityBlueprint>> ABILITY_KEY = createRegistryKey("ability");
+        public static final ResourceKey<Registry<AbilityEffect>> ABILITY_EFFECT_KEY = createRegistryKey("abilities/effect");
+        public static final ResourceKey<Registry<AbilityBlueprint>> ABILITY_KEY = createRegistryKey("abilities/ability");
         public static final ResourceKey<Registry<InputAction>> INPUT_ACTION_KEY = createRegistryKey("input_action");
-        public static final ResourceKey<Registry<AbilityCueBlueprint>> ABILITY_CUE_KEY = createRegistryKey("ability_cue");
+        public static final ResourceKey<Registry<AbilityCueBlueprint>> ABILITY_CUE_KEY = createRegistryKey("abilities/cue");
+        public static final ResourceKey<Registry<WidgetBlueprint>> WIDGET_KEY = createRegistryKey("widget");
+        public static final ResourceKey<Registry<ParticleBlueprint>> PARTICLE_PIECE_KEY = createRegistryKey("particle/piece");
+        public static final ResourceKey<Registry<ParticleSystemBlueprint>> PARTICLE_SYSTEM_KEY = createRegistryKey("particle/system");
+        public static final ResourceKey<Registry<ParticleInitializerScriptBlueprint>> PARTICLE_INITIALIZER_KEY = createRegistryKey("particle/initializer");
+        public static final ResourceKey<Registry<ParticleUpdaterScriptBlueprint>> PARTICLE_UPDATER_KEY = createRegistryKey("particle/updater");
+
+        /// Checks across a registry's entries, run once it loads. An error fails the load the way a codec error does.
+        private static final Map<ResourceKey<? extends Registry<?>>, RegistryValidator<?>> VALIDATORS = Map.of(
+            WIDGET_KEY, WidgetBlueprint.VALIDATOR
+        );
 
         static {
             ModPlatformProvider.get().createDataPackRegistry(ANIM_MONTAGE_KEY, AnimationMontage.CODEC);
@@ -60,6 +82,17 @@ public final class AkytheraRegistries {
             ModPlatformProvider.get().createDataPackRegistry(ABILITY_KEY, AbilityBlueprint.CODEC);
             ModPlatformProvider.get().createDataPackRegistry(INPUT_ACTION_KEY, InputAction.CODEC);
             ModPlatformProvider.get().createDataPackRegistry(ABILITY_CUE_KEY, AbilityCueBlueprint.CODEC);
+            ModPlatformProvider.get().createDataPackRegistry(WIDGET_KEY, WidgetBlueprint.CODEC);
+            ModPlatformProvider.get().createDataPackRegistry(PARTICLE_PIECE_KEY, ParticleBlueprint.CODEC);
+            ModPlatformProvider.get().createDataPackRegistry(PARTICLE_SYSTEM_KEY, ParticleSystemBlueprint.CODEC);
+            ModPlatformProvider.get().createDataPackRegistry(PARTICLE_INITIALIZER_KEY, ParticleInitializerScriptBlueprint.CODEC);
+            ModPlatformProvider.get().createDataPackRegistry(PARTICLE_UPDATER_KEY, ParticleUpdaterScriptBlueprint.CODEC);
+        }
+
+        /// The cross-entry check of `registryKey`, or null when it has none.
+        @SuppressWarnings("unchecked")
+        public static <T> @Nullable RegistryValidator<T> getValidator(final ResourceKey<? extends Registry<T>> registryKey) {
+            return (RegistryValidator<T>)VALIDATORS.get(registryKey);
         }
     }
 
@@ -74,6 +107,11 @@ public final class AkytheraRegistries {
         public static final ResourceKey<Registry<ScriptType>> SCRIPT_TYPE_KEY = createRegistryKey("script_type");
         public static final ResourceKey<Registry<MapCodec<? extends ComponentBlueprint<?, ?>>>> ENTITY_PATCH_COMPONENT_TYPES_KEY = createRegistryKey("entity_patch_component_type");
         public static final ResourceKey<Registry<MapCodec<? extends ComponentBlueprint<?, ?>>>> ITEM_PATCH_COMPONENT_TYPES_KEY = createRegistryKey("item_patch_component_type");
+        public static final ResourceKey<Registry<MapCodec<? extends ComponentBlueprint<?, ?>>>> WIDGET_COMPONENT_TYPES_KEY = createRegistryKey("widget_component_type");
+        public static final ResourceKey<Registry<MapCodec<? extends ParticleBlueprint>>> PARTICLE_TYPE_KEY = createRegistryKey("particle_type");
+        public static final ResourceKey<Registry<MapCodec<? extends EmitterSpawnRule>>> EMITTER_SPAWN_RULE_TYPE_KEY = createRegistryKey("emitter_spawn_rule_type");
+        public static final ResourceKey<Registry<MapCodec<? extends ParticleInitializerBlueprint>>> PARTICLE_INITIALIZER_TYPE_KEY = createRegistryKey("particle_initializer_type");
+        public static final ResourceKey<Registry<MapCodec<? extends ParticleUpdaterBlueprint>>> PARTICLE_UPDATER_TYPE_KEY = createRegistryKey("particle_updater_type");
 
         // Registries
         public static final Registry<MapCodec<? extends AnimationNotify<?>>> ANIM_NOTIFY_TYPES = ModPlatformProvider.get().createRegistry(ANIM_NOTIFY_TYPE_KEY);
@@ -86,5 +124,20 @@ public final class AkytheraRegistries {
 
         /// Component types an [ItemPatchBlueprint] and its hosts may attach.
         public static final Registry<MapCodec<? extends ComponentBlueprint<?, ?>>> ITEM_PATCH_COMPONENT_TYPES = ModPlatformProvider.get().createRegistry(ITEM_PATCH_COMPONENT_TYPES_KEY);
+
+        /// Component types a [WidgetBlueprint] and its containers may attach.
+        public static final Registry<MapCodec<? extends ComponentBlueprint<?, ?>>> WIDGET_COMPONENT_TYPES = ModPlatformProvider.get().createRegistry(WIDGET_COMPONENT_TYPES_KEY);
+
+        /// Particle types a [ParticleBlueprint] dispatches on.
+        public static final Registry<MapCodec<? extends ParticleBlueprint>> PARTICLE_TYPES = ModPlatformProvider.get().createRegistry(PARTICLE_TYPE_KEY);
+
+        /// Spawn rules an [EmitterSpawnRule] dispatches on.
+        public static final Registry<MapCodec<? extends EmitterSpawnRule>> EMITTER_SPAWN_RULE_TYPES = ModPlatformProvider.get().createRegistry(EMITTER_SPAWN_RULE_TYPE_KEY);
+
+        /// Module types a [ParticleInitializerBlueprint] dispatches on.
+        public static final Registry<MapCodec<? extends ParticleInitializerBlueprint>> PARTICLE_INITIALIZER_TYPES = ModPlatformProvider.get().createRegistry(PARTICLE_INITIALIZER_TYPE_KEY);
+
+        /// Module types a [ParticleUpdaterBlueprint] dispatches on.
+        public static final Registry<MapCodec<? extends ParticleUpdaterBlueprint>> PARTICLE_UPDATER_TYPES = ModPlatformProvider.get().createRegistry(PARTICLE_UPDATER_TYPE_KEY);
     }
 }

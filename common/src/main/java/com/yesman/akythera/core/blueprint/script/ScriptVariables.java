@@ -1,5 +1,6 @@
 package com.yesman.akythera.core.blueprint.script;
 
+import com.google.common.base.Suppliers;
 import com.google.gson.JsonElement;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
@@ -8,7 +9,7 @@ import com.mojang.serialization.JsonOps;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.data.modularize.ScriptType;
 import com.yesman.akythera.core.reflection.DataDrivenScript;
-import com.yesman.akythera.core.registry.AkytheraRegistries;
+import com.yesman.akythera.core.util.StaticRegistryAccess;
 import com.yesman.akythera.core.util.helper.ParseUtils;
 import org.jspecify.annotations.Nullable;
 
@@ -19,6 +20,7 @@ import java.util.Locale;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /// A runtime fields belong to [DataDrivenScript]. Scripts
 /// that are built by datapack is already in runtime so
@@ -40,7 +42,7 @@ public final class ScriptVariables {
     public ScriptVariables(final List<VariableInfo> memberVariables) {
         if (memberVariables != null) {
             memberVariables.forEach(v -> {
-                this.variables.put(v.name(), v.defaultVal());
+                this.variables.put(v.name(), v.type().mutableCopy(v.defaultVal()));
                 this.memberVariables.put(v.name(), v);
             });
         }
@@ -80,6 +82,23 @@ public final class ScriptVariables {
         variables.entrySet().removeIf(entry -> !memberVariables.containsKey(entry.getKey()));
     }
 
+    /// The locals this instance holds right now, for [#restoreLocals] to put back.
+    public Map<String, Object> captureLocals() {
+        Map<String, Object> locals = new HashMap<>();
+
+        variables.forEach((name, value) -> {
+            if (!memberVariables.containsKey(name)) locals.put(name, value);
+        });
+
+        return locals;
+    }
+
+    /// Replaces the locals with `locals`, keeping the member variables.
+    public void restoreLocals(final Map<String, Object> locals) {
+        reset();
+        variables.putAll(locals);
+    }
+
     @Override
     public String toString() {
         return "Script Variables: " + variables + "\nmember variables: " + memberVariables;
@@ -95,7 +114,7 @@ public final class ScriptVariables {
         /// The owner's client writes it and sends it with its activation request.
         CLIENT_TO_SERVER;
 
-        static final Codec<SyncDirection> CODEC = Codec.STRING.xmap(
+        public static final Codec<SyncDirection> CODEC = Codec.STRING.xmap(
             name -> ParseUtils.enumValueOfOrNull(SyncDirection.class, name) == null
                 ? NONE
                 : ParseUtils.enumValueOfOrNull(SyncDirection.class, name),
@@ -103,13 +122,17 @@ public final class ScriptVariables {
         );
     }
 
-    /// @param defaultVal allowed only for primitives or string. No default value of references.
-    /// @param sync       forced to [SyncDirection#NONE] when the type carries no stream codec
+    /// @param defaultValue the value the variable starts at, resolving to null when it starts unset
+    /// @param sync         forced to [SyncDirection#NONE] when the type carries no stream codec
     public record VariableInfo(
-        String name, ScriptType type, @Nullable Object defaultVal, SyncDirection sync
+        String name, ScriptType type, Supplier<@Nullable Object> defaultValue, SyncDirection sync
     ) {
         public VariableInfo(final String name, final ScriptType type, final @Nullable Object defaultVal) {
             this(name, type, defaultVal, SyncDirection.NONE);
+        }
+
+        public VariableInfo(final String name, final ScriptType type, final @Nullable Object defaultVal, final SyncDirection sync) {
+            this(name, type, () -> defaultVal, sync);
         }
 
         public VariableInfo {
@@ -120,13 +143,18 @@ public final class ScriptVariables {
             instance ->
                 instance.group(
                     Codec.STRING.fieldOf("name").forGetter(VariableInfo::name),
-                    AkytheraRegistries.Frozen.SCRIPT_TYPE.byNameCodec().fieldOf("type").forGetter(VariableInfo::type),
+                    ScriptType.CODEC.fieldOf("type").forGetter(VariableInfo::type),
                     Codec.PASSTHROUGH.optionalFieldOf("default_value").forGetter(ParseUtils.provideOptional(VariableInfo::valueAsDynamic)),
                     SyncDirection.CODEC.optionalFieldOf("sync", SyncDirection.NONE).forGetter(VariableInfo::sync)
                 )
                 .apply(instance, (name, type, defaultValue, sync) ->
-                    new VariableInfo(name, type, decodeDefaultValue(type, defaultValue), sync))
+                    new VariableInfo(name, type, Suppliers.memoize(() -> decodeDefaultValue(type, defaultValue)), sync))
         );
+
+        /// The value the variable starts at. Null when it starts unset.
+        public @Nullable Object defaultVal() {
+            return defaultValue.get();
+        }
 
         /// Whether this variable crosses the wire in `flow`'s direction.
         public boolean travels(final PacketFlow flow) {
@@ -137,14 +165,15 @@ public final class ScriptVariables {
             };
         }
 
-        // For codec
-        private Dynamic<?> valueAsDynamic() {
-            return type.codec() == null ? null : new Dynamic<> (JsonOps.INSTANCE, encode().getOrThrow());
+        // For codec. A null default is left out of the json.
+        private @Nullable Dynamic<?> valueAsDynamic() {
+            return type.codec() == null || defaultVal() == null ? null : new Dynamic<> (JsonOps.INSTANCE, encode().getOrThrow());
         }
 
-        /// Decodes the serialized `default_value` back into the actual typed value via the [ScriptType]'s
-        /// codec. `optionalFieldOf` hands the raw [Optional]/[Dynamic] to the constructor's `Object` slot,
-        /// so without this the default would be stored as an `Optional<Dynamic>` and later mis-cast at runtime.
+        /// Decodes the serialized `default_value` into the typed value via the [ScriptType]'s codec.
+        ///
+        /// Runs on the first [#defaultVal] call. A registry entry default is looked up through
+        /// [StaticRegistryAccess], which holds nothing while the data pack registries carrying this variable load.
         @SuppressWarnings("unchecked")
         private static <A> @Nullable Object decodeDefaultValue(final ScriptType type, final Optional<Dynamic<?>> defaultValue) {
             if (defaultValue.isEmpty() || type.codec() == null) return null;

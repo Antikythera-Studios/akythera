@@ -2,11 +2,13 @@ package com.yesman.akythera.api.data.serializable;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
+import com.yesman.akythera.core.reflection.ScriptType;
 import net.minecraft.util.Mth;
 
 import java.util.List;
 
 /// RGBA color utility for global use
+@ScriptType(autoRegister = false)
 public record RGBA(float r, float g, float b, float a) {
     public static final Codec<RGBA> INT_LIST_CODEC =
         Codec.intRange(0, 255).listOf().comapFlatMap(
@@ -65,6 +67,11 @@ public record RGBA(float r, float g, float b, float a) {
         this(r, g, b, 255);
     }
 
+    /// The color a [#packARGB] value packs.
+    public static RGBA fromARGB(final int argb) {
+        return new RGBA((argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF, (argb >>> 24) & 0xFF);
+    }
+
     /// Returns a compact ARGB (Minecraft's standard) expressed in one integer value
     ///
     /// 1 byte represents element degree, from the leftmost, A, R, G, B
@@ -80,9 +87,9 @@ public record RGBA(float r, float g, float b, float a) {
     /// ```
     public int packARGB() {
         // apply shift operations
-        int intA = Math.round(a() * 255.0F) >> 24;
-        int intR = Math.round(r() * 255.0F) >> 16;
-        int intG = Math.round(g() * 255.0F) >> 8;
+        int intA = Math.round(a() * 255.0F) << 24;
+        int intR = Math.round(r() * 255.0F) << 16;
+        int intG = Math.round(g() * 255.0F) << 8;
         int intB = Math.round(b() * 255.0F);
 
         // merge bits

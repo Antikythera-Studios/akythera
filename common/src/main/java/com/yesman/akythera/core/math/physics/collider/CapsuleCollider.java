@@ -4,6 +4,7 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.component.ComponentAttachable;
+import com.yesman.akythera.api.component.TransformInheritPolicy;
 import com.yesman.akythera.core.math.Transform;
 import com.yesman.akythera.core.math.physics.collider.component.CapsuleColliderComponent;
 import net.minecraft.world.phys.Vec3;
@@ -15,9 +16,11 @@ public final class CapsuleCollider extends Collider {
     public static final MapCodec<CapsuleCollider> CODEC = RecordCodecBuilder.mapCodec(
         instance ->
             instance.group(
-                Transform.CODEC.fieldOf("transform").forGetter(Collider::getPivotTransform),
+                TRANSFORM_CODEC.forGetter(Collider::getPivotTransform),
+                TRANSFORM_INHERIT_POLICY_CODEC.forGetter(Collider::getTransformInheritPolicy),
                 Codec.DOUBLE.fieldOf("radius").forGetter(CapsuleCollider::getRadius),
-                Codec.DOUBLE.fieldOf("height").forGetter(CapsuleCollider::getHeight)
+                Codec.DOUBLE.fieldOf("height").forGetter(CapsuleCollider::getHeight),
+                ENABLED_CODEC.forGetter(Collider::enabled)
             )
             .apply(instance, CapsuleCollider::new)
     );
@@ -29,8 +32,14 @@ public final class CapsuleCollider extends Collider {
     private final Vec3 localEndA;
     private final Vec3 localEndB;
 
-    public CapsuleCollider(final Transform pivotTransform, final double radius, final double height) {
-        super(pivotTransform);
+    public CapsuleCollider(
+        final Transform pivotTransform,
+        final TransformInheritPolicy transformInheritPolicy,
+        final double radius,
+        final double height,
+        final boolean enabled
+    ) {
+        super(pivotTransform, transformInheritPolicy, enabled);
 
         this.radius = radius;
         this.height = height;
@@ -58,7 +67,7 @@ public final class CapsuleCollider extends Collider {
 
     @Override
     public CapsuleColliderComponent instantiate(final @Nullable ComponentAttachable host) {
-        return new CapsuleColliderComponent(this, Transform.identity());
+        return new CapsuleColliderComponent(this, host, Transform.identity());
     }
 
     @Override

@@ -2,6 +2,7 @@ package com.yesman.akythera.api.animation.animator;
 
 import com.mojang.serialization.MapCodec;
 import com.yesman.akythera.core.math.model.FSMState;
+import com.yesman.akythera.core.reflection.ScriptType;
 import com.yesman.akythera.core.util.EnumerableDataBlock;
 import com.yesman.akythera.core.util.EnumerableDataBlockManager;
 import net.minecraft.resources.Identifier;
@@ -10,6 +11,7 @@ import net.minecraft.resources.Identifier;
 ///
 /// Although the [AbstractAnimationInterface] client side only code, the keys exist in common side
 /// to be included by data packs.
+@ScriptType(autoRegister = false)
 public interface AnimationInterfaceKey extends FSMState {
     EnumerableDataBlockManager<AnimationInterfaceKey> ENUM_MANAGER = new EnumerableDataBlockManager<>(
         "anim_interface_signature",

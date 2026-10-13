@@ -2,6 +2,7 @@ package com.yesman.akythera.neoforged.client.core;
 
 import com.yesman.akythera.api.asset.animation.AnimationManager;
 import com.yesman.akythera.api.asset.armature.ArmatureManager;
+import com.yesman.akythera.api.asset.physics.ArmaturePhysicsManager;
 import com.yesman.akythera.client.api.mesh.MeshManager;
 import com.yesman.akythera.client.config.AkytheraClientConfig;
 import com.yesman.akythera.client.core.AkytheraClient;
@@ -43,6 +44,7 @@ public final class AkytheraNeoForgedClient {
         event.addListener(Akythera.identifier("mesh_manager_dynamic"), MeshManager.getInstance());
         event.addListener(Akythera.identifier("anim_manager_dynamic"), AnimationManager.getInstance());
         event.addListener(Akythera.identifier("armature_manager_dynamic"), ArmatureManager.getInstance());
+        event.addListener(Akythera.identifier("armature_physics_manager_dynamic"), ArmaturePhysicsManager.getInstance());
     }
 
     private void registerKeyMappings(final RegisterKeyMappingsEvent event) {

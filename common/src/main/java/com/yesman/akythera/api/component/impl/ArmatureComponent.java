@@ -4,27 +4,42 @@ import com.yesman.akythera.api.animation.animator.Animator;
 import com.yesman.akythera.api.asset.AssetAccessor;
 import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.api.component.DynamicPatchComponent;
+import com.yesman.akythera.api.component.PatchComponent;
 import com.yesman.akythera.api.component.TickableDynamicComponent;
+import com.yesman.akythera.api.component.TransformComponent;
+import com.yesman.akythera.api.component.TransformInheritPolicy;
 import com.yesman.akythera.api.component.UniqueComponent;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.asset.armature.Armature;
 import com.yesman.akythera.core.asset.armature.Bone;
-import com.yesman.akythera.core.asset.armature.BoneSocket;
+import com.yesman.akythera.core.asset.armature.TransformSocket;
+import com.yesman.akythera.core.blueprint.ComponentBlueprint;
 import com.yesman.akythera.core.math.Transform;
+import com.yesman.akythera.core.util.LogicalSide;
 import com.yesman.akythera.core.util.helper.Matrix4fUtils;
-import net.minecraft.world.entity.Entity;
 import org.joml.Matrix4f;
 import org.jspecify.annotations.Nullable;
 
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /// Module for skeletal mesh armature. Animator and armature are paired since both are coupled to work.
 ///
-/// Implements [ComponentAttachable], Used in adding sockets. Only socket blueprints are allowed.
+/// Implements [ComponentAttachable]. A [TransformSocket] attached here binds to a bone; anything
+/// else attached here stands in for the entity's own model, which is how a skeletal mesh replaces
+/// the vanilla one.
+///
+/// A patch may hold several, one per animated layer. [EntityPatch#getArmatureComponent] answers the
+/// first one it lists.
+///
+/// The owner is any [ComponentAttachable], and the armature lives on the owner's
+/// [ComponentAttachable#logicalSide].
+///
+/// Its [TransformComponent#localTransform] places the whole skeleton: bones, sockets and meshes all live in its space.
+/// [#getBoneModelTransform] stays in the armature's own space.
 public class ArmatureComponent
-    implements DynamicPatchComponent<EntityPatch<Entity>>, TickableDynamicComponent<EntityPatch<Entity>>, ComponentAttachable, UniqueComponent
+    implements DynamicPatchComponent<ComponentAttachable>, TickableDynamicComponent<ComponentAttachable>, ComponentAttachable, TransformComponent
 {
     /// One server tick, in seconds. The client passes real frame time instead.
     private static final float SERVER_FRAME_TIME = 0.05F;
@@ -33,10 +48,20 @@ public class ArmatureComponent
     private final Animator animator;
     private final @Nullable RootMotionComponent rootMotionComponent;
 
-    /// List of attached [BoneSocket]
-    private final Map<String, BoneSocket> boneSockets = new HashMap<>();
+    /// The attached components by name, in declaration order—[TransformSocket]s and whatever draws
+    /// the entity's body.
+    private final Map<String, PatchComponent> components = new LinkedHashMap<>();
 
-    private EntityPatch<Entity> owner;
+    /// [#components] indexed by [UniqueComponent] type, built once the children are.
+    private final Map<Class<? extends UniqueComponent>, ? extends UniqueComponent> uniqueComponents;
+
+    private ComponentAttachable owner;
+
+    /// Where the skeleton sits in [#owner]'s space.
+    private Transform localTransform;
+
+    /// The elements of [#owner]'s space the skeleton takes on.
+    private final TransformInheritPolicy transformInheritPolicy;
 
     /// Last pose resulted by [Animator#getPose()]
     ///
@@ -56,41 +81,48 @@ public class ArmatureComponent
     private long poseTick = Long.MIN_VALUE;
     private long previousPoseTick = Long.MIN_VALUE;
 
+    /// Whether this armature takes part, see [PatchComponent#isEnabled].
+    private boolean enabled = true;
+
     public ArmatureComponent(
-        final EntityPatch<Entity> owner,
+        final ComponentAttachable owner,
         final AssetAccessor<? extends Armature> armature,
         final Animator animator,
         final boolean useRootMotion
     ) {
-        this(owner, armature, animator, useRootMotion, Map.of());
+        this(owner, armature, animator, useRootMotion, Transform.IDENTITY, TransformInheritPolicy.LOC_ROT_SCA, Map.of());
     }
 
     public ArmatureComponent(
-        final EntityPatch<Entity> owner,
+        final ComponentAttachable owner,
         final AssetAccessor<? extends Armature> armature,
         final Animator animator,
         final boolean useRootMotion,
-        final Map<String, BoneSocket> sockets
+        final Transform localTransform,
+        final TransformInheritPolicy transformInheritPolicy,
+        final Map<String, ComponentBlueprint<?, ?>> childBlueprints
     ) {
         this.armature = armature;
         this.animator = animator;
         this.owner = owner;
+        this.localTransform = localTransform;
+        this.transformInheritPolicy = transformInheritPolicy;
 
-        sockets.forEach((name, socket) -> boneSockets.put(name, socket.instantiate(this)));
+        ComponentBlueprint.instantiateAll(childBlueprints, this, owner.logicalSide().validInClientSide(), components::put);
 
-        rootMotionComponent = useRootMotion ? new RootMotionComponent(owner) : null;
+        uniqueComponents = ComponentAttachable.indexUnique(components);
+
+        rootMotionComponent = useRootMotion ? new RootMotionComponent(this) : null;
     }
 
     @Override
     public void tick() {
-        EntityPatch<Entity> owner = getOwner();
-
         // The client advances animation time in [#frameUpdate], once per frame. A server has no frame,
         // so its tick does it—before [Animator#tick], whose notify window is
         // [lastUpdatedTime, elapsedTime] and so has to see the time this tick moved to.
         //
         // Time only. The skeleton itself is built on demand, in [#ensureServerPose].
-        if (owner != null && !owner.isLogicalClient()) {
+        if (owner.logicalSide() == LogicalSide.SERVER) {
             getAnimator().update(SERVER_FRAME_TIME, 1.0F);
         }
 
@@ -127,11 +159,9 @@ public class ArmatureComponent
     /// Server posing is on demand because most entities are never asked: the cost lands only on the
     /// ones a collision query actually reads, on the ticks it reads them.
     private void ensureServerPose() {
-        EntityPatch<Entity> owner = getOwner();
+        if (owner.logicalSide() != LogicalSide.SERVER || !(owner instanceof EntityPatch<?> entityPatch)) return;
 
-        if (owner == null || owner.isLogicalClient()) return;
-
-        long tick = owner.getLevel().getGameTime();
+        long tick = entityPatch.getLevel().getGameTime();
 
         if (tick == poseTick) return;
 
@@ -172,29 +202,44 @@ public class ArmatureComponent
         return rootMotionComponent;
     }
 
-    // Null if preview armature component
     @Override
-    public EntityPatch<Entity> getOwner() {
+    public ComponentAttachable getOwner() {
         return owner;
     }
 
     @Override
-    public ArmatureComponent getRenewed(final EntityPatch<Entity> newOwner) {
-        // No deep-copying the component. Just change the owner.
+    public ArmatureComponent getRenewed(final ComponentAttachable newOwner) {
+        // No deep-copying the component. Just change the owner, the animator's along with it.
         owner = newOwner;
+        animator.setOwner(newOwner);
         return this;
     }
 
     @Override
-    public Map<String, BoneSocket> getComponents() {
-        return boneSockets;
+    public boolean isEnabled() {
+        return enabled;
     }
 
-    /// Armature component doesn't support type-based component getter—all sockets
-    /// are meant to be identified by string.
-    @Override @Deprecated
+    @Override
+    public void setEnabled(final boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    @Override
+    public Map<String, PatchComponent> getComponents() {
+        return components;
+    }
+
+    @Override
+    public LogicalSide logicalSide() {
+        return owner.logicalSide();
+    }
+
+    @SuppressWarnings("unchecked") @Override
     public @Nullable <C extends UniqueComponent> C getComponent(Class<C> type) {
-        return null;
+        UniqueComponent component = uniqueComponents.get(type);
+
+        return component != null && component.isEnabled() ? (C)component : null;
     }
 
     /// A bone's transform in this armature's model space, at the pose [#updateBoundTransforms] last
@@ -238,7 +283,30 @@ public class ArmatureComponent
 
     /// Returns a bound transform of socket by name, in this armature's model space.
     public @Nullable Transform getSocketBoundTransform(final String socketName) {
-        BoneSocket socket = boneSockets.get(socketName);
-        return socket == null ? null : socket.getBoundTransform();
+        return components.get(socketName) instanceof TransformSocket socket ? socket.getBoundTransform() : null;
+    }
+
+    // ***************************************************************
+    // TransformComponent
+    // ***************************************************************
+
+    @Override
+    public Transform localTransform() {
+        return localTransform;
+    }
+
+    @Override
+    public void setLocalTransform(final Transform transform) {
+        localTransform = transform;
+    }
+
+    @Override
+    public ComponentAttachable host() {
+        return owner;
+    }
+
+    @Override
+    public TransformInheritPolicy transformInheritPolicy() {
+        return transformInheritPolicy;
     }
 }

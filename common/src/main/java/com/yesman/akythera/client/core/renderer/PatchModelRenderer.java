@@ -1,5 +1,6 @@
 package com.yesman.akythera.client.core.renderer;
 
+import com.mojang.blaze3d.IndexType;
 import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
@@ -8,26 +9,37 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.yesman.akythera.api.asset.AssetAccessor;
 import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.api.component.PatchComponent;
+import com.yesman.akythera.api.component.TransformComponent;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.client.api.component.RenderableComponent;
 import com.yesman.akythera.client.core.asset.mesh.Mesh;
 import com.yesman.akythera.client.core.asset.mesh.SkeletalMesh;
+import com.yesman.akythera.client.core.asset.physics.ClothSimulationParameters;
 import com.yesman.akythera.client.core.shader.backend.setup.AnimationComputeShader;
+import com.yesman.akythera.client.core.shader.backend.setup.ClothComputeShader;
+import com.yesman.akythera.client.core.shader.backend.setup.ClothSimulationInstance;
 import com.yesman.akythera.client.core.shader.backend.setup.DynamicStorageBuffer;
 import com.yesman.akythera.client.core.shader.backend.setup.SkinnedDrawContext;
+import com.yesman.akythera.client.core.shader.backend.setup.TriangleDepthSort;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.asset.armature.Armature;
-import com.yesman.akythera.core.asset.armature.BoneSocket;
+import com.yesman.akythera.core.asset.physics.ArmaturePhysicsData;
 import com.yesman.akythera.core.util.helper.Matrix4fUtils;
 import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.util.ARGB;
+import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
+import org.joml.Vector3f;
+import org.joml.Vector3fc;
 import org.jspecify.annotations.Nullable;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,26 +62,43 @@ public final class PatchModelRenderer {
     // Up to 32 part visibility flags are available
     private static final int FLAG_WORD_BYTES = 4;
 
+    /// `DrawParamsBuffer` header of `vanilla_cloth_transformer.comp`: three matrices and four words
+    private static final int CLOTH_DRAW_HEADER_BYTES = 208;
+
+    /// Frames an in-game cloth instance survives without a submit before its GPU state is released
+    private static final int STALE_FRAMES = 200;
+
+    /// Where the camera is for geometry placed relative to it, as the level's is.
+    private static final Vector3fc CAMERA = new Vector3f();
+
+    /// What an entity's cloth simulates in: the camera's own frame, unturned.
+    private static final Matrix4f NO_SIMULATION_ROTATION = new Matrix4f();
+
     private static final PatchModelRenderer INSTANCE = new PatchModelRenderer();
 
     public static PatchModelRenderer getInstance() {
         return INSTANCE;
     }
 
-    /// Every renderable under `host`, parents before children, each paired with the [BoneSocket] it
-    /// hangs under. `socket` is the one `host` itself sits under — null at the patch root.
+    /// Every switched-on renderable under `host`, parents before children, each paired with the host
+    /// it is attached to and the [TransformComponent] that places it. `space` is the one `host` itself
+    /// lives in—null at the patch root.
     public static void collect(
         final ComponentAttachable host,
-        final @Nullable BoneSocket socket,
+        final @Nullable TransformComponent space,
         final List<RenderableSubmit> out
     ) {
         for (PatchComponent component : host.getComponents().values()) {
+            if (!component.isEnabled()) continue;
+
+            TransformComponent placing = component instanceof TransformComponent transform ? transform : space;
+
             if (component instanceof RenderableComponent<?> renderable) {
-                out.add(new RenderableSubmit(renderable, socket));
+                out.add(new RenderableSubmit(renderable, host, placing));
             }
 
             if (component instanceof ComponentAttachable attachable) {
-                collect(attachable, component instanceof BoneSocket boneSocket ? boneSocket : socket, out);
+                collect(attachable, placing, out);
             }
         }
     }
@@ -91,7 +120,7 @@ public final class PatchModelRenderer {
         }
     }
 
-    /// Submits every collected renderable the state fits, each under its socket's transform.
+    /// Submits every collected renderable the state fits, each in armature space under its placing transform.
     @SuppressWarnings("unchecked")
     public static void submit(
         final List<RenderableSubmit> submits,
@@ -106,11 +135,9 @@ public final class PatchModelRenderer {
             if (!component.stateType().isInstance(state)) continue;
 
             poseStack.pushPose();
+            RenderUtils.toArmatureSpace(poseStack);
 
-            if (submit.socket() != null) {
-                RenderUtils.toArmatureSpace(poseStack);
-                poseStack.mulPose(submit.socket().getBoundTransform().toMatrix());
-            }
+            if (submit.space() != null) poseStack.mulPose(submit.space().modelTransform().toMatrix());
 
             ((RenderableComponent<LivingEntityRenderState>) component)
                 .submit(poseStack, submitNodeCollector, lightCoords, state, state.yRot, state.xRot);
@@ -128,6 +155,12 @@ public final class PatchModelRenderer {
 
     /// Permanent communication channel buffer to GPU
     private @Nullable DynamicStorageBuffer frameStorage;
+
+    /// The simulated state of every in-game cloth, by the identity of the object that submits it
+    private final Map<Object, ClothSimulationInstance> clothInstances = new IdentityHashMap<>();
+
+    /// Counts [#endFrame] calls
+    private int frameIndex;
 
     private PatchModelRenderer() {
     }
@@ -147,9 +180,42 @@ public final class PatchModelRenderer {
         AnimationComputeShader setup = mesh.getAnimationComputeShader();
         if (setup == null) return;
 
+        SkinnedDrawContext context = buildContext(mesh, armature, animationPose, pose, packedLight, packedOverlay, color, outlineColor);
+        SkinnedSubmit submit = new SkinnedSubmit(setup, () -> setup.skin(context), outlineColor);
+
+        Map<RenderType, List<SkinnedSubmit>> bucket = renderType.hasBlending() ? translucentSubmits : solidSubmits;
+        bucket.computeIfAbsent(renderType, _ -> new ArrayList<>()).add(submit);
+    }
+
+    /// Queues a simulated cloth draw for `owner`, creating or replacing its instance when `setup`
+    /// changed. `pose` is in armature space; `cameraPosition` is the world camera position.
+    public void submitClothMesh(
+        final Object owner,
+        final ClothComputeShader setup,
+        final AssetAccessor<? extends Armature> armature,
+        final Pose animationPose,
+        final @Nullable ArmaturePhysicsData armaturePhysics,
+        final ClothSimulationParameters parameters,
+        final RenderType renderType,
+        final PoseStack.Pose pose,
+        final Vec3 cameraPosition,
+        final int packedLight,
+        final int packedOverlay,
+        final int color,
+        final int outlineColor
+    ) {
+        ClothSimulationInstance instance = clothInstances.get(owner);
+
+        if (instance == null || instance.getSetup() != setup) {
+            if (instance != null) instance.close();
+
+            instance = setup.createInstance();
+            clothInstances.put(owner, instance);
+        }
+
         SkinnedSubmit submit = new SkinnedSubmit(
-            setup,
-            buildContext(mesh, armature, animationPose, pose, packedLight, packedOverlay, color, outlineColor),
+            setup.getMeshShader(),
+            prepareCloth(instance, armature, animationPose, armaturePhysics, parameters, pose, cameraPosition, NO_SIMULATION_ROTATION, frameIndex, packedLight, packedOverlay, color, outlineColor),
             outlineColor
         );
 
@@ -168,13 +234,37 @@ public final class PatchModelRenderer {
         final PoseStack.Pose pose,
         final int packedLight,
         final int packedOverlay,
-        final int color
+        final int color,
+        final Vector3fc eye
     ) {
         AnimationComputeShader setup = mesh.getAnimationComputeShader();
         if (setup == null) return;
 
         setup.skin(buildContext(mesh, armature, animationPose, pose, packedLight, packedOverlay, color, 0));
-        draw(renderType, setup.output(), setup.vertexCount());
+        drawSkinned(renderType, setup, eye);
+    }
+
+    /// Simulates `instance` and draws it on the spot, for a model viewer that owns its instance.
+    /// `frame` is the caller's own frame counter; the viewer's space is the simulation's world, turned
+    /// by `simulationRotation` — see [ClothSimulationInstance#prepareFrame].
+    public void drawClothMeshImmediate(
+        final ClothSimulationInstance instance,
+        final AssetAccessor<? extends Armature> armature,
+        final Pose animationPose,
+        final @Nullable ArmaturePhysicsData armaturePhysics,
+        final ClothSimulationParameters parameters,
+        final RenderType renderType,
+        final PoseStack.Pose pose,
+        final Matrix4f simulationRotation,
+        final int frame,
+        final int packedLight,
+        final int packedOverlay,
+        final int color
+    ) {
+        AnimationComputeShader meshShader = instance.getSetup().getMeshShader();
+
+        prepareCloth(instance, armature, animationPose, armaturePhysics, parameters, pose, Vec3.ZERO, simulationRotation, frame, packedLight, packedOverlay, color, 0).run();
+        draw(renderType, meshShader.output(), meshShader.vertexCount());
     }
 
     public void renderSolid() {
@@ -194,6 +284,22 @@ public final class PatchModelRenderer {
         if (frameStorage != null) {
             frameStorage.endFrame();
         }
+
+        frameIndex++;
+
+        clothInstances.values().removeIf(instance -> {
+            boolean stale = instance.getLastFrame() < frameIndex - STALE_FRAMES;
+
+            if (stale) instance.close();
+
+            return stale;
+        });
+    }
+
+    /// Closes every in-game cloth instance. The meshes they borrow from are about to close.
+    public void releaseClothInstances() {
+        clothInstances.values().forEach(ClothSimulationInstance::close);
+        clothInstances.clear();
     }
 
     private DynamicStorageBuffer frameStorage() {
@@ -246,13 +352,77 @@ public final class PatchModelRenderer {
         );
     }
 
+    /// Writes a cloth's frame inputs, poses and draw params, and returns the dispatch that simulates
+    /// and skins it. The colliders read the animated bone transforms before the backward bind.
+    private Runnable prepareCloth(
+        final ClothSimulationInstance instance,
+        final AssetAccessor<? extends Armature> armature,
+        final Pose animationPose,
+        final @Nullable ArmaturePhysicsData armaturePhysics,
+        final ClothSimulationParameters parameters,
+        final PoseStack.Pose pose,
+        final Vec3 cameraPosition,
+        final Matrix4f simulationRotation,
+        final int frame,
+        final int packedLight,
+        final int packedOverlay,
+        final int color,
+        final int outlineColor
+    ) {
+        Armature resolved = armature.get();
+        int boneCount = resolved.getBoneCount();
+
+        if (boundTransforms.length < boneCount) {
+            boundTransforms = Matrix4fUtils.allocateMatrixArray(boneCount);
+        }
+
+        animationPose.getForwardBoundTransforms(armature, boundTransforms);
+
+        DynamicStorageBuffer storage = frameStorage();
+        ClothSimulationInstance.Frame clothFrame = instance.prepareFrame(
+            storage, pose.pose(), cameraPosition, simulationRotation, boundTransforms, resolved, armaturePhysics, parameters, frame
+        );
+
+        resolved.boundBackwardTransform(boundTransforms);
+
+        ClothComputeShader setup = instance.getSetup();
+        SkeletalMesh mesh = setup.getMesh();
+        Matrix4f modelView = new Matrix4f(pose.pose());
+        Matrix4f normal = new Matrix4f(pose.normal());
+
+        GpuBufferSlice poses = storage.write(
+            boneCount * MATRIX_BYTES, buffer -> writePoses(boundTransforms, boneCount, buffer)
+        );
+        GpuBufferSlice drawParams = storage.write(
+            CLOTH_DRAW_HEADER_BYTES + visibilityWordCount(mesh) * FLAG_WORD_BYTES,
+            buffer -> {
+                modelView.get(0, buffer);
+                normal.get(64, buffer);
+                clothFrame.simulationToCamera().get(128, buffer);
+                // The color attribute is four normalized unsigned bytes read as RGBA
+                buffer.putInt(192, ARGB.toABGR(color));
+                buffer.putInt(196, ARGB.toABGR(outlineColor));
+                buffer.putInt(200, packedOverlay);
+                buffer.putInt(204, packedLight);
+                buffer.position(CLOTH_DRAW_HEADER_BYTES);
+                writeVisibility(mesh, buffer);
+            }
+        );
+
+        return () -> {
+            instance.step(clothFrame, poses);
+            setup.skin(instance, poses, drawParams);
+        };
+    }
+
     private void render(final Map<RenderType, List<SkinnedSubmit>> submits) {
         for (Map.Entry<RenderType, List<SkinnedSubmit>> entry : submits.entrySet()) {
             for (SkinnedSubmit submit : entry.getValue()) {
                 AnimationComputeShader setup = submit.setup();
 
-                setup.skin(submit.context());
-                draw(entry.getKey(), setup.output(), setup.vertexCount());
+                submit.dispatch().run();
+
+                drawSkinned(entry.getKey(), setup, CAMERA);
 
                 Optional<RenderType> outline = entry.getKey().outline();
                 GpuBuffer outlineVertices = setup.outlineOutput();
@@ -272,6 +442,20 @@ public final class PatchModelRenderer {
     /// [RenderType#prepare] resolves the render type's textures and writes its dynamic transforms,
     /// both of which reach the command encoder on a miss. It runs before `drawFromBuffer` opens the
     /// render pass, which the encoder would reject either under.
+    /// Draws `setup`'s skinned output. A render type that sorts on upload is translucent: its triangles are sorted
+    /// farthest from `eye` first, and only the fragments nearest the camera are colored ([RenderUtils#drawBuffers]).
+    private void drawSkinned(final RenderType renderType, final AnimationComputeShader setup, final Vector3fc eye) {
+        if (!renderType.sortOnUpload()) {
+            draw(renderType, setup.output(), setup.vertexCount());
+            return;
+        }
+
+        TriangleDepthSort depthSort = setup.depthSort();
+        GpuBuffer sortedIndices = depthSort.sort(setup.output(), eye);
+
+        RenderUtils.drawBuffers(renderType, setup.output().slice(), sortedIndices, IndexType.INT, 0, depthSort.indexCount(), true);
+    }
+
     private void draw(final RenderType renderType, final GpuBuffer vertices, final int vertexCount) {
         RenderSystem.AutoStorageIndexBuffer indices = RenderSystem.getSequentialBuffer(PrimitiveTopology.TRIANGLES);
 
@@ -312,10 +496,23 @@ public final class PatchModelRenderer {
         }
     }
 
-    /// One renderable and the socket it draws under, or null when it hangs off the patch directly.
-    public record RenderableSubmit(RenderableComponent<?> component, @Nullable BoneSocket socket) {
+    /// One renderable, what it is attached to, and the transform that places it.
+    ///
+    /// @param space the renderable itself when it is a [TransformComponent], else its nearest one above; null when
+    ///              there is none
+    public record RenderableSubmit(
+        RenderableComponent<?> component,
+        ComponentAttachable host,
+        @Nullable TransformComponent space
+    ) {
     }
 
-    private record SkinnedSubmit(AnimationComputeShader setup, SkinnedDrawContext context, int outlineColor) {
+    /// How [LivingEntityRenderer#submit] would have drawn the entity's own model: what a patch's
+    /// renderables draw with when they name nothing of their own.
+    public record ModelDraw(RenderType renderType, int overlayCoords, int tintedColor) {
+    }
+
+    /// A queued draw: `dispatch` fills `setup`'s outputs, which are then drawn.
+    private record SkinnedSubmit(AnimationComputeShader setup, Runnable dispatch, int outlineColor) {
     }
 }

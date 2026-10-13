@@ -8,6 +8,8 @@ import com.yesman.akythera.core.util.LogicalSide;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.api.world.patch.entity.component.EntityEventListener;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.TreeMap;
 import java.util.stream.Stream;
 
@@ -20,8 +22,8 @@ import java.util.stream.Stream;
 /// To create custom events, follow these codebase: [BuiltInEventHooks]
 /// and [BuiltInClientEventHooks] for client-side only events
 public class EventHook<T extends Event> {
-	/// Treemap to order subscribers in descending order
-	final TreeMap<Integer, EventListener<T>> subscribers = new TreeMap<> ((i1, i2) -> Integer.compare(i2, i1));
+	/// Subscribers grouped by priority in descending order
+	final TreeMap<Integer, List<EventListener<T>>> subscribers = new TreeMap<> ((i1, i2) -> Integer.compare(i2, i1));
 
     /// Determines if the event is only called in logical side
     protected final LogicalSide logicalSide;
@@ -32,9 +34,11 @@ public class EventHook<T extends Event> {
 
     /// Post the event to subscribers and execute tasks by their priority in descending order
     public T post(T event) {
-        for (EventListener<T> subscriber : this.subscribers.values()) {
-            if (subscriber.subscriptionType() instanceof DefaultEventSubscription<T> passiveSubscription) {
-                passiveSubscription.fire(event);
+        for (List<EventListener<T>> tier : this.subscribers.values()) {
+            for (EventListener<T> subscriber : tier) {
+                if (subscriber.subscriptionType() instanceof DefaultEventSubscription<T> passiveSubscription) {
+                    passiveSubscription.fire(event);
+                }
             }
         }
 
@@ -47,7 +51,7 @@ public class EventHook<T extends Event> {
             throw new IllegalArgumentException("EventHook instance must be a subtype of LivingEntityPatchEvent to be posted with EntityEventListener");
         }
 
-        Stream.concat(this.subscribers.values().stream(), eventListener.getListenersFor(this))
+        Stream.concat(this.subscribers.values().stream().flatMap(List::stream), eventListener.getListenersFor(this))
             .sorted((o1, o2) -> Integer.compare(o2.priority(), o1.priority()))
             .forEach(subscriber -> {
                 if (subscriber.subscriptionType() instanceof DefaultEventSubscription<T> passiveSubscription) {
@@ -77,7 +81,7 @@ public class EventHook<T extends Event> {
 	
 	/// Registers an event with full parameters
 	public void registerEvent(DefaultEventSubscription<T> subscription, String name, int priority) {
-		this.subscribers.put(priority, new EventListener<> (name, priority, subscription));
+		this.subscribers.computeIfAbsent(priority, _ -> new ArrayList<>()).add(new EventListener<> (name, priority, subscription));
 	}
 
     /// Returns which side the event hook should be posted

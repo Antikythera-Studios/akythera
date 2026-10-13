@@ -5,7 +5,7 @@ import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.asset.AssetAccessor;
 import com.yesman.akythera.api.asset.animation.AnimationManager;
-import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.animation.keyframe.AnimationClip;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.notify.AnimationNotifyTrack;
@@ -64,7 +64,7 @@ public record AnimationSequence(
     }
 
     @Override
-    public void tick(final EntityPatch<Entity> owner, final float prevElapsedTime, final float currentElapsedTime) {
+    public void tick(final ComponentAttachable owner, final float prevElapsedTime, final float currentElapsedTime) {
         notifyTrack.tick(this, owner, prevElapsedTime, currentElapsedTime);
     }
 

@@ -15,14 +15,13 @@ import com.yesman.akythera.core.asset.loader.AnimationLoader;
 import com.yesman.akythera.core.asset.loader.AssetLoader;
 import com.yesman.akythera.core.asset.loader.ResourceLoadingFailureException;
 import net.minecraft.resources.Identifier;
-import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.HashSet;
 import java.util.Set;
 
-public final class AnimationManager extends DynamicAssetManager<@NotNull AnimationClip> {
+public final class AnimationManager extends DynamicAssetManager<@NonNull AnimationClip> {
     public static final AssetAccessor<AnimationClip> EMPTY_ANIMATION_ACCESSOR = new SingletonAccessor<> (
         Identifier.fromNamespaceAndPath(Akythera.MODID, "empty"),
         AnimationClip.builder().build(),

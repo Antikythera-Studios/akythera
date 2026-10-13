@@ -3,6 +3,7 @@ package com.yesman.akythera.client.core.shader.backend.impl.vulkan;
 import com.yesman.akythera.client.core.shader.backend.program.ComputeUniform;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
+import org.joml.Vector3fc;
 
 import java.nio.ByteBuffer;
 
@@ -41,5 +42,14 @@ record VulkanComputeUniform(ByteBuffer block, int offset, int size) implements C
         if (block == null) return;
 
         block.putInt(offset, value);
+    }
+
+    @Override
+    public void putVector3f(final Vector3fc value) {
+        if (block == null) return;
+
+        block.putFloat(offset, value.x());
+        block.putFloat(offset + 4, value.y());
+        block.putFloat(offset + 8, value.z());
     }
 }

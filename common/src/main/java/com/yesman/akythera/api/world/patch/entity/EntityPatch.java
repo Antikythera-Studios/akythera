@@ -13,22 +13,27 @@ import com.yesman.akythera.core.blueprint.ComponentBlueprint;
 import com.yesman.akythera.core.blueprint.EntityPatchBlueprint;
 import com.yesman.akythera.core.blueprint.script.EntityPatchScript;
 import com.yesman.akythera.core.reflection.ScriptFunction;
+import com.yesman.akythera.core.reflection.ScriptType;
 import com.yesman.akythera.core.util.ClientOnly;
+import com.yesman.akythera.core.util.LogicalSide;
 import net.minecraft.core.Holder;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerPlayer;
+import com.yesman.akythera.core.math.Transform;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Quaterniond;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.text.MessageFormat;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /// A modularized extra entity data required by Epic Fight. To avoid
@@ -40,6 +45,7 @@ import java.util.Map;
 /// while keeping compatibility with other addons.
 ///
 /// Register custom entity patches via [ComponentsFactory#registerEntityPatchProvider].
+@ScriptType(autoRegister = false)
 public class EntityPatch<T extends Entity> implements AnimatableObject, ComponentAttachable {
     /// An owner of the patch. Use [#getOriginal()] to access this field.
     @NonNull
@@ -56,6 +62,9 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
 
     /// Components by type. Each component is unique in the patch
     private final Map<Class<? extends UniqueComponent>, ? extends UniqueComponent> uniqueComponents;
+
+    /// Whether the entity's own vanilla model and its layers are skipped while this patch renders.
+    private boolean blockVanillaRender;
 
     // Constructor for hardcoded entity patches. Register components manually using
     // `BuiltInEventHooks.Entity.CONSTRUCTED` event in subclasses.
@@ -77,15 +86,13 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
         entityEventListener = new EntityEventListener(this);
         buildEventListeners();
 
-        Map<String, PatchComponent> componentGather = new HashMap<>();
+        // Insertion-ordered: declaration order is what [ComponentAttachable#findComponent] reads as
+        // priority order, which is how "the" armature of several is picked.
+        Map<String, PatchComponent> componentGather = new LinkedHashMap<>();
         EntityConstructEvent event = new EntityConstructEvent(this, componentGather, false);
 
         if (script != null) {
-            for (Map.Entry<String, ComponentBlueprint<?, ?>> entry : script.componentsToAttach().entrySet()) {
-                event.addComponent(entry.getKey(), ((ComponentBlueprint<?, Object>)entry.getValue()).instantiate(this));
-            }
-
-            script.onConstruct();
+            ComponentBlueprint.instantiateAll(script.componentsToAttach(), this, isLogicalClient(), event::addComponent);
         }
 
         BuiltInEventHooks.Entity.CONSTRUCTED.post(event);
@@ -110,19 +117,22 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
         }
 
         uniqueComponents = Collections.unmodifiableMap(uniqueComponentMap);
+
+        if (script != null) script.onConstruct();
     }
 
-    /// Copy constructor. Called on datapack reload and dimension changes.
+    /// Copy constructor. Called on dimension changes.
     @SuppressWarnings({"unchecked", "rawtypes"})
     public EntityPatch(final EntityPatch<T> copyTarget) {
         original = copyTarget.original;
         script = copyTarget.script;
+        blockVanillaRender = copyTarget.blockVanillaRender;
 
         // Note: event listener must be fully reloaded with new lambda because the old lambda points the old entity patch's methods.
         entityEventListener = new EntityEventListener(this);
         buildEventListeners();
 
-        final Map<String, PatchComponent> componentGather = new HashMap<>();
+        final Map<String, PatchComponent> componentGather = new LinkedHashMap<>();
 
         copyTarget.components.entrySet().stream()
             .map(entry ->
@@ -174,6 +184,16 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
         return components;
     }
 
+    @Override
+    public LogicalSide logicalSide() {
+        return isLogicalClient() ? LogicalSide.CLIENT : LogicalSide.SERVER;
+    }
+
+    /// The script the patch was built from, or null for a patch built in code.
+    public @Nullable EntityPatchScript getScript() {
+        return script;
+    }
+
     /// Called when a player in a server level starts to track this entity in their local client
     ///
     /// Send data that requires to be synced
@@ -203,8 +223,8 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
     /// Ticks after [Entity#tick]
 	public void postTick() {
         components.values().forEach(component -> {
-            if (component instanceof TickableDynamicComponent<?> tickableDynamicComponent) {
-                tickableDynamicComponent.tick();
+            if (component.isEnabled() && component instanceof TickableComponent tickableComponent) {
+                tickableComponent.tick();
             }
         });
 
@@ -229,7 +249,7 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
         // deltaTime == 0.0 means the game is paused, so don't call the update logic
         if (deltaTime > 0.0F) {
             components.values().forEach(component -> {
-                if (component instanceof TickableDynamicComponent<?> tickableDynamicComponent) {
+                if (component.isEnabled() && component instanceof TickableDynamicComponent<?> tickableDynamicComponent) {
                     tickableDynamicComponent.frameUpdate(deltaTime, partialTick);
                 }
             });
@@ -273,12 +293,53 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
 		return original.level();
 	}
 
+    @ScriptFunction(pure = true, label = "Blocks Vanilla Render", category = "Render", desc = """
+        Returns whether the entity's own vanilla model and its layers are skipped
+    """)
+    public boolean isBlockingVanillaRender() {
+        return blockVanillaRender;
+    }
+
+    @ScriptFunction(label = "Block Vanilla Render", category = "Render", desc = """
+        Skips the entity's own vanilla model and its layers, or gives them back
+    """)
+    public void setBlockVanillaRender(final boolean blockVanillaRender) {
+        this.blockVanillaRender = blockVanillaRender;
+    }
+
     /// Returns a dynamic event listener manager
     ///
     /// Use [EntityEventListener#registerEvent] to add event listeners or
     /// [EntityEventListener#removeListenersBelongTo] to remove listeners.
     public EntityEventListener getEntityEventListener() {
         return entityEventListener;
+    }
+
+    /// Where this entity's armature model space sits in world space: at the entity's position, turned by its body yaw
+    /// the way vanilla's living entity renderer turns the model, and scaled by the entity's scale. Posing only a renderer
+    /// applies (sleeping, dying, a renderer's own model scale) is left out.
+    public Transform getModelTransform() {
+        float scale = getOriginal() instanceof LivingEntity livingEntity ? livingEntity.getScale() : 1.0F;
+
+        return new Transform(
+            getOriginal().position(),
+            new Quaterniond().rotationY((180.0F - getVisualYRot()) * Mth.DEG_TO_RAD),
+            new Vec3(scale, scale, scale)
+        );
+    }
+
+    @ScriptFunction(pure = true, label = "Get Component Transform", category = "Component", desc = """
+        Returns the local transform of the component at the path, or null when no transform component sits there
+    """)
+    public @Nullable Transform getComponentTransform(final String path) {
+        return getComponentAt(path) instanceof TransformComponent component ? component.localTransform() : null;
+    }
+
+    @ScriptFunction(label = "Set Component Transform", category = "Component", desc = """
+        Replaces the local transform of the component at the path. Does nothing when no transform component sits there
+    """)
+    public void setComponentTransform(final String path, final Transform transform) {
+        if (getComponentAt(path) instanceof TransformComponent component) component.setLocalTransform(transform);
     }
 
     /// Transform the given vector to the world transform applied one, based on the entity's yaw and
@@ -307,12 +368,17 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
 
     @SuppressWarnings("unchecked") @Override
     public <C extends UniqueComponent> C getComponent(final Class<C> type) {
-        return (C)uniqueComponents.get(type);
+        UniqueComponent component = uniqueComponents.get(type);
+
+        return component != null && component.isEnabled() ? (C)component : null;
     }
 
+    /// The first switched-on [ArmatureComponent] this patch lists. A patch may hold several—one per
+    /// animated layer—and this is the one every consumer asking for "the" armature takes. An armature
+    /// is no longer a [UniqueComponent], so this is the only way to reach one.
     @Override
     public @Nullable ArmatureComponent getArmatureComponent() {
-        return getComponent(ArmatureComponent.class);
+        return findComponent(ArmatureComponent.class);
     }
 
     // *************************************

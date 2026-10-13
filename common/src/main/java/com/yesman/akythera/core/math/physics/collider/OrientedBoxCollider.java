@@ -3,6 +3,7 @@ package com.yesman.akythera.core.math.physics.collider;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.component.ComponentAttachable;
+import com.yesman.akythera.api.component.TransformInheritPolicy;
 import com.yesman.akythera.core.math.Transform;
 import com.yesman.akythera.core.math.physics.collider.component.OrientedBoxColliderComponent;
 import com.yesman.akythera.core.util.helper.MathUtils;
@@ -15,8 +16,10 @@ public final class OrientedBoxCollider extends Collider {
     public static final MapCodec<OrientedBoxCollider> CODEC = RecordCodecBuilder.mapCodec(
         instance ->
             instance.group(
-                Transform.CODEC.fieldOf("transform").forGetter(Collider::getPivotTransform),
-                Vec3.CODEC.fieldOf("length").forGetter(OrientedBoxCollider::getLength)
+                TRANSFORM_CODEC.forGetter(Collider::getPivotTransform),
+                TRANSFORM_INHERIT_POLICY_CODEC.forGetter(Collider::getTransformInheritPolicy),
+                Vec3.CODEC.fieldOf("length").forGetter(OrientedBoxCollider::getLength),
+                ENABLED_CODEC.forGetter(Collider::enabled)
             )
             .apply(instance, OrientedBoxCollider::new)
     );
@@ -30,8 +33,13 @@ public final class OrientedBoxCollider extends Collider {
     /// Half of [#length] along each of [#axes], the pivot's scale folded in
     private final Vec3 halfExtents;
 
-    public OrientedBoxCollider(final Transform pivotTransform, final Vec3 length) {
-        super(pivotTransform);
+    public OrientedBoxCollider(
+        final Transform pivotTransform,
+        final TransformInheritPolicy transformInheritPolicy,
+        final Vec3 length,
+        final boolean enabled
+    ) {
+        super(pivotTransform, transformInheritPolicy, enabled);
 
         this.length = length;
         this.halfExtents = length.scale(0.5D).multiply(pivotTransform.sca());
@@ -54,7 +62,7 @@ public final class OrientedBoxCollider extends Collider {
 
     @Override
     public OrientedBoxColliderComponent instantiate(final @Nullable ComponentAttachable host) {
-        return new OrientedBoxColliderComponent(this, Transform.identity());
+        return new OrientedBoxColliderComponent(this, host, Transform.identity());
     }
 
     @Override

@@ -103,12 +103,11 @@ public final class GlComputeProgram implements ComputeProgram {
         @Override
         public void dispatch(final int countX, final int countY, final int countZ) {
             ARBComputeShader.glDispatchCompute(countX, countY, countZ);
+            ARBShaderImageLoadStore.glMemoryBarrier(barrierBits);
         }
 
         @Override
         public void close() {
-            ARBShaderImageLoadStore.glMemoryBarrier(barrierBits);
-
             for (int i = 0; i < takenBindings.size(); i++) {
                 glBindBufferBase(ARBShaderStorageBufferObject.GL_SHADER_STORAGE_BUFFER, takenBindings.getInt(i), 0);
             }

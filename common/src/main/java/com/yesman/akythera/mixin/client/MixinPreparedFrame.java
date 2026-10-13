@@ -1,6 +1,7 @@
 package com.yesman.akythera.mixin.client;
 
 import com.yesman.akythera.client.core.renderer.PatchModelRenderer;
+import com.yesman.akythera.client.core.renderer.TrailRenderer;
 import net.minecraft.client.renderer.feature.FeatureRenderDispatcher;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -20,10 +21,12 @@ public abstract class MixinPreparedFrame {
     @Inject(at = @At("TAIL"), method = "executeTranslucent()V")
     private void akythera$renderTranslucentSkinnedMeshes(CallbackInfo callbackInfo) {
         PatchModelRenderer.getInstance().renderTranslucent();
+        TrailRenderer.getInstance().render();
     }
 
     @Inject(at = @At("TAIL"), method = "close()V")
     private void akythera$clearSkinnedMeshSubmits(CallbackInfo callbackInfo) {
         PatchModelRenderer.getInstance().clear();
+        TrailRenderer.getInstance().clear();
     }
 }

@@ -6,6 +6,8 @@ import com.yesman.akythera.core.event.subscription.DefaultEventSubscription;
 import com.yesman.akythera.core.util.LogicalSide;
 import com.yesman.akythera.api.world.patch.entity.component.EntityEventListener;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.stream.Stream;
 
 /// EventHook definition for [CancelableEvent]
@@ -21,17 +23,19 @@ public class CancelableEventHook<T extends Event & CancelableEvent> extends Even
     public T post(T event) {
         EventContext eventContext = event.getEventContext();
 
-        for (EventListener<T> subscriber : this.subscribers.values()) {
-            eventContext.subscriptionStart(subscriber.identifier());
+        for (List<EventListener<T>> tier : this.subscribers.values()) {
+            for (EventListener<T> subscriber : tier) {
+                eventContext.subscriptionStart(subscriber.identifier());
 
-            if (subscriber.subscriptionType() instanceof DefaultEventSubscription<T> defaultSubscription) {
-                if (!event.isCanceled()) {
-                    defaultSubscription.fire(event);
+                if (subscriber.subscriptionType() instanceof DefaultEventSubscription<T> defaultSubscription) {
+                    if (!event.isCanceled()) {
+                        defaultSubscription.fire(event);
+                        eventContext.onCalled();
+                    }
+                } else if (subscriber.subscriptionType() instanceof ContextAwareEventSubscription<T> contextAwareSubscription) {
+                    contextAwareSubscription.fire(event, eventContext);
                     eventContext.onCalled();
                 }
-            } else if (subscriber.subscriptionType() instanceof ContextAwareEventSubscription<T> contextAwareSubscription) {
-                contextAwareSubscription.fire(event, eventContext);
-                eventContext.onCalled();
             }
         }
 
@@ -49,7 +53,7 @@ public class CancelableEventHook<T extends Event & CancelableEvent> extends Even
 
         EventContext eventContext = event.getEventContext();
 
-        Stream.concat(this.subscribers.values().stream(), eventListener.getListenersFor(this))
+        Stream.concat(this.subscribers.values().stream().flatMap(List::stream), eventListener.getListenersFor(this))
             .sorted((o1, o2) -> Integer.compare(o2.priority(), o1.priority()))
             .forEach(subscriber -> {
                 eventContext.subscriptionStart(subscriber.identifier());
@@ -89,7 +93,7 @@ public class CancelableEventHook<T extends Event & CancelableEvent> extends Even
 
     /// Registers an event with full parameters
     public void registerContextAwareEvent(ContextAwareEventSubscription<T> subscription, String name, int priority) {
-        this.subscribers.put(priority, new EventListener<> (name, priority, subscription));
+        this.subscribers.computeIfAbsent(priority, _ -> new ArrayList<>()).add(new EventListener<> (name, priority, subscription));
     }
 
     /// Defines a cancelable event hook

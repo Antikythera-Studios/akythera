@@ -1,12 +1,16 @@
 package com.yesman.akythera.api.world.ability;
 
+import com.yesman.akythera.api.data.modularize.ScriptFunction;
 import com.yesman.akythera.client.input.AbilityInputInterface;
 import com.yesman.akythera.core.blueprint.AbilityBlueprint;
+import com.yesman.akythera.core.reflection.BlueprintFunction;
+import com.yesman.akythera.core.reflection.ScriptType;
 import com.yesman.akythera.core.util.ClientOnly;
 import net.minecraft.resources.ResourceKey;
 import org.jetbrains.annotations.ApiStatus;
 import org.jspecify.annotations.Nullable;
 
+@ScriptType
 public abstract class Ability<S extends AbilityState> {
     /// The datapack entry that built this ability, or null when Java did.
     ///
@@ -23,6 +27,7 @@ public abstract class Ability<S extends AbilityState> {
     }
 
     /// Which sides instantiate this ability.
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.PROPERTY)
     public InstantiationScope getInstantiationScope() {
         return InstantiationScope.EVERYWHERE;
     }
@@ -46,6 +51,7 @@ public abstract class Ability<S extends AbilityState> {
     }
 
     /// Whether the owner may activate this ability right now.
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.FUNCTION)
     public boolean canActivate(
         final AbilitySystemComponent abilitySystemComponent,
         final AbilityInstance abilityInstance,
@@ -55,6 +61,7 @@ public abstract class Ability<S extends AbilityState> {
     }
 
     /// Called when this ability is equipped into a slot.
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.EVENT_GRAPH)
     public void onEquipped(
         final AbilitySystemComponent abilitySystemComponent,
         final AbilityInstance abilityInstance,
@@ -64,6 +71,7 @@ public abstract class Ability<S extends AbilityState> {
     }
 
     /// Called when this ability leaves its slot.
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.EVENT_GRAPH)
     public void onUnequipped(
         final AbilitySystemComponent abilitySystemComponent,
         final AbilityInstance abilityInstance,
@@ -72,24 +80,28 @@ public abstract class Ability<S extends AbilityState> {
 
     }
 
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.EVENT_GRAPH)
     public abstract void onActivated(
         final AbilitySystemComponent abilitySystemComponent,
         final AbilityInstance abilityInstance,
         final S abilityState
     );
 
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.EVENT_GRAPH)
     public abstract void onRecast(
         final AbilitySystemComponent abilitySystemComponent,
         final AbilityInstance abilityInstance,
         final S abilityState
     );
 
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.EVENT_GRAPH)
     public abstract void onCanceled(
         final AbilitySystemComponent abilitySystemComponent,
         final AbilityInstance abilityInstance,
         final S abilityState
     );
 
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.EVENT_GRAPH)
     public abstract void onFinished(
         final AbilitySystemComponent abilitySystemComponent,
         final AbilityInstance abilityInstance,
