@@ -26,6 +26,9 @@ import java.util.Map;
 
 /// One simulated cloth: the particle state of a [ClothComputeShader], stepped once per rendered frame.
 ///
+/// Particles are simulated at the size the cloth was authored in. The scale of the pose it is drawn
+/// under is applied to the simulated result, as it is to any other vertex.
+///
 /// State never leaves the GPU. The first frame, a reset, a frame gap past [#RESET_GAP_SECONDS] and an
 /// owner farther than [#REBASE_DISTANCE] from the simulation origin all re-skin every particle onto its
 /// animated position.
@@ -113,7 +116,8 @@ public final class ClothSimulationInstance implements AutoCloseable {
     ///
     /// @param parameters         the `ParamsBuffer` slice, null when [#simulate] is false
     /// @param colliders          the `ColliderBuffer` slice, null when [#simulate] is false
-    /// @param simulationToCamera simulation space to the camera-relative space the pose stack is in
+    /// @param simulationToCamera simulation space to the camera-relative space the pose stack is in,
+    ///                           carrying the pose's scale
     /// @param simulate           false for a second submission within one frame
     public record Frame(
         @Nullable GpuBufferSlice parameters,
@@ -178,13 +182,20 @@ public final class ClothSimulationInstance implements AutoCloseable {
             origin = armatureWorld;
         }
 
-        // R · T · pose on the way in, T⁻¹ · R⁻¹ on the way out: the two compose back to the pose, so a
-        // particle resting on its animated position draws where the skinned vertex would
+        // The pose with its scale taken off: where the armature is and how it is turned
+        Matrix4f rigidToCamera = new Matrix4f().translationRotate(
+            armatureOrigin.x, armatureOrigin.y, armatureOrigin.z,
+            armatureToCamera.getUnnormalizedRotation(new Quaternionf()).normalize()
+        );
+
+        // R · T · rigid on the way in, pose · rigid⁻¹ · T⁻¹ · R⁻¹ on the way out: the two compose back to
+        // the pose, so a particle resting on its animated position draws where the skinned vertex would
         Matrix4f armatureToSimulation = new Matrix4f(simulationRotation)
             .translate((float) (cameraPosition.x - origin.x), (float) (cameraPosition.y - origin.y), (float) (cameraPosition.z - origin.z))
-            .mul(armatureToCamera);
-        Matrix4f simulationToCamera = new Matrix4f()
-            .translation((float) (origin.x - cameraPosition.x), (float) (origin.y - cameraPosition.y), (float) (origin.z - cameraPosition.z))
+            .mul(rigidToCamera);
+        Matrix4f simulationToCamera = new Matrix4f(armatureToCamera)
+            .mul(rigidToCamera.invert(new Matrix4f()))
+            .translate((float) (origin.x - cameraPosition.x), (float) (origin.y - cameraPosition.y), (float) (origin.z - cameraPosition.z))
             .mul(new Matrix4f(simulationRotation).invert());
 
         if (!simulate) {

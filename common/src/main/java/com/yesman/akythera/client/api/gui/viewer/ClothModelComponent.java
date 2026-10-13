@@ -14,6 +14,7 @@ import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.asset.armature.Armature;
 import com.yesman.akythera.core.asset.physics.ArmaturePhysicsData;
+import com.yesman.akythera.core.math.Transform;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.texture.MissingTextureAtlasSprite;
@@ -57,6 +58,9 @@ public final class ClothModelComponent implements Model3DViewerComponent {
     /// The pose the mesh is skinned by, advanced by whoever owns it. Null holds the T-pose.
     private Supplier<@Nullable Pose> poseSource = () -> null;
 
+    /// Where the mesh sits in the viewer's space, read per frame.
+    private Supplier<Transform> transformSource = () -> Transform.IDENTITY;
+
     private @Nullable ClothComputeShader setup;
     private @Nullable ClothSimulationInstance instance;
 
@@ -95,6 +99,11 @@ public final class ClothModelComponent implements Model3DViewerComponent {
     /// supplier's owner does, so one animator can pose the body and its cloth alike.
     public void setPoseSource(final Supplier<@Nullable Pose> poseSource) {
         this.poseSource = poseSource;
+    }
+
+    /// The transform the mesh is drawn under, read per frame.
+    public void setTransformSource(final Supplier<Transform> transformSource) {
+        this.transformSource = transformSource;
     }
 
     /// Re-skins the cloth onto the animated pose on the next frame.
@@ -138,6 +147,9 @@ public final class ClothModelComponent implements Model3DViewerComponent {
         Identifier sidecar = skeletalMesh.getMetadata().texture();
         Identifier drawTexture = supplied != null ? supplied : sidecar != null ? sidecar : MissingTextureAtlasSprite.getLocation();
 
+        poseStack.pushPose();
+        poseStack.mulPose(transformSource.get().toMatrix());
+
         PatchModelRenderer.getInstance().drawClothMeshImmediate(
             instance,
             armature,
@@ -152,6 +164,8 @@ public final class ClothModelComponent implements Model3DViewerComponent {
             OverlayTexture.NO_OVERLAY,
             NO_TINT
         );
+
+        poseStack.popPose();
     }
 
     @Override

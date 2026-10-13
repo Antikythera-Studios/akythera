@@ -141,11 +141,13 @@ void main() {
 
     if (particle >= 0) {
         ParticleState state = states[particle];
-        // A rotation plus a translation, so the transpose of its 3x3 part undoes the rotation
+        // Carries the pose's scale, so a normal crosses it by the inverse transpose: the transpose into
+        // simulation space, its inverse back out
         mat3 simulationToView = mat3(simulation_to_view);
+        vec3 simulationNormal = normalize(transpose(simulationToView) * finalNormal);
 
         finalPosition = (simulation_to_view * vec4(state.position.xyz, 1.0)).xyz;
-        finalNormal = normalize(simulationToView * turn(state.axis_x, state.axis_y, transpose(simulationToView) * finalNormal));
+        finalNormal = normalize(inverse(transpose(simulationToView)) * turn(state.axis_x, state.axis_y, simulationNormal));
     }
 
     out_vert[vertex_id].px = finalPosition.x;
