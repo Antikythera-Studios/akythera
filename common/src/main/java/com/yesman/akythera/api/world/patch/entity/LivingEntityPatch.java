@@ -46,11 +46,14 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
     /// call diffs against.
     private Map<AnimationInterfaceKey, ResourceKey<? extends PlayableAnimation>> animationReplacements = Map.of();
 
+    /// This entity's own item patch per equipment slot, and the shared patch it was built from.
+    private final Map<EquipmentSlot, SlotItemPatch> slotItemPatches = new EnumMap<>(EquipmentSlot.class);
+
     /// Whether [#animationReplacements] were written through their mirrored twins.
     private boolean replacementsMirrored;
 
-    /// This entity's own item patch per equipment slot, and the shared patch it was built from.
-    private final Map<EquipmentSlot, SlotItemPatch> slotItemPatches = new EnumMap<>(EquipmentSlot.class);
+    /// Whether [LivingEntity#yBodyRot]
+    private boolean syncBodyYRot = true;
 
     /// What [#getMovementYaw] last returned.
     private float movementYaw;
@@ -96,6 +99,13 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
         }
 
         refreshAnimationReplacements(getEquippedComponent(ReplaceAnimations.class));
+    }
+
+    @Override
+    public void postTickClient() {
+        super.postTickClient();
+
+        if (syncBodyYRot) getOriginal().setYBodyRot(getOriginal().getYRot());
     }
 
     /// The adapter that established the current stance, the item patch declaring it and the slot that
@@ -220,6 +230,10 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
         return getItemPatchInSlot(EquipmentSlot.OFFHAND);
     }
 
+    // ***************************************************************
+    // Common Getters
+    // ***************************************************************
+
     @ScriptFunction(pure = true, label = "Get Health")
     public float getHealth() {
         return getOriginal().getHealth();
@@ -319,6 +333,14 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
     @ScriptFunction(pure = true, label = "Is Dead or Dying")
     public boolean isDeadOrDying() {
         return getOriginal().isDeadOrDying();
+    }
+
+    // ***************************************************************
+    // Common Setters
+    // ***************************************************************
+    @ScriptFunction(label = "Set Sync Body Yaw", desc = "Determines whether the body yaw rotation sync to entity's model yaw.")
+    public void setSyncBodyYRot(final boolean flag) {
+        syncBodyYRot = flag;
     }
 
     /// An entity's own item patch for one slot, and the shared patch it was built from, which tells when the slot's
