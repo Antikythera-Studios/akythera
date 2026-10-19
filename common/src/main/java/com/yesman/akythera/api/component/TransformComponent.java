@@ -13,8 +13,7 @@ import org.jspecify.annotations.Nullable;
 /// The parent space is found by walking [#host]:
 /// - a `TransformComponent` gives its [#modelTransform],
 /// - a [DynamicPatchComponent] passes the walk on to its owner,
-/// - an [ItemPatch] an entity holds gives the [EquipmentSlotAnchor] drawing its slot,
-/// - any other host (an [EntityPatch], the shared [ItemPatch]) is the model space's origin.
+/// - any other host (an [EntityPatch], an [ItemPatch]) is the model space's origin.
 public interface TransformComponent extends PatchComponent {
     /// This component's transform inside its parent space.
     Transform localTransform();
@@ -69,13 +68,6 @@ public interface TransformComponent extends PatchComponent {
                     return previous ? transform.previousModelTransform() : transform.modelTransform();
                 }
                 case DynamicPatchComponent<?> dynamic -> walked = dynamic.getOwner();
-                case ItemPatch itemPatch -> {
-                    EquipmentSlotAnchor anchor = itemPatch.getAnchor();
-
-                    if (anchor == null) return Transform.IDENTITY;
-
-                    return previous ? anchor.previousModelTransform() : anchor.modelTransform();
-                }
                 default -> walked = null;
             }
         }
@@ -94,7 +86,6 @@ public interface TransformComponent extends PatchComponent {
                 }
                 case TransformComponent transform -> walked = transform.host();
                 case DynamicPatchComponent<?> dynamic -> walked = dynamic.getOwner();
-                case ItemPatch itemPatch -> walked = itemPatch.getHolder();
                 default -> walked = null;
             }
         }

@@ -45,6 +45,11 @@ public record SpawnRateRule(float rate, float duration, boolean loop) implements
     }
 
     @Override
+    public SpawnRateRule withDuration(final float duration) {
+        return new SpawnRateRule(rate, duration, loop);
+    }
+
+    @Override
     public MapCodec<SpawnRateRule> mapCodec() {
         return MAP_CODEC;
     }

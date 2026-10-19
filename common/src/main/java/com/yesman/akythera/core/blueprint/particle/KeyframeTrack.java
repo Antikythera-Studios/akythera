@@ -3,6 +3,7 @@ package com.yesman.akythera.core.blueprint.particle;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
@@ -42,6 +43,17 @@ public record KeyframeTrack<T>(List<Key<T>> keys) {
         Key<T> to = keys.get(after);
 
         return interpolator.interpolate(from.value, to.value, (time - from.time) / (to.time - from.time));
+    }
+
+    /// This track ending at `end` seconds: the keys before `end`, then a key at `end` holding the value there, which is
+    /// the last key's when `end` is past it. An empty track stays empty.
+    public KeyframeTrack<T> endingAt(final float end, final Interpolator<T> interpolator) {
+        if (keys.isEmpty()) return this;
+
+        List<Key<T>> cut = new ArrayList<>(keys.stream().filter(key -> key.time < end).toList());
+        cut.add(new Key<>(end, sample(end, keys.getFirst().value, interpolator)));
+
+        return new KeyframeTrack<>(cut);
     }
 
     /// @param time in seconds since the emitter's time span started

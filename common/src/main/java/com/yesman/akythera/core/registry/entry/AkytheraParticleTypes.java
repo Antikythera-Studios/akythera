@@ -17,6 +17,8 @@ import com.yesman.akythera.client.api.particle.module.Spinner2DInitializer;
 import com.yesman.akythera.client.api.particle.module.Spinner2DUpdater;
 import com.yesman.akythera.client.api.particle.module.Spinner3DInitializer;
 import com.yesman.akythera.client.api.particle.module.Spinner3DUpdater;
+import com.yesman.akythera.client.api.particle.module.TrailLengthInitializer;
+import com.yesman.akythera.client.api.particle.module.TrailLengthUpdater;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.blueprint.particle.EmitterSpawnRule;
 import com.yesman.akythera.core.blueprint.particle.InstantSpawnRule;
@@ -28,6 +30,7 @@ import com.yesman.akythera.core.blueprint.particle.SpawnRateRule;
 import com.yesman.akythera.core.blueprint.particle.SpriteParticleBlueprint;
 import com.yesman.akythera.core.blueprint.particle.StaticMeshParticleBlueprint;
 import com.yesman.akythera.core.blueprint.particle.TrailParticleBlueprint;
+import com.yesman.akythera.core.blueprint.particle.TrailSpawnRule;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.platform.ModPlatform;
 import com.yesman.akythera.platform.ModPlatformProvider;
@@ -60,6 +63,8 @@ public final class AkytheraParticleTypes {
 
     public static final Holder<MapCodec<? extends EmitterSpawnRule>> SPAWN_RATE = SPAWN_RULE_REGISTRAR.register("spawn_rate", () -> SpawnRateRule.MAP_CODEC);
 
+    public static final Holder<MapCodec<? extends EmitterSpawnRule>> TRAIL_SPAWN = SPAWN_RULE_REGISTRAR.register("trail", () -> TrailSpawnRule.MAP_CODEC);
+
     public static final Holder<MapCodec<? extends ParticleInitializerBlueprint>> CLASS_INITIALIZER = INITIALIZER_REGISTRAR.register("class", () -> ParticleInitializerBlueprint.ByClass.MAP_CODEC);
 
     public static final Holder<MapCodec<? extends ParticleInitializerBlueprint>> DATA_INITIALIZER = INITIALIZER_REGISTRAR.register("data", () -> ParticleInitializerBlueprint.ByData.MAP_CODEC);
@@ -82,6 +87,8 @@ public final class AkytheraParticleTypes {
 
     public static final Holder<MapCodec<? extends ParticleInitializerBlueprint>> GLOWER_INITIALIZER = INITIALIZER_REGISTRAR.register("glower", () -> GlowerInitializer.MAP_CODEC);
 
+    public static final Holder<MapCodec<? extends ParticleInitializerBlueprint>> TRAIL_LENGTH_INITIALIZER = INITIALIZER_REGISTRAR.register("trail_length", () -> TrailLengthInitializer.MAP_CODEC);
+
     public static final Holder<MapCodec<? extends ParticleUpdaterBlueprint>> CLASS_UPDATER = UPDATER_REGISTRAR.register("class", () -> ParticleUpdaterBlueprint.ByClass.MAP_CODEC);
 
     public static final Holder<MapCodec<? extends ParticleUpdaterBlueprint>> DATA_UPDATER = UPDATER_REGISTRAR.register("data", () -> ParticleUpdaterBlueprint.ByData.MAP_CODEC);
@@ -99,4 +106,6 @@ public final class AkytheraParticleTypes {
     public static final Holder<MapCodec<? extends ParticleUpdaterBlueprint>> PAINTER_UPDATER = UPDATER_REGISTRAR.register("painter", () -> PainterUpdater.MAP_CODEC);
 
     public static final Holder<MapCodec<? extends ParticleUpdaterBlueprint>> GLOWER_UPDATER = UPDATER_REGISTRAR.register("glower", () -> GlowerUpdater.MAP_CODEC);
+
+    public static final Holder<MapCodec<? extends ParticleUpdaterBlueprint>> TRAIL_LENGTH_UPDATER = UPDATER_REGISTRAR.register("trail_length", () -> TrailLengthUpdater.MAP_CODEC);
 }

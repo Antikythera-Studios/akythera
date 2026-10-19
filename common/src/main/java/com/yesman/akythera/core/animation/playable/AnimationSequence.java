@@ -81,6 +81,11 @@ public record AnimationSequence(
     }
 
     @Override
+    public void interrupt(final ComponentAttachable owner, final float elapsedTime) {
+        notifyTrack.interrupt(this, owner, elapsedTime);
+    }
+
+    @Override
     public Pose getPose(final float time) {
         Pose pose = animClip.get().getPose(time);
 

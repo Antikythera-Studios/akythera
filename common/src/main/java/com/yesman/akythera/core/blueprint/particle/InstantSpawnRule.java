@@ -45,6 +45,11 @@ public record InstantSpawnRule(int count) implements EmitterSpawnRule {
     }
 
     @Override
+    public InstantSpawnRule withDuration(final float duration) {
+        return this;
+    }
+
+    @Override
     public MapCodec<InstantSpawnRule> mapCodec() {
         return MAP_CODEC;
     }

@@ -15,6 +15,7 @@ import net.minecraft.core.Holder;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.function.Supplier;
 
@@ -49,6 +50,12 @@ public final class BlendSpace2DDriver implements AnimationDriver {
     /// Last [AnimationDriver#tick] phase, the start of the winner node's notify window. Mirrors
     /// `AnimationPlayer#lastUpdatedTime`.
     private float lastUpdatedPhase;
+
+    /// Whether [#terminate] ran since the last [#start]. A terminated play fades out without driving notifies.
+    private boolean terminated;
+
+    /// The owner of the last [#tick], which a stopped play's notify states are ended for.
+    private @Nullable ComponentAttachable owner;
 
     private float targetX;
     private float targetY;
@@ -233,17 +240,33 @@ public final class BlendSpace2DDriver implements AnimationDriver {
         return true;
     }
 
+    /// Drives only the winner's notify track, and none once terminated.
     @Override
     public void tick(final ComponentAttachable owner) {
-        // Drive only the winner's notify track.
-        PlayableAnimation winner = switch (winnerDot) {
+        this.owner = owner;
+
+        if (!terminated) {
+            PlayableAnimation winner = winner();
+            winner.tick(owner, timeOf(winner, lastUpdatedPhase), timeOf(winner, phase));
+        }
+
+        lastUpdatedPhase = phase;
+    }
+
+    /// Ends the winner's notify states the last tick sits inside, for a play that stops before its end.
+    private void interruptNotifies() {
+        if (owner == null || terminated || cachedTriangleIndex == NO_TRIANGLE) return;
+
+        PlayableAnimation winner = winner();
+        winner.interrupt(owner, timeOf(winner, lastUpdatedPhase));
+    }
+
+    private PlayableAnimation winner() {
+        return switch (winnerDot) {
             case 0 -> cachedAnim1;
             case 1 -> cachedAnim2;
             default -> cachedAnim3;
         };
-
-        winner.tick(owner, timeOf(winner, lastUpdatedPhase), timeOf(winner, phase));
-        lastUpdatedPhase = phase;
     }
 
     /// Runs on the blended clock: the phase times the weighted loop length of the cached corner mix.
@@ -257,10 +280,13 @@ public final class BlendSpace2DDriver implements AnimationDriver {
         return phase;
     }
 
+    /// Restarting a play that still runs interrupts it.
     @Override
     public void start() {
+        interruptNotifies();
         fadingInOrOut = true;
         isFinished = false;
+        terminated = false;
         phase = 0.0F;
         lastUpdatedPhase = 0.0F;
         cachedTriangleIndex = NO_TRIANGLE;
@@ -269,7 +295,9 @@ public final class BlendSpace2DDriver implements AnimationDriver {
 
     @Override
     public void terminate() {
+        interruptNotifies();
         fadingInOrOut = false;
+        terminated = true;
     }
 
     @Override

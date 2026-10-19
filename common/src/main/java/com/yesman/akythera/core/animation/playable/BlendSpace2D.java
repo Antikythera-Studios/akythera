@@ -129,6 +129,10 @@ public final class BlendSpace2D implements PlayableAnimation {
     public void tick(ComponentAttachable owner, float prevElapsedTime, float currentElapsedTime) {
     }
 
+    @Override
+    public void interrupt(ComponentAttachable owner, float elapsedTime) {
+    }
+
     public float smoothX() {
         return smoothX;
     }

@@ -13,13 +13,13 @@ import net.minecraft.resources.Identifier;
 /// `length` blocks out, and draws the edges of the last `trailLifetime` ticks as one curved strip. Attach the system to
 /// a bone socket for a weapon trail. Drawn only where compute shaders are supported.
 ///
-/// The particle samples while it is younger than [ParticleProperties#lifetime], then stays until its last edge
-/// expires.
+/// An emitter spawns it by a [TrailSpawnRule]. The particle samples until the rule's time span ends, then stays until
+/// its last edge expires. [ParticleProperties#lifetime] is unused: the time span is the lifetime.
 ///
-/// @param length        in blocks, from the emitter's origin to the trail's far side along its +Z axis. The emitter's
+/// @param length        in blocks, from the emitter's origin to the trail's far side along its +Y axis. The emitter's
 ///                      own rotation turns it
-/// @param fadeOut       the share of the lifetime after which the trail fades out, 0 to 1. Alpha goes from the
-///                      color's own to 0 between `fadeOut × lifetime` and the lifetime. 1 never fades
+/// @param fadeOut       the share of the time span after which the trail fades out, 0 to 1. Alpha goes from the
+///                      color's own to 0 between `fadeOut × time span` and the time span's end. 1 never fades
 /// @param interpolation quads drawn per sampled edge
 /// @param trailLifetime in ticks, how long one sampled edge stays
 public record TrailParticleBlueprint(

@@ -21,6 +21,8 @@ import com.yesman.akythera.client.core.renderer.RenderUtils;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.asset.armature.Armature;
 import com.yesman.akythera.core.asset.loader.ResourceLoadingFailureException;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
@@ -37,6 +39,7 @@ import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.EntityType;
 import org.joml.Matrix4f;
@@ -47,7 +50,9 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.OptionalDouble;
 import java.util.function.Supplier;
 
@@ -57,6 +62,12 @@ public final class Model3DViewer extends AbstractWidget
     public static final int FULL_BRIGHT = (15 * 16) | ((15 * 16) << 16);
 
     private static final Vector4f TRANSPARENT_CLEAR_COLOR = new Vector4f(0.0F, 0.0F, 0.0F, 0.0F);
+
+    private static final int DEBUG_MESSAGE_COLOR = 0xFFE03C3C;
+
+    /// Gap between the debug messages and the view's left and bottom edges, in pixels.
+    private static final int DEBUG_MESSAGE_MARGIN = 8;
+    private static final int DEBUG_MESSAGE_LINE_H = 12;
 
     /// Default dimensions used for skeletal meshes that don't yet have a
     /// registered [EntityDimensions] association. Player-sized.
@@ -86,6 +97,9 @@ public final class Model3DViewer extends AbstractWidget
 
     /// Widgets floating over the 3D view. Hit-tested before picking, drawn after the blit.
     private final List<AbstractWidget> overlayWidgets = new ArrayList<>();
+
+    /// Error lines drawn at the view's bottom left, by the source that raised them.
+    private final Map<Object, List<Component>> debugMessages = new LinkedHashMap<>();
 
     /// The view / projection the last extracted frame rendered with — what [#buildRay] and
     /// [#projectToWidget] work against. Rebuilding them from [CameraComponent] instead would advance
@@ -141,6 +155,8 @@ public final class Model3DViewer extends AbstractWidget
         }
 
         if (!components.remove(component)) return;
+
+        debugMessages.remove(component);
 
         if (focused == component) focused = null;
         if (dragTarget == component) dragTarget = null;
@@ -215,6 +231,15 @@ public final class Model3DViewer extends AbstractWidget
     /// Drops every overlay widget of `type`.
     public void removeOverlayWidgets(Class<? extends AbstractWidget> type) {
         overlayWidgets.removeIf(type::isInstance);
+    }
+
+    /// Replaces the lines `source` shows at the view's bottom left. An empty list takes them down.
+    public void setDebugMessages(Object source, List<Component> messages) {
+        if (messages.isEmpty()) {
+            debugMessages.remove(source);
+        } else {
+            debugMessages.put(source, List.copyOf(messages));
+        }
     }
 
     public @Nullable Model3DViewerComponent getFocused() {
@@ -355,6 +380,7 @@ public final class Model3DViewer extends AbstractWidget
         for (Model3DViewerComponent c : components) c.destroy();
 
         overlayWidgets.clear();
+        debugMessages.clear();
         focused = null;
         dragTarget = null;
         matricesValid = false;
@@ -455,6 +481,20 @@ public final class Model3DViewer extends AbstractWidget
 
         // Border drawn on top of blit
         graphics.outline(x, y, w, h, 0xFF333333);
+
+        if (!debugMessages.isEmpty()) {
+            Font font = Minecraft.getInstance().font;
+            List<FormattedCharSequence> lines = debugMessages.values().stream()
+                .flatMap(List::stream)
+                .flatMap(message -> font.split(message, w - DEBUG_MESSAGE_MARGIN * 2).stream())
+                .toList();
+            int lineY = y + h - DEBUG_MESSAGE_MARGIN - lines.size() * DEBUG_MESSAGE_LINE_H;
+
+            for (FormattedCharSequence line : lines) {
+                graphics.text(font, line, x + DEBUG_MESSAGE_MARGIN, lineY, DEBUG_MESSAGE_COLOR, false);
+                lineY += DEBUG_MESSAGE_LINE_H;
+            }
+        }
 
         for (AbstractWidget widget : overlayWidgets) {
             widget.extractRenderState(graphics, mouseX, mouseY, a);

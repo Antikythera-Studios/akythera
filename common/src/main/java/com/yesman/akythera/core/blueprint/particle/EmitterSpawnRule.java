@@ -23,6 +23,9 @@ public interface EmitterSpawnRule {
     /// sampled at.
     float spanTime(float seconds);
 
+    /// This rule with a time span of `duration` seconds. A rule with no time span answers itself.
+    EmitterSpawnRule withDuration(float duration);
+
     MapCodec<? extends EmitterSpawnRule> mapCodec();
 
     /// The playback state of one emitter's spawn rule.

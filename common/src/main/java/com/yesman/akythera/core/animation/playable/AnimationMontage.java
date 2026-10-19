@@ -245,6 +245,11 @@ public final class AnimationMontage implements PlayableAnimation {
     }
 
     @Override
+    public void interrupt(final ComponentAttachable owner, final float elapsedTime) {
+        notifyTrack.interrupt(this, owner, elapsedTime);
+    }
+
+    @Override
     public Pose getPose(final float time) {
         Pose pose = mergedClip.get().getPose(time);
 

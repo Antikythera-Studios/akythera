@@ -2,14 +2,18 @@ package com.yesman.akythera.api.world.patch.entity;
 
 import com.yesman.akythera.api.animation.animator.AnimationInterfaceKey;
 import com.yesman.akythera.api.animation.notify.impl.LockMovementNotifyState;
+import com.yesman.akythera.api.component.ComponentAttachable;
+import com.yesman.akythera.api.component.PatchComponent;
 import com.yesman.akythera.api.component.UniqueComponent;
 import com.yesman.akythera.api.component.impl.ArmatureComponent;
+import com.yesman.akythera.api.component.impl.EquipmentSlotBinder;
 import com.yesman.akythera.api.world.patch.AkytheraPatches;
 import com.yesman.akythera.api.world.patch.entity.component.EquipmentHolder;
 import com.yesman.akythera.api.world.patch.item.ItemPatch;
 import com.yesman.akythera.api.world.patch.item.WeaponStance;
 import com.yesman.akythera.api.world.patch.item.component.ReplaceAnimations;
 import com.yesman.akythera.api.world.patch.item.component.WeaponStanceVariationAdapter;
+import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.animation.animator.BlendingAnimator;
 import com.yesman.akythera.core.animation.driver.AnimationMontagePlayer;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
@@ -26,6 +30,9 @@ import net.minecraft.world.item.ItemStack;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayDeque;
+import java.util.Arrays;
+import java.util.Deque;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
@@ -46,8 +53,8 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
     /// call diffs against.
     private Map<AnimationInterfaceKey, ResourceKey<? extends PlayableAnimation>> animationReplacements = Map.of();
 
-    /// This entity's own item patch per equipment slot, and the shared patch it was built from.
-    private final Map<EquipmentSlot, SlotItemPatch> slotItemPatches = new EnumMap<>(EquipmentSlot.class);
+    /// The [EquipmentSlotBinder] of each slot in the component tree, collected on first use. Null until then.
+    private @Nullable Map<EquipmentSlot, EquipmentSlotBinder> slotBinders;
 
     /// Whether [#animationReplacements] were written through their mirrored twins.
     private boolean replacementsMirrored;
@@ -99,6 +106,15 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
         }
 
         refreshAnimationReplacements(getEquippedComponent(ReplaceAnimations.class));
+    }
+
+    /// Refreshes the slot binders before the components tick, so an item changed during this tick has its sockets
+    /// in place when the animator fires its notifies.
+    @Override
+    public void postTick() {
+        slotBinders().values().forEach(EquipmentSlotBinder::refresh);
+
+        super.postTick();
     }
 
     @Override
@@ -199,23 +215,58 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
     @ScriptFunction(pure = true, label = "Get Item Patch In Slot", desc = "Returns the item patch of the item in the slot. Null when the item has none.")
     @Override
     public @Nullable ItemPatch getItemPatchInSlot(final EquipmentSlot equipmentSlot) {
-        ItemStack itemStack = getItemInSlot(equipmentSlot);
-        ItemPatch shared = AkytheraPatches.getItemPatch(itemStack);
+        return AkytheraPatches.getItemPatch(getItemInSlot(equipmentSlot));
+    }
 
-        if (shared == null) {
-            slotItemPatches.remove(equipmentSlot);
+    @Override
+    public @Nullable EquipmentSlotBinder getSlotBinder(final EquipmentSlot equipmentSlot) {
+        EquipmentSlotBinder binder = slotBinders().get(equipmentSlot);
 
-            return null;
+        return binder != null && binder.isEnabled() ? binder : null;
+    }
+
+    /// [#slotBinders], collected from the component tree on the first call. A second binder of a slot is
+    /// switched off.
+    private Map<EquipmentSlot, EquipmentSlotBinder> slotBinders() {
+        if (slotBinders != null) return slotBinders;
+
+        slotBinders = new EnumMap<>(EquipmentSlot.class);
+
+        Deque<ComponentAttachable> hosts = new ArrayDeque<>(List.of(this));
+
+        while (!hosts.isEmpty()) {
+            List<PatchComponent> children = List.copyOf(hosts.pop().getComponents().values());
+
+            for (PatchComponent component : children.reversed()) {
+                if (component instanceof ComponentAttachable host) hosts.push(host);
+            }
+
+            for (PatchComponent component : children) {
+                if (!(component instanceof EquipmentSlotBinder binder) || slotBinders.putIfAbsent(binder.equipmentSlot(), binder) == null) continue;
+
+                binder.setEnabled(false);
+                Akythera.LOGGER.warn("{} binds {} a second time and is switched off", getOriginal().getType(), binder.equipmentSlot());
+            }
         }
 
-        SlotItemPatch slotItemPatch = slotItemPatches.get(equipmentSlot);
+        return slotBinders;
+    }
 
-        if (slotItemPatch == null || slotItemPatch.shared() != shared) {
-            slotItemPatch = new SlotItemPatch(shared, shared.getBlueprint().instantiate(itemStack.getItem(), this, equipmentSlot));
-            slotItemPatches.put(equipmentSlot, slotItemPatch);
-        }
+    /// Also reaches the components a slot's [EquipmentSlotBinder] attached by the slot's name, `mainhand/trail_start`
+    /// for the binder's `trail_start`, when no component of the patch sits at `path`.
+    @Override
+    public @Nullable PatchComponent getComponentAt(final String path) {
+        PatchComponent component = super.getComponentAt(path);
 
-        return slotItemPatch.instance();
+        if (component != null) return component;
+
+        String[] parts = path.split(PATH_SEPARATOR, 2);
+        EquipmentSlot slot = parts.length == 2
+            ? Arrays.stream(EquipmentSlot.values()).filter(candidate -> candidate.getSerializedName().equals(parts[0])).findFirst().orElse(null)
+            : null;
+        EquipmentSlotBinder binder = slot == null ? null : getSlotBinder(slot);
+
+        return binder == null ? null : binder.getItemComponentAt(parts[1]);
     }
 
     @ScriptFunction(pure = true, label = "Get Main Hand Item Patch")
@@ -341,10 +392,5 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
     @ScriptFunction(label = "Set Sync Body Yaw", desc = "Determines whether the body yaw rotation sync to entity's model yaw.")
     public void setSyncBodyYRot(final boolean flag) {
         syncBodyYRot = flag;
-    }
-
-    /// An entity's own item patch for one slot, and the shared patch it was built from, which tells when the slot's
-    /// item, or the loaded blueprint, changed.
-    private record SlotItemPatch(ItemPatch shared, ItemPatch instance) {
     }
 }

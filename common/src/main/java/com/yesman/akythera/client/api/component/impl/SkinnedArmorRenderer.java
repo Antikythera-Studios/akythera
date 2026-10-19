@@ -4,8 +4,8 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.yesman.akythera.api.asset.AssetAccessor;
 import com.yesman.akythera.api.component.ComponentAttachable;
-import com.yesman.akythera.api.component.EquipmentSlotAnchor;
 import com.yesman.akythera.api.component.PatchComponent;
+import com.yesman.akythera.api.component.TransformComponent;
 import com.yesman.akythera.api.component.TransformInheritPolicy;
 import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
@@ -57,10 +57,8 @@ import java.util.List;
 /// [VanillaModelBaker] and skinned by its pose, in the armature's space. An item that draws its own armor
 /// is drawn by its own renderer instead, rigid in that space.
 ///
-/// The item patch the holder holds in that slot hangs under it.
-///
 /// Instantiated per host by [SkinnedArmorRendererBlueprint].
-public final class SkinnedArmorRenderer implements RenderableComponent<LivingEntityRenderState>, EquipmentSlotAnchor {
+public final class SkinnedArmorRenderer implements RenderableComponent<LivingEntityRenderState>, TransformComponent {
     /// The slot whose armor piece is drawn.
     private final EquipmentSlot equipmentSlot;
 
@@ -356,13 +354,8 @@ public final class SkinnedArmorRenderer implements RenderableComponent<LivingEnt
     }
 
     // ***************************************************************
-    // EquipmentSlotAnchor
+    // TransformComponent
     // ***************************************************************
-
-    @Override
-    public EquipmentSlot equipmentSlot() {
-        return equipmentSlot;
-    }
 
     @Override
     public Transform localTransform() {
@@ -387,11 +380,11 @@ public final class SkinnedArmorRenderer implements RenderableComponent<LivingEnt
     /// The piece sits in its armature's space.
     @Override
     public Transform parentModelTransform() {
-        return armature != null ? armature.modelTransform() : EquipmentSlotAnchor.super.parentModelTransform();
+        return armature != null ? armature.modelTransform() : TransformComponent.super.parentModelTransform();
     }
 
     @Override
     public Transform previousParentModelTransform() {
-        return armature != null ? armature.previousModelTransform() : EquipmentSlotAnchor.super.previousParentModelTransform();
+        return armature != null ? armature.previousModelTransform() : TransformComponent.super.previousParentModelTransform();
     }
 }

@@ -3,7 +3,11 @@ package com.yesman.akythera.client.api.lifecycle;
 import com.mojang.blaze3d.systems.DeviceInfo;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.yesman.akythera.api.component.ComponentAttachable;
+import com.yesman.akythera.api.component.impl.EquipmentSlotBinder;
+import com.yesman.akythera.api.component.impl.EquipmentSlotBinderBlueprint;
 import com.yesman.akythera.api.lifecycle.ComponentsFactory;
+import com.yesman.akythera.client.api.component.impl.ItemInSlotRenderer;
 import com.yesman.akythera.client.core.asset.mesh.SkeletalMesh;
 import com.yesman.akythera.client.core.physics.cloth.ClothColliderPacker;
 import com.yesman.akythera.client.core.renderer.TrailRenderer;
@@ -56,6 +60,12 @@ public final class ClientComponentsFactory extends ComponentsFactory {
         if (player instanceof AbstractClientPlayer abstractClientPlayer) return abstractClientPlayer.getSkin();
 
         return null;
+    }
+
+    /// The logical client's binder draws the slot's item, see [ItemInSlotRenderer].
+    @Override
+    public EquipmentSlotBinder createEquipmentSlotBinder(final EquipmentSlotBinderBlueprint blueprint, final ComponentAttachable host) {
+        return host.logicalSide().validInClientSide() ? new ItemInSlotRenderer(blueprint, host) : super.createEquipmentSlotBinder(blueprint, host);
     }
 
     // *********************************************************

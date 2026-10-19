@@ -118,6 +118,16 @@ public class ArmatureComponent
         rootMotionComponent = useRootMotion ? new RootMotionComponent(this) : null;
     }
 
+    /// The armature that poses what `host` places: the host itself, the one a socket rides, or a patch's first.
+    public static @Nullable ArmatureComponent armatureOf(final ComponentAttachable host) {
+        return switch (host) {
+            case ArmatureComponent armature -> armature;
+            case TransformSocket socket -> socket.getArmature();
+            case EntityPatch<?> patch -> patch.getArmatureComponent();
+            default -> null;
+        };
+    }
+
     @Override
     public void tick() {
         // The client advances animation time in [#frameUpdate], once per frame. A server has no frame,

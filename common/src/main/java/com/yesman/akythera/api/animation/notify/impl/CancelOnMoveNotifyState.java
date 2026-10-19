@@ -5,6 +5,7 @@ import com.yesman.akythera.api.animation.notify.AnimationNotifyState;
 import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
 import com.yesman.akythera.core.animation.driver.AnimationMontagePlayer;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
+import com.yesman.akythera.core.math.TimeWindow;
 import com.yesman.akythera.core.util.LogicalSide;
 
 /// A notify state that stops the montage once the owner tries to move in its time window.
@@ -18,7 +19,7 @@ public final class CancelOnMoveNotifyState extends AnimationNotifyState<LivingEn
     }
 
     @Override
-    public void onBegin(final LivingEntityPatch<?> owner, final PlayableAnimation animation) {
+    public void onBegin(final LivingEntityPatch<?> owner, final PlayableAnimation animation, final TimeWindow timeWindow) {
     }
 
     @Override
@@ -26,7 +27,7 @@ public final class CancelOnMoveNotifyState extends AnimationNotifyState<LivingEn
     }
 
     @Override
-    public void onEnd(final LivingEntityPatch<?> owner, final PlayableAnimation animation) {
+    public void onEnd(final LivingEntityPatch<?> owner, final PlayableAnimation animation, final boolean interrupted) {
     }
 
     @Override

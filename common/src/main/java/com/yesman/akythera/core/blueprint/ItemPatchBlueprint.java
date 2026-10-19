@@ -3,14 +3,14 @@ package com.yesman.akythera.core.blueprint;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.api.component.PatchComponent;
-import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.api.component.TransformComponent;
 import com.yesman.akythera.api.world.patch.item.ItemPatch;
 import com.yesman.akythera.api.world.patch.item.component.WeaponStanceVariationAdapter;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.Item;
 import org.jetbrains.annotations.ApiStatus;
 
@@ -40,13 +40,30 @@ public record ItemPatchBlueprint(
     /// Builds the shared [ItemPatch] after resolving the parent chain. Requires a loaded registry access.
     @Override
     public ItemPatch instantiate(final Item item) {
-        return new ItemPatch(item, this, null, null);
+        return new ItemPatch(item, this);
     }
 
-    /// Builds `holder`'s own instance of the patch for the item it holds in `slot`, whose components are attached
-    /// under it. Requires a loaded registry access.
-    public ItemPatch instantiate(final Item item, final EntityPatch<?> holder, final EquipmentSlot slot) {
-        return new ItemPatch(item, this, holder, slot);
+    /// The [TransformComponent]s of `shared`, the patch this blueprint built, each built again under `host` from the
+    /// nearest blueprint of the parent chain declaring it. Skips the ones [ComponentBlueprint#buildsFor] refuses on
+    /// `host`'s side. Requires a loaded registry access.
+    @SuppressWarnings("unchecked")
+    public Map<String, PatchComponent> instantiateTransformComponents(final ItemPatch shared, final ComponentAttachable host) {
+        List<ItemPatchBlueprint> nearestFirst = hierarchy(this).reversed();
+        boolean logicalClient = host.logicalSide().validInClientSide();
+        Map<String, PatchComponent> built = new LinkedHashMap<>();
+
+        shared.getComponents().forEach((name, component) -> {
+            if (!(component instanceof TransformComponent)) return;
+
+            nearestFirst.stream()
+                .map(blueprint -> blueprint.components.get(name))
+                .filter(Objects::nonNull)
+                .findFirst()
+                .filter(blueprint -> blueprint.buildsFor(logicalClient))
+                .ifPresent(blueprint -> built.put(name, ((ComponentBlueprint<?, Object>)blueprint).instantiate(host)));
+        });
+
+        return built;
     }
 
     /// The whole parent chain's components instantiated into one map, root first and each blueprint

@@ -38,7 +38,7 @@ public abstract class AnimationNotifyState<T extends ComponentAttachable> {
             T casted = (T)owner;
 
             if (prevElapsedTime < timeWindow.from() && timeWindow.from() <= currentElapsedTime) {
-                this.onBegin(casted, animation);
+                this.onBegin(casted, animation, timeWindow);
             }
 
             if (timeWindow.from() < currentElapsedTime && prevElapsedTime <= timeWindow.to()) {
@@ -46,20 +46,38 @@ public abstract class AnimationNotifyState<T extends ComponentAttachable> {
             }
 
             if (prevElapsedTime < timeWindow.to() && timeWindow.to() <= currentElapsedTime) {
-                this.onEnd(casted, animation);
+                this.onEnd(casted, animation, false);
             }
         } catch(ClassCastException _) {
         }
     }
 
+    /// Ends the notify early, for an animation stopped inside the notify's window
+    @ApiStatus.Internal @SuppressWarnings("unchecked")
+    public final void tryInterrupt(PlayableAnimation animation, final ComponentAttachable owner) {
+        if (!logicalSide.accepts(owner.logicalSide())) {
+            return;
+        }
+
+        try {
+            this.onEnd((T)owner, animation, true);
+        } catch(ClassCastException _) {
+        }
+    }
+
     /// Called when notify triggered at first. Note that [#onTick] is triggered in the same tick
-    public abstract void onBegin(T owner, PlayableAnimation animation);
+    ///
+    /// @param timeWindow the window the notify runs in, in the animation's elapsed time
+    public abstract void onBegin(T owner, PlayableAnimation animation, TimeWindow timeWindow);
 
     /// Called in each tick when notify is in time window
     public abstract void onTick(T owner, PlayableAnimation animation, float prevElapsedTime, float currentElapsedTime);
 
-    /// Called when the playback time gets through the last time window. Note that [#onTick] is triggered in the same tick
-    public abstract void onEnd(T owner, PlayableAnimation animation);
+    /// Called when the playback time gets through the last time window, or when the animation stops inside the window.
+    /// Note that [#onTick] is triggered in the same tick
+    ///
+    /// @param interrupted whether the animation stopped before the window's end
+    public abstract void onEnd(T owner, PlayableAnimation animation, boolean interrupted);
 
     public final LogicalSide logicalSide() {
         return logicalSide;

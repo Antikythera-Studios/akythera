@@ -2,8 +2,11 @@ package com.yesman.akythera.client.api.particle;
 
 import com.yesman.akythera.client.core.renderer.TrailRenderer;
 import com.yesman.akythera.core.blueprint.particle.ParticleAttachment;
+import com.yesman.akythera.core.blueprint.particle.ParticleEmitterBlueprint;
 import com.yesman.akythera.core.blueprint.particle.TrailParticleBlueprint;
+import com.yesman.akythera.core.blueprint.particle.TrailSpawnRule;
 import com.yesman.akythera.core.math.Transform;
+import com.yesman.akythera.core.reflection.ScriptFunction;
 import com.yesman.akythera.core.reflection.ScriptType;
 import net.minecraft.client.particle.Particle;
 import net.minecraft.client.particle.ParticleRenderType;
@@ -24,6 +27,10 @@ import java.util.function.UnaryOperator;
 /// Edges are sampled twice a tick, at its middle and its end, and stamped with their time in ticks. A frame draws the
 /// edges between `now - trailLifetime` and `now`, where `now` is the drawn time between the last two ticks, closed by
 /// one more edge sampled at `now` itself.
+///
+/// Its lifetime is what is left of its [TrailSpawnRule]'s time span when it spawns, and it samples until the lifetime
+/// ends, the end of the time span included. A sample places the emitter by its own age, never by the emitter's last
+/// tick, since the particle engine ticks the trail and its system in no set order.
 @ScriptType
 public class AkytheraTrailParticle extends Particle implements AkytheraParticle {
     private final ParticleState state;
@@ -32,8 +39,11 @@ public class AkytheraTrailParticle extends Particle implements AkytheraParticle 
     /// The socket the system follows, or null when the trail follows the system's own transform.
     private final @Nullable ParticleAttachment attachment;
 
-    /// The trail's far side from the emitter's origin, in the emitter's space.
-    private final Vec3 farSide;
+    /// Seconds since the emitter started at the moment the trail spawned.
+    private final float spawnTime;
+
+    /// How far the trail's far side is from the emitter's origin along the emitter's +Y axis, in blocks.
+    private float length;
 
     /// Sampled edges, oldest first.
     private final List<Edge> edges = new ArrayList<>();
@@ -42,7 +52,7 @@ public class AkytheraTrailParticle extends Particle implements AkytheraParticle 
     private Transform source;
     private Transform previousSource;
 
-    /// Whether the trail still samples edges: until its lifetime ends or its socket is gone.
+    /// Whether the trail still samples edges: until its lifetime ends, its system stops, or its socket is gone.
     private boolean sampling = true;
 
     public AkytheraTrailParticle(final AkytheraParticleEmitter emitter, final TrailParticleBlueprint blueprint) {
@@ -51,18 +61,20 @@ public class AkytheraTrailParticle extends Particle implements AkytheraParticle 
         this.state = new ParticleState(emitter, emitter.getWorldTransform().loc(), blueprint.properties(), blueprint.color());
         this.blueprint = blueprint;
         this.attachment = emitter.getSystem().getAttachment();
-        this.farSide = new Vec3(0.0D, 0.0D, blueprint.length());
+        this.spawnTime = emitter.getSpawnTime();
+        this.length = blueprint.length();
         this.source = emitter.getWorldTransform();
         this.previousSource = this.source;
         this.hasPhysics = false;
         this.setSize(blueprint.properties().bbWidth(), blueprint.properties().bbHeight());
-        this.lifetime = blueprint.properties().lifetime();
+        this.lifetime = Math.max(1, Math.round((emitter.getBlueprint().spawn().duration() - this.spawnTime) * 20.0F));
         this.edges.add(edgeOf(this.source, 0.0F));
     }
 
     @Override
     public void emitterInit(final AkytheraParticleEmitter emitter) {
         state.runInitializers(this);
+        edges.set(0, edgeOf(source, 0.0F));
     }
 
     @Override
@@ -75,9 +87,11 @@ public class AkytheraTrailParticle extends Particle implements AkytheraParticle 
         if (!state.update(this)) return;
 
         if (sampling) {
-            Transform sampled = sourceTransform();
+            // The emitter finishes on the tick the time span ends, so a finished emitter stops the trail early only before then
+            boolean stopped = age > lifetime || getEmitter().isFinished() && age < lifetime;
+            Transform sampled = stopped ? null : sourceTransform();
 
-            if (sampled == null || age > lifetime) {
+            if (sampled == null) {
                 sampling = false;
             } else {
                 previousSource = source;
@@ -155,15 +169,28 @@ public class AkytheraTrailParticle extends Particle implements AkytheraParticle 
     }
 
     /// Where the emitter is now, in world space, or null once its socket is gone: the socket's transform, else the
-    /// system's, with the emitter's current placement.
+    /// system's, with the emitter's placement at the trail's age.
     private @Nullable Transform sourceTransform() {
         Transform system = attachment == null ? getEmitter().getSystem().getTransform() : attachment.worldTransform(level);
+        ParticleEmitterBlueprint emitter = getEmitter().getBlueprint();
 
-        return system == null ? null : system.mul(getEmitter().getPlacement());
+        return system == null ? null : system.mul(emitter.placementAt(emitter.spawn().spanTime(spawnTime + age / 20.0F)));
     }
 
     private Edge edgeOf(final Transform transform, final float time) {
-        return new Edge(transform.loc(), transform.mul(farSide), time);
+        return new Edge(transform.loc(), transform.mul(new Vec3(0.0D, length, 0.0D)), time);
+    }
+
+    /// In blocks.
+    @ScriptFunction(pure = true, category = "Particle/Trail", desc = "The trail's length, in blocks")
+    public float getTrailLength() {
+        return length;
+    }
+
+    /// Edges sampled before keep their length.
+    @ScriptFunction(category = "Particle/Trail", desc = "Sets the trail's length, in blocks. Edges sampled before keep theirs")
+    public void setTrailLength(final float length) {
+        this.length = length;
     }
 
     @Override

@@ -131,6 +131,16 @@ public final class TransformSocket implements TransformComponent, ComponentBluep
         return components;
     }
 
+    /// Attaches `component` under `name`, unless a component already sits there. Whether it was attached.
+    public boolean attach(final String name, final PatchComponent component) {
+        return components.putIfAbsent(name, component) == null;
+    }
+
+    /// Removes `component` from `name`, if it still sits there.
+    public void detach(final String name, final PatchComponent component) {
+        components.remove(name, component);
+    }
+
     @Override
     public @Nullable <C extends UniqueComponent> C getComponent(Class<C> type) {
         return null;

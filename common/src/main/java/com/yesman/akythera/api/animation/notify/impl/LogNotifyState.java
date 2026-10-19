@@ -6,6 +6,7 @@ import com.yesman.akythera.api.animation.notify.AnimationNotifyState;
 import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
+import com.yesman.akythera.core.math.TimeWindow;
 import com.yesman.akythera.core.util.LogicalSide;
 
 /// An animation notify that prints out a log in a specified time window
@@ -23,7 +24,7 @@ public final class LogNotifyState extends AnimationNotifyState<ComponentAttachab
     }
 
     @Override
-    public void onBegin(ComponentAttachable owner, PlayableAnimation animation) {
+    public void onBegin(ComponentAttachable owner, PlayableAnimation animation, TimeWindow timeWindow) {
         Akythera.LOGGER.info("Notified {}, begin notified in {}", animation, owner.logicalSide().getSerializedName());
     }
 
@@ -33,7 +34,7 @@ public final class LogNotifyState extends AnimationNotifyState<ComponentAttachab
     }
 
     @Override
-    public void onEnd(ComponentAttachable owner, PlayableAnimation animation) {
+    public void onEnd(ComponentAttachable owner, PlayableAnimation animation, boolean interrupted) {
         Akythera.LOGGER.info("Notified {}, end notified in {}", animation, owner.logicalSide().getSerializedName());
     }
 

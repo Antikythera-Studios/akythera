@@ -28,6 +28,12 @@ public final class AnimationPlayer implements AnimationDriver {
     // true if fading in, false if fading out
     private boolean fadingInOrOut;
 
+    /// Whether [#terminate] ran since the last [#start]. A terminated play fades out without driving notifies.
+    private boolean terminated;
+
+    /// The owner of the last [#tick], which a stopped play's notify states are ended for.
+    private @Nullable ComponentAttachable owner;
+
     /// Custom control of animation looping, has higher priority of [PlayableAnimation#loops]
     private final @Nullable Boolean loops;
 
@@ -39,11 +45,13 @@ public final class AnimationPlayer implements AnimationDriver {
         this.loops = loops;
     }
 
-    /// Restart the player from 0 time
+    /// Restart the player from 0 time. Restarting a play that still runs interrupts it.
     @Override
     public void start() {
+        interruptNotifies();
         fadingInOrOut = true;
         isFinished = false;
+        terminated = false;
         fadeTime = 0.0F;
         elapsedTime = 0.0F;
         lastUpdatedTime = 0.0F;
@@ -51,15 +59,24 @@ public final class AnimationPlayer implements AnimationDriver {
 
     @Override
     public void terminate() {
+        interruptNotifies();
         fadingInOrOut = false;
+        terminated = true;
     }
 
-    /// Drives the underlying [PlayableAnimation]'s notify track for this tick.
+    /// Drives the underlying [PlayableAnimation]'s notify track for this tick, until the player is terminated.
     /// Mirrors [AnimationMontagePlayer#tick] so sequences carry notify support
     /// when this player runs them.
     public void tick(final ComponentAttachable owner) {
-        if (getWeight() >= 0.01F) playableAnimation.value().tick(owner, lastUpdatedTime, elapsedTime);
+        this.owner = owner;
+
+        if (!terminated && getWeight() >= 0.01F) playableAnimation.value().tick(owner, lastUpdatedTime, elapsedTime);
         lastUpdatedTime = elapsedTime;
+    }
+
+    /// Ends the notify states the last tick sits inside, for a play that stops before its end.
+    private void interruptNotifies() {
+        if (owner != null && !terminated) playableAnimation.value().interrupt(owner, lastUpdatedTime);
     }
 
     @Override

@@ -37,7 +37,7 @@ public record SkinnedArmorRendererBlueprint(
     public SkinnedArmorRenderer instantiate(final ComponentAttachable host) {
         SkinnedArmorRenderer component = new SkinnedArmorRenderer(
             equipmentSlot,
-            MeshComponentBlueprint.armatureOf(host),
+            ArmatureComponent.armatureOf(host),
             host,
             transform,
             transformInheritPolicy

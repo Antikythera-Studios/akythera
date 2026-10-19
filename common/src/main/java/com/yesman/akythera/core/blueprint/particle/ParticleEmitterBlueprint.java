@@ -76,6 +76,26 @@ public record ParticleEmitterBlueprint(
         return DataResult.success(this);
     }
 
+    /// This emitter with a time span of `duration` seconds, its keys cut or held at the new end
+    /// ([KeyframeTrack#endingAt]). An emitter with no time span answers itself.
+    public ParticleEmitterBlueprint withTimeSpan(final float duration) {
+        if (spawn.duration() <= 0.0F) return this;
+
+        return new ParticleEmitterBlueprint(
+            name,
+            particle,
+            start,
+            spawn.withDuration(duration),
+            hideParticlesOnFinish,
+            pivot,
+            transform,
+            pivotKeys.endingAt(duration, Transform::slerp),
+            transformKeys.endingAt(duration, Transform::slerp),
+            initializers,
+            updaters
+        );
+    }
+
     /// The emitter's transform in its system's space at `spanTime` seconds into its time span: the emitter's transform
     /// placed in the pivot's space.
     public Transform placementAt(final float spanTime) {

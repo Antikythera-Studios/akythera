@@ -1,11 +1,11 @@
 package com.yesman.akythera.core.blueprint;
 
 import com.mojang.serialization.MapCodec;
+import com.yesman.akythera.api.component.impl.EquipmentSlotBinderBlueprint;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.api.world.patch.item.component.AttributeModifiersComponent;
 import com.yesman.akythera.api.world.patch.item.component.ReplaceAnimations;
 import com.yesman.akythera.api.world.patch.item.component.WeaponStanceVariationAdapter;
-import com.yesman.akythera.client.api.component.impl.ItemInSlotRendererBlueprint;
 import com.yesman.akythera.client.api.component.impl.MeshComponentBlueprint;
 import com.yesman.akythera.client.api.component.impl.PALPoseBinder;
 import com.yesman.akythera.client.api.component.impl.SkinnedArmorRendererBlueprint;
@@ -65,8 +65,12 @@ public final class AkytheraComponentBlueprints {
     public static final Holder<MapCodec<? extends ComponentBlueprint<?, ?>>> MESH =
         ENTITY_PATCH_REGISTRAR.register("mesh", () -> MeshComponentBlueprint.CODEC);
 
+    public static final Holder<MapCodec<? extends ComponentBlueprint<?, ?>>> EQUIPMENT_SLOT_BINDER =
+        ENTITY_PATCH_REGISTRAR.register("equipment_slot_binder", () -> EquipmentSlotBinderBlueprint.CODEC);
+
+    /// The former id of [#EQUIPMENT_SLOT_BINDER], read only.
     public static final Holder<MapCodec<? extends ComponentBlueprint<?, ?>>> ITEM_IN_SLOT =
-        ENTITY_PATCH_REGISTRAR.register("item_in_slot", () -> ItemInSlotRendererBlueprint.CODEC);
+        ENTITY_PATCH_REGISTRAR.register("item_in_slot", () -> EquipmentSlotBinderBlueprint.LEGACY_CODEC);
 
     public static final Holder<MapCodec<? extends ComponentBlueprint<?, ?>>> SKINNED_ARMOR =
         ENTITY_PATCH_REGISTRAR.register("skinned_armor", () -> SkinnedArmorRendererBlueprint.CODEC);

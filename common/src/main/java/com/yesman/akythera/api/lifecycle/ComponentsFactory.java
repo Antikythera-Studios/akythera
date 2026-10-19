@@ -3,6 +3,8 @@ package com.yesman.akythera.api.lifecycle;
 import com.yesman.akythera.api.animation.animator.Animator;
 import com.yesman.akythera.api.asset.AssetAccessor;
 import com.yesman.akythera.api.component.ComponentAttachable;
+import com.yesman.akythera.api.component.impl.EquipmentSlotBinder;
+import com.yesman.akythera.api.component.impl.EquipmentSlotBinderBlueprint;
 import com.yesman.akythera.api.data.modularize.ScriptFunction;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.client.api.gui.viewer.Model3DViewer;
@@ -191,6 +193,11 @@ public abstract class ComponentsFactory {
         return owner.logicalSide() == LogicalSide.SERVER
             ? new MontageOnlyAnimator(owner)
             : new BlendingAnimator(owner, scriptProvider);
+    }
+
+    /// Builds `blueprint`'s binder for `host`. A dedicated server's binder draws nothing.
+    public EquipmentSlotBinder createEquipmentSlotBinder(final EquipmentSlotBinderBlueprint blueprint, final ComponentAttachable host) {
+        return new EquipmentSlotBinder(blueprint, host);
     }
 
     /// Returns the resource manager the assets are read from.

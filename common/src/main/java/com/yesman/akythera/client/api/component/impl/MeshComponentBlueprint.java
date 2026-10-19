@@ -52,7 +52,7 @@ public record MeshComponentBlueprint(
             mesh,
             renderTypeGetter,
             ownerOf(host),
-            armatureOf(host),
+            ArmatureComponent.armatureOf(host),
             host,
             transform,
             transformInheritPolicy
@@ -70,16 +70,6 @@ public record MeshComponentBlueprint(
             case EntityPatch<?> patch -> patch;
             case ArmatureComponent armature -> armature.getOwner() instanceof EntityPatch<?> patch ? patch : null;
             case TransformSocket socket -> socket.getArmature() != null && socket.getArmature().getOwner() instanceof EntityPatch<?> patch ? patch : null;
-            default -> null;
-        };
-    }
-
-    /// The armature that poses this mesh: the host itself, the one a socket rides, or a patch's first.
-    static @Nullable ArmatureComponent armatureOf(final ComponentAttachable host) {
-        return switch (host) {
-            case ArmatureComponent armature -> armature;
-            case TransformSocket socket -> socket.getArmature();
-            case EntityPatch<?> patch -> patch.getArmatureComponent();
             default -> null;
         };
     }

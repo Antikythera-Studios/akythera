@@ -5,6 +5,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.animation.notify.AnimationNotifyState;
 import com.yesman.akythera.api.data.modularize.ScriptFunction;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
+import com.yesman.akythera.core.math.TimeWindow;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.LogicalSide;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
@@ -33,7 +34,7 @@ public final class MotionWarpingNotifyState extends AnimationNotifyState<EntityP
     }
 
     @Override
-    public void onBegin(EntityPatch<?> owner, PlayableAnimation animation) {
+    public void onBegin(EntityPatch<?> owner, PlayableAnimation animation, TimeWindow timeWindow) {
     }
 
     @Override
@@ -42,7 +43,7 @@ public final class MotionWarpingNotifyState extends AnimationNotifyState<EntityP
     }
 
     @Override
-    public void onEnd(EntityPatch<?> owner, PlayableAnimation animation) {
+    public void onEnd(EntityPatch<?> owner, PlayableAnimation animation, boolean interrupted) {
 
     }
 

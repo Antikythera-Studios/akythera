@@ -63,6 +63,9 @@ public final class AnimationMontagePlayer implements AnimationDriver {
     /// Current montage callback handler
     private MontageCallbackHandle montageCallbackHandle;
 
+    /// The owner of the last [#tick], which a stopped montage's notify states are ended for.
+    private @Nullable ComponentAttachable owner;
+
     /// Plays an animation montage starting in a specific section
     public MontageCallbackHandle playAnimation(final Holder.@NonNull Reference<@NonNull AnimationMontage> animMontage, @Nullable final String sectionName) {
         fadeInStartWeight = getWeight();
@@ -70,6 +73,7 @@ public final class AnimationMontagePlayer implements AnimationDriver {
         if (currentPlaying != null) {
             // Cache the current pose of the montage played lastly
             cachedLastMontagePose = getPose();
+            interruptNotifies();
             montageCallbackHandle.triggerComplete(animMontage, true);
         }
 
@@ -118,6 +122,7 @@ public final class AnimationMontagePlayer implements AnimationDriver {
             return;
         }
 
+        interruptNotifies();
         fadeOut(animMontage, true);
     }
 
@@ -154,8 +159,15 @@ public final class AnimationMontagePlayer implements AnimationDriver {
     /// Called by fixed tick both in client and server.
     @Override
     public void tick(final ComponentAttachable owner) {
+        this.owner = owner;
+
         if (currentPlaying != null) currentPlaying.value().tick(owner, lastUpdatedTime, elapsedTime);
         lastUpdatedTime = elapsedTime;
+    }
+
+    /// Ends the playing montage's notify states the last tick sits inside, for a montage that stops before its end.
+    private void interruptNotifies() {
+        if (owner != null && currentPlaying != null && !isFinished) currentPlaying.value().interrupt(owner, lastUpdatedTime);
     }
 
     /// @param frameTime fixed to 0.05 in a server side, variable frame time in client side.

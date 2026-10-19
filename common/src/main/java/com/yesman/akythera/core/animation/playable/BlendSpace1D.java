@@ -49,6 +49,10 @@ public final class BlendSpace1D implements PlayableAnimation {
     public void tick(ComponentAttachable owner, float prevElapsedTime, float currentElapsedTime) {
     }
 
+    @Override
+    public void interrupt(ComponentAttachable owner, float elapsedTime) {
+    }
+
     /// Instantiated version of [BlendSpace2D]. To keep the design intention of [PlayableAnimation] and [AnimationDriver]
     public static final class BlendSpace1DDriver implements AnimationDriver {
         //TODO: Maybe need AssetAccessor?

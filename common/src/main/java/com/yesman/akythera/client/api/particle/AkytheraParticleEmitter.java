@@ -9,6 +9,8 @@ import com.yesman.akythera.core.blueprint.particle.ParticleEmitterBlueprint;
 import com.yesman.akythera.core.blueprint.particle.ParticleInitializerBlueprint;
 import com.yesman.akythera.core.blueprint.particle.ParticleUpdaterBlueprint;
 import com.yesman.akythera.core.blueprint.particle.SpriteParticleBlueprint;
+import com.yesman.akythera.core.blueprint.particle.TrailParticleBlueprint;
+import com.yesman.akythera.core.blueprint.particle.TrailSpawnRule;
 import com.yesman.akythera.core.math.Transform;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
@@ -22,7 +24,8 @@ public class AkytheraParticleEmitter {
     private final AkytheraParticleSystem system;
     private final ParticleEmitterBlueprint blueprint;
 
-    /// Null when the blueprint names a particle the system's host lacks, which finishes the emitter at once.
+    /// Null when the blueprint names a particle the system's host lacks, or a trail spawned by a rule other than
+    /// [TrailSpawnRule], which finishes the emitter at once.
     private final @Nullable ParticleBlueprint particle;
 
     /// The live particles this emitter spawned, kept only when [ParticleEmitterBlueprint#hideParticlesOnFinish].
@@ -47,6 +50,9 @@ public class AkytheraParticleEmitter {
     /// Seconds since the emitter started at its last tick, or -1 before its first tick.
     private float lastLocal = -1.0F;
 
+    /// Seconds since the emitter started at the moment the last particle it built spawned.
+    private float spawnTime;
+
     /// The emitter's transform in its system's space. While a particle is being built, the one at the moment that
     /// particle spawns.
     public Transform getPlacement() {
@@ -61,10 +67,20 @@ public class AkytheraParticleEmitter {
     public AkytheraParticleEmitter(final AkytheraParticleSystem system, final ParticleEmitterBlueprint blueprint) {
         this.system = system;
         this.blueprint = blueprint;
-        this.particle = blueprint.particle().map(
+        ParticleBlueprint named = blueprint.particle().map(
             system.getHost()::piece,
             SpriteParticleBlueprint::ofVanilla
         );
+
+        if (named == null) {
+            Akythera.LOGGER.warn("Emitter {} names the unknown particle {}", blueprint.name(), blueprint.particle().left().orElseThrow().identifier());
+        } else if (named instanceof TrailParticleBlueprint && !(blueprint.spawn() instanceof TrailSpawnRule)) {
+            Akythera.LOGGER.warn("Emitter {} spawns a trail by a spawn rule other than trail", blueprint.name());
+            named = null;
+        }
+
+        this.particle = named;
+        this.finished = named == null;
         this.placement = blueprint.placementAt(0.0F);
         this.worldTransform = system.getTransform().mul(this.placement);
         this.spawner = blueprint.spawn().spawner();
@@ -83,11 +99,6 @@ public class AkytheraParticleEmitter {
             } catch (IllegalStateException e) {
                 Akythera.LOGGER.warn("Emitter {} skips an updater: {}", blueprint.name(), e.getMessage());
             }
-        }
-
-        if (this.particle == null) {
-            Akythera.LOGGER.warn("Emitter {} names the unknown particle {}", blueprint.name(), blueprint.particle().left().orElseThrow().identifier());
-            this.finished = true;
         }
     }
 
@@ -115,7 +126,7 @@ public class AkytheraParticleEmitter {
 
         // The tick's particles spread evenly over the time since the last tick, each at its own transform
         for (int i = 1; i <= count; i++) {
-            float spawnTime = previous + (local - previous) * i / count;
+            spawnTime = previous + (local - previous) * i / count;
             placement = blueprint.placementAt(blueprint.spawn().spanTime(spawnTime));
             worldTransform = system.getTransformAt((float)i / count).mul(placement);
 
@@ -175,6 +186,12 @@ public class AkytheraParticleEmitter {
 
     public Transform getWorldTransform() {
         return worldTransform;
+    }
+
+    /// Seconds since the emitter started at the moment the last particle it built spawned. While a particle is being
+    /// built, the moment that particle spawns.
+    public float getSpawnTime() {
+        return spawnTime;
     }
 
     /// How far the emitter moved over the last tick, in world space. A new particle starts this far back as its

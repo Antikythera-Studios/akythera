@@ -73,6 +73,15 @@ public final class AnimationNotifyTrack {
         }
     }
 
+    /// Ends every notify state `elapsedTime` sits inside, for an animation stopped there.
+    public void interrupt(final PlayableAnimation playingAnimation, final ComponentAttachable owner, final float elapsedTime) {
+        for (Map.Entry<TimeWindow, AnimationNotifyState<?>> entry : notifyStates.entrySet()) {
+            if (entry.getKey().from() <= elapsedTime && elapsedTime < entry.getKey().to()) {
+                entry.getValue().tryInterrupt(playingAnimation, owner);
+            }
+        }
+    }
+
     /// For codec encoding
     public List<NotifyInTimeStamp> serializeNotifies() {
         return notifies.entrySet().stream()
