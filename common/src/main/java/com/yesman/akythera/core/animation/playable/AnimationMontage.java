@@ -10,6 +10,7 @@ import com.yesman.akythera.api.animation.notify.AnimationNotifyState;
 import com.yesman.akythera.api.asset.AssetAccessor;
 import com.yesman.akythera.api.asset.animation.AnimationManager;
 import com.yesman.akythera.api.component.ComponentAttachable;
+import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.animation.AnimationLayerSignature;
 import com.yesman.akythera.core.animation.driver.AnimationMontagePlayer;
 import com.yesman.akythera.api.animation.impl.AkytheraAnimationLayerSignature;
@@ -150,6 +151,13 @@ public final class AnimationMontage implements PlayableAnimation {
 
         for (AssetAccessor<AnimationClip> animation : segments) {
             animation.get().visitBoneTracks((name, _) -> allBones.add(name));
+        }
+
+        if (rootMotion && !allBones.contains(ArmatureLoader.ROOT_BONE)) {
+            Akythera.LOGGER.warn(
+                "Root motion is on, but no clip of {} has a '{}' bone track, so its owner will not move",
+                segments.stream().map(AssetAccessor::identifier).toList(), ArmatureLoader.ROOT_BONE
+            );
         }
 
         for (AssetAccessor<AnimationClip> animation : segments) {

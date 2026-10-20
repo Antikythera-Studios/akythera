@@ -63,15 +63,15 @@ public interface Animator {
                 );
             }
 
-            ArmatureComponent armatureComponent = owner.findComponent(ArmatureComponent.class);
+            ArmatureComponent armatureComponent = getArmatureComponent();
 
             // Play root motion if enabled.
             if (animMontage.value().rootMotion() && armatureComponent != null) {
-                RootMotionComponent rootMotionComponent = armatureComponent.getRootMotionComponent();
+                RootMotionComponent rootMotionComponent = armatureComponent.getComponent(RootMotionComponent.class);
                 // Important: used merged clip, the `getPose` method will remove root motion.
                 AnimationClip montageClip = animMontage.value().getMergedAnimClip();
 
-                if (rootMotionComponent != null && rootMotionComponent.isEnabled()
+                if (rootMotionComponent != null
                     && montageClip.hasBoneTransform(ArmatureLoader.ROOT_BONE)
                 ) {
                     rootMotionComponent.setSource(
@@ -183,9 +183,15 @@ public interface Animator {
         throw new UnsupportedOperationException(getClass().getSimpleName() + " can't change its owner");
     }
 
-    /// Returns the armature the owner's first [ArmatureComponent] holds
+    /// The [ArmatureComponent] this animator poses, null until one is built over it.
+    @Nullable ArmatureComponent getArmatureComponent();
+
+    /// Binds this animator to the [ArmatureComponent] built over it.
+    void setArmatureComponent(final ArmatureComponent armatureComponent);
+
+    /// Returns the armature [#getArmatureComponent] holds
     @ScriptFunction(pure = true, label = "Get Armature")
     default AssetAccessor<? extends Armature> getArmature() {
-        return this.<ComponentAttachable>getOwner().findComponent(ArmatureComponent.class).getArmature();
+        return getArmatureComponent().getArmature();
     }
 }

@@ -25,8 +25,8 @@ import java.util.List;
 ///
 /// The player automatically be faded out when the animation elapse time
 /// reaches [AnimationMontage#getTotalFrameTime] if [AnimationMontage#loops()]
-/// is false. Otherwise, the playback restarts from the beginning until [#terminate]
-/// is called.
+/// is false. Otherwise, the montage restarts from the beginning, so manual call
+/// of [#terminate] will be required.
 ///
 /// The player will start increase [#elapsedTime] and fully deactivated until
 /// [#fadeTime] becomes 1 or 0 in each case. This means the fade-in and fade-out
@@ -207,32 +207,36 @@ public final class AnimationMontagePlayer implements AnimationDriver {
                 String currentSectionName = sectionInfo.getSectionAt(elapsedTime);
                 TimeWindow currentSectionWindow = sectionInfo.getSectionTimeWindow(currentSectionName);
 
-                // Exceeds the section & animation total time bound by increment
-                if (currentSectionWindow != null && !currentSectionWindow.isIn(elapsedTime + frameTime) || elapsedTime + frameTime > currentPlaying.value().getTotalFrameTime()) {
-                    String nextSectionName = sectionInfo.getNextSection(currentSectionName);
-                    float totalTime = currentPlaying.value().getTotalFrameTime();
+                float totalTime = currentPlaying.value().getTotalFrameTime();
+                boolean reachesEnd = elapsedTime + frameTime > totalTime;
 
-                    if (nextSectionName == null && currentSectionWindow.to() >= totalTime) {
-                        if (currentPlaying.value().loops()) {
-                            lastUpdatedTime = elapsedTime - totalTime;
-                            elapsedTime = elapsedTime + frameTime - totalTime;
-                        } else {
-                            elapsedTime = totalTime;
-                            fadeOut(null, false);
-                        }
-                    } else if (nextSectionName == null) {
+                // Exceeds the section & animation total time bound by increment
+                if (currentSectionWindow != null && !currentSectionWindow.isIn(elapsedTime + frameTime) || reachesEnd) {
+                    String nextSectionName = sectionInfo.getNextSection(currentSectionName);
+                    float sectionEnd = currentSectionWindow == null ? totalTime : Math.min(currentSectionWindow.to(), totalTime);
+                    float restartTime;
+
+                    if (nextSectionName != null) {
+                        restartTime = sectionInfo.getSectionTimeWindow(nextSectionName).from();
+                    } else if (reachesEnd && currentPlaying.value().loops()) {
+                        restartTime = 0.0F;
+                    } else if (reachesEnd) {
+                        // Ends the montage and fades out. The next tick still drives notifies up to the end.
+                        elapsedTime = totalTime;
+                        fadeOut(null, false);
+                        return;
+                    } else {
                         // No transition defined → pause at the section end and hold the pose. Stay active
                         // so the caller can jumpToSection (play another sequence) or terminate() explicitly.
-                        elapsedTime = currentSectionWindow.to();
-                        lastUpdatedTime = elapsedTime; // so notifies between here and the section end don't re-fire each tick
-                    } else {
-                        // Set elapsed times to the next section
-                        float deltaMinus = currentSectionWindow.to() - elapsedTime;
-                        float deltaPlus = elapsedTime + frameTime - currentSectionWindow.to();
-                        TimeWindow nextSectionTime = sectionInfo.getSectionTimeWindow(nextSectionName);
-                        lastUpdatedTime = nextSectionTime.from() - deltaMinus;
-                        elapsedTime = nextSectionTime.from() + deltaPlus;
+                        elapsedTime = sectionEnd;
+                        lastUpdatedTime = sectionEnd; // so notifies between here and `sectionEnd` don't re-fire each tick
+                        return;
                     }
+
+                    float deltaMinus = sectionEnd - elapsedTime;
+                    float deltaPlus = elapsedTime + frameTime - sectionEnd;
+                    lastUpdatedTime = restartTime - deltaMinus;
+                    elapsedTime = restartTime + deltaPlus;
                 } else {
                     elapsedTime += frameTime;
                 }

@@ -5,6 +5,7 @@ import com.yesman.akythera.api.asset.AssetAccessor;
 import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.api.component.DynamicPatchComponent;
 import com.yesman.akythera.api.component.PatchComponent;
+import com.yesman.akythera.api.component.TickableComponent;
 import com.yesman.akythera.api.component.TickableDynamicComponent;
 import com.yesman.akythera.api.component.TransformComponent;
 import com.yesman.akythera.api.component.TransformInheritPolicy;
@@ -45,11 +46,12 @@ public class ArmatureComponent
     private static final float SERVER_FRAME_TIME = 0.05F;
 
     private final AssetAccessor<? extends Armature> armature;
-    private final Animator animator;
-    private final @Nullable RootMotionComponent rootMotionComponent;
+
+    /// Null only on a preview armature that has no animator installed yet, which draws the bind pose.
+    private final @Nullable Animator animator;
 
     /// The attached components by name, in declaration order—[TransformSocket]s and whatever draws
-    /// the entity's body.
+    /// the entity's body, and a [RootMotionComponent].
     private final Map<String, PatchComponent> components = new LinkedHashMap<>();
 
     /// [#components] indexed by [UniqueComponent] type, built once the children are.
@@ -90,17 +92,15 @@ public class ArmatureComponent
     public ArmatureComponent(
         final ComponentAttachable owner,
         final AssetAccessor<? extends Armature> armature,
-        final Animator animator,
-        final boolean useRootMotion
+        final Animator animator
     ) {
-        this(owner, armature, animator, useRootMotion, Transform.IDENTITY, TransformInheritPolicy.LOC_ROT_SCA, Map.of());
+        this(owner, armature, animator, Transform.IDENTITY, TransformInheritPolicy.LOC_ROT_SCA, Map.of());
     }
 
     public ArmatureComponent(
         final ComponentAttachable owner,
         final AssetAccessor<? extends Armature> armature,
-        final Animator animator,
-        final boolean useRootMotion,
+        final @Nullable Animator animator,
         final Transform localTransform,
         final TransformInheritPolicy transformInheritPolicy,
         final Map<String, ComponentBlueprint<?, ?>> childBlueprints
@@ -111,11 +111,11 @@ public class ArmatureComponent
         this.localTransform = localTransform;
         this.transformInheritPolicy = transformInheritPolicy;
 
+        if (animator != null) animator.setArmatureComponent(this);
+
         ComponentBlueprint.instantiateAll(childBlueprints, this, owner.logicalSide().validInClientSide(), components::put);
 
         uniqueComponents = ComponentAttachable.indexUnique(components);
-
-        rootMotionComponent = useRootMotion ? new RootMotionComponent(this) : null;
     }
 
     /// The armature that poses what `host` places: the host itself, the one a socket rides, or a patch's first.
@@ -146,7 +146,10 @@ public class ArmatureComponent
 
         frameUpdatedSinceTick = false;
         getAnimator().tick();
-        if (rootMotionComponent != null) rootMotionComponent.tick();
+
+        components.values().forEach(component -> {
+            if (component.isEnabled() && component instanceof TickableComponent tickable) tickable.tick();
+        });
     }
 
     @Override
@@ -155,7 +158,9 @@ public class ArmatureComponent
         getAnimator().update(frameTime, partialTick);
         updateBoundTransforms();
 
-        if (rootMotionComponent != null) rootMotionComponent.frameUpdate(frameTime);
+        components.values().forEach(component -> {
+            if (component.isEnabled() && component instanceof TickableDynamicComponent<?> dynamic) dynamic.frameUpdate(frameTime, partialTick);
+        });
     }
 
     /// Rewrites [#boundTransforms] from the animator's current pose.
@@ -215,11 +220,6 @@ public class ArmatureComponent
 
     public Matrix4f @Nullable [] getPreviousBoundTransforms() {
         return previousBoundTransforms;
-    }
-
-    // The call site must be in-game time. Crashed when try to use this component in preview model.
-    public @Nullable RootMotionComponent getRootMotionComponent() {
-        return rootMotionComponent;
     }
 
     @Override

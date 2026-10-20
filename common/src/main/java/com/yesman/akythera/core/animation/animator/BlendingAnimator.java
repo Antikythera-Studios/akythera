@@ -38,6 +38,7 @@ import java.util.function.Function;
 /// Detailed logics should be implemented in [AnimatorScript].
 public final class BlendingAnimator implements Animator {
     private ComponentAttachable owner;
+    private @Nullable ArmatureComponent armatureComponent;
 
     /// Defines how this animator is controlled in each event trigger
     private final AnimatorScript animScript;
@@ -195,5 +196,15 @@ public final class BlendingAnimator implements Animator {
     @Override
     public void setOwner(final ComponentAttachable owner) {
         this.owner = owner;
+    }
+
+    @Override
+    public @Nullable ArmatureComponent getArmatureComponent() {
+        return armatureComponent;
+    }
+
+    @Override
+    public void setArmatureComponent(final ArmatureComponent armatureComponent) {
+        this.armatureComponent = armatureComponent;
     }
 }

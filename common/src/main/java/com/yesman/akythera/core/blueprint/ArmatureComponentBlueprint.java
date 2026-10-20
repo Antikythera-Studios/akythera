@@ -32,7 +32,6 @@ import java.util.Map;
 public record ArmatureComponentBlueprint(
     AssetAccessor<? extends Armature> armature,
     AnimatorScriptFactory scriptFactory,
-    boolean useRootMotion,
     Transform transform,
     TransformInheritPolicy transformInheritPolicy,
     Map<String, ComponentBlueprint<?, ?>> childBlueprints,
@@ -44,7 +43,6 @@ public record ArmatureComponentBlueprint(
             instance.group(
                 ArmatureManager.CODEC.fieldOf("armature").forGetter(ArmatureComponentBlueprint::armature),
                 AnimatorScriptFactory.CODEC.fieldOf("script").forGetter(ArmatureComponentBlueprint::scriptFactory),
-                Codec.BOOL.fieldOf("use_root_motion").forGetter(ArmatureComponentBlueprint::useRootMotion),
                 TRANSFORM_CODEC.forGetter(ArmatureComponentBlueprint::transform),
                 TRANSFORM_INHERIT_POLICY_CODEC.forGetter(ArmatureComponentBlueprint::transformInheritPolicy),
                 // The same field [TransformSocket] declares for its own children, dispatching
@@ -61,10 +59,9 @@ public record ArmatureComponentBlueprint(
     /// attachable.
     public ArmatureComponentBlueprint(
         final AssetAccessor<? extends Armature> armature,
-        final AnimatorScriptFactory scriptFactory,
-        final boolean useRootMotion
+        final AnimatorScriptFactory scriptFactory
     ) {
-        this(armature, scriptFactory, useRootMotion, Transform.IDENTITY, TransformInheritPolicy.LOC_ROT_SCA, Map.of(), true);
+        this(armature, scriptFactory, Transform.IDENTITY, TransformInheritPolicy.LOC_ROT_SCA, Map.of(), true);
     }
 
     @Override
@@ -73,7 +70,6 @@ public record ArmatureComponentBlueprint(
             armatureOwner,
             armature,
             ComponentsFactory.getImpl().getAnimator(armatureOwner, scriptFactory::instantiate),
-            useRootMotion,
             transform,
             transformInheritPolicy,
             childBlueprints

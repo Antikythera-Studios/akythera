@@ -49,6 +49,9 @@ public final class AkytheraComponentBlueprints {
     public static final Holder<MapCodec<? extends ComponentBlueprint<?, ?>>> ENTITY_MOVEMENT =
         ENTITY_PATCH_REGISTRAR.register("entity_movement", () -> EntityMovementComponentBlueprint.CODEC);
 
+    public static final Holder<MapCodec<? extends ComponentBlueprint<?, ?>>> ROOT_MOTION =
+        ENTITY_PATCH_REGISTRAR.register("root_motion", () -> RootMotionComponentBlueprint.CODEC);
+
     public static final Holder<MapCodec<? extends ComponentBlueprint<?, ?>>> ABILITY_SYSTEM =
         ENTITY_PATCH_REGISTRAR.register("ability_system", () -> AbilitySystemComponentBlueprint.CODEC);
 

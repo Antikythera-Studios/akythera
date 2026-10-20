@@ -2,11 +2,13 @@ package com.yesman.akythera.core.animation.animator;
 
 import com.yesman.akythera.api.animation.animator.Animator;
 import com.yesman.akythera.api.component.ComponentAttachable;
+import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.core.animation.driver.AnimationMontagePlayer;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.playable.AnimationMontage;
 import net.minecraft.resources.ResourceKey;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Collection;
 import java.util.List;
@@ -19,6 +21,7 @@ import java.util.List;
 public final class MontageOnlyAnimator implements Animator {
     private final AnimationMontagePlayer montagePlayer = new AnimationMontagePlayer();
     private ComponentAttachable owner;
+    private @Nullable ArmatureComponent armatureComponent;
 
     public boolean isHardPaused = false;
     public boolean isSoftPaused = false;
@@ -80,5 +83,15 @@ public final class MontageOnlyAnimator implements Animator {
     @Override
     public void setOwner(final ComponentAttachable owner) {
         this.owner = owner;
+    }
+
+    @Override
+    public @Nullable ArmatureComponent getArmatureComponent() {
+        return armatureComponent;
+    }
+
+    @Override
+    public void setArmatureComponent(final ArmatureComponent armatureComponent) {
+        this.armatureComponent = armatureComponent;
     }
 }

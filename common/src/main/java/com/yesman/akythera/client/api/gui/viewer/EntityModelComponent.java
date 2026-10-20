@@ -210,7 +210,7 @@ public final class EntityModelComponent implements Model3DViewerComponent, Anima
             : Map.of();
         Transform transform = armatureComponent == null ? Transform.IDENTITY : armatureComponent.localTransform();
 
-        armatureComponent = new ArmatureComponent(this, armature, animator, false, transform, TransformInheritPolicy.LOC_ROT_SCA, children);
+        armatureComponent = new ArmatureComponent(this, armature, animator, transform, TransformInheritPolicy.LOC_ROT_SCA, children);
     }
 
     /// The pose to skin by, read per frame in place of this component's own animator. A component with
@@ -469,6 +469,7 @@ public final class EntityModelComponent implements Model3DViewerComponent, Anima
     public static final class SimpleHeadlessAnimator implements EditorScrubAnimator {
         @Nullable
         private AssetAccessor<AnimationClip> animation;
+        private @Nullable ArmatureComponent armatureComponent;
         private float elapsedTime = 0.0F;
 
         /// Whether pose update by render tick, or manual control.
@@ -573,6 +574,16 @@ public final class EntityModelComponent implements Model3DViewerComponent, Anima
         @Override
         public <O> O getOwner() {
             throw new UnsupportedOperationException("SimpleHeadlessAnimator has no owner");
+        }
+
+        @Override
+        public @Nullable ArmatureComponent getArmatureComponent() {
+            return armatureComponent;
+        }
+
+        @Override
+        public void setArmatureComponent(final ArmatureComponent armatureComponent) {
+            this.armatureComponent = armatureComponent;
         }
 
         @Override
