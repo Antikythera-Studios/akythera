@@ -6,6 +6,10 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
+import com.yesman.akythera.mixinaccessor.client.KeyMappingAccessor;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.Options;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.util.Mth;
@@ -13,6 +17,9 @@ import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.function.Predicate;
 
 /// Camera component: necessary for rendering
@@ -24,6 +31,9 @@ public final class CameraComponent implements Model3DViewerComponent {
     private static final float FOV = 70.0F;
 
     private static final float BEHIND_YAW = 0.0F; // behind a model, looking the way it faces
+
+    /// Distance [#focus] travels per tick while a movement key is held, as a fraction of the zoom distance.
+    private static final float MOVE_SPEED = 0.04F;
 
     private ViewMode viewMode = ViewMode.FRUSTUM;
 
@@ -41,14 +51,40 @@ public final class CameraComponent implements Model3DViewerComponent {
     private float targetYRot = 180.0F;
     private final Vector3f targetFocus = new Vector3f(0.0F, 1.0F, 0.0F);
 
+    /// Vanilla movement keys whose press reached the camera, held until the physical key comes up.
+    private final Set<KeyMapping> heldMoveKeys = new HashSet<>();
+
     private final boolean controllable;
 
     public CameraComponent(boolean controllable) {
         this.controllable = controllable;
     }
 
+    /// Moves [#focus] by the [#heldMoveKeys], fly-camera style: forward, strafe and world up / down. Movement
+    /// stops once the pointer leaves the viewer or the viewer loses focus.
     @Override
     public void extractComponent(GuiGraphicsExtractor graphics, Model3DViewer model3DViewer, PoseStack poseStack, ByteBufferBuilder byteBuffer, int mouseX, int mouseY, float a) {
+        if (heldMoveKeys.isEmpty()) return;
+
+        Minecraft minecraft = Minecraft.getInstance();
+        heldMoveKeys.removeIf(key -> !model3DViewer.isFocused() || !model3DViewer.isHovered()
+            || !InputConstants.isKeyDown(minecraft.getWindow(), ((KeyMappingAccessor) key).akythera$getKey().getValue()));
+
+        Options options = minecraft.options;
+        float forward = (heldMoveKeys.contains(options.keyUp) ? 1.0F : 0.0F) - (heldMoveKeys.contains(options.keyDown) ? 1.0F : 0.0F);
+        float strafe = (heldMoveKeys.contains(options.keyRight) ? 1.0F : 0.0F) - (heldMoveKeys.contains(options.keyLeft) ? 1.0F : 0.0F);
+        float lift = (heldMoveKeys.contains(options.keyJump) ? 1.0F : 0.0F) - (heldMoveKeys.contains(options.keyShift) ? 1.0F : 0.0F);
+
+        if (forward == 0.0F && strafe == 0.0F && lift == 0.0F) return;
+
+        // Rows of the view rotation: the camera's right and back in world space.
+        Matrix3f rotation = new Matrix3f().rotationX(xRot * Mth.DEG_TO_RAD).rotateY(yRot * Mth.DEG_TO_RAD);
+        float step = MOVE_SPEED * (float) -zoom * a;
+
+        focus.add(rotation.getRow(0, new Vector3f()).mul(strafe * step));
+        focus.add(rotation.getRow(2, new Vector3f()).mul(-forward * step));
+        focus.y += lift * step;
+        targetFocus.set(focus);
     }
 
     /// Builds the model-view PoseStack for this frame.
@@ -177,6 +213,17 @@ public final class CameraComponent implements Model3DViewerComponent {
         if (Shortcut.VIEW_OPPOSITE.matches(event)) {
             orbitTo(-targetXRot, targetYRot + 180.0F);
             return true;
+        }
+
+        if (event.hasControlDown() || event.hasAltDown()) return false;
+
+        Options options = Minecraft.getInstance().options;
+
+        for (KeyMapping key : List.of(options.keyUp, options.keyDown, options.keyLeft, options.keyRight, options.keyJump, options.keyShift)) {
+            if (key.matches(event)) {
+                heldMoveKeys.add(key);
+                return true;
+            }
         }
 
         return false;

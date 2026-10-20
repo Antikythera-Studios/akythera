@@ -141,7 +141,9 @@ public class ArmatureComponent
         } else if (!frameUpdatedSinceTick) {
             getAnimator().update(SERVER_FRAME_TIME, 1.0F);
 
-            if (rootMotionComponent != null) rootMotionComponent.frameUpdate(SERVER_FRAME_TIME);
+            components.values().forEach(component -> {
+                if (component.isEnabled() && component instanceof TickableDynamicComponent<?> dynamic) dynamic.frameUpdate(SERVER_FRAME_TIME, 1.0F);
+            });
         }
 
         frameUpdatedSinceTick = false;

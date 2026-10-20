@@ -10,9 +10,7 @@ import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.animation.playable.SectionInfo;
 import com.yesman.akythera.core.math.TimeWindow;
 import com.yesman.akythera.core.util.helper.MathUtils;
-import com.yesman.akythera.core.util.helper.PoseOperators;
 import net.minecraft.core.Holder;
-import net.minecraft.util.Mth;
 import net.minecraft.util.StringUtil;
 import org.jetbrains.annotations.ApiStatus;
 import org.jspecify.annotations.NonNull;
@@ -32,13 +30,22 @@ import java.util.List;
 /// [#fadeTime] becomes 1 or 0 in each case. This means the fade-in and fade-out
 /// times are included for the animation's total time. Both are declared at
 /// [AnimationMontage#fadeInTime()] and [AnimationMontage#fadeOutTime()].
+///
+/// A montage played over another one fades in from the replaced montage, which keeps playing
+/// in [#outgoing] until the fade-in ends.
 public final class AnimationMontagePlayer implements AnimationDriver {
-    /// Cached last pose before call [#playAnimation] or [#terminate]
+    /// Cached last pose before call [#terminate]
     @NonNull
     private Pose cachedLastMontagePose = Pose.EMPTY_POSE;
 
-    /// [#getWeight] of the montage [#playAnimation] replaced. The fade-in starts from here.
-    private float fadeInStartWeight;
+    /// The replaced montage, still playing while the current one fades in. Null when no switch runs.
+    private @Nullable AnimationMontagePlayer outgoing;
+
+    /// Blends [#outgoing] into [#playingPose] while [#outgoing] exists.
+    private @Nullable PoseBlendDriver crossfade;
+
+    /// The current montage's own pose, without [#crossfade].
+    private final AnimationDriver playingPose = new PlayingPose();
 
     /// Current playing time
     private float elapsedTime;
@@ -68,13 +75,29 @@ public final class AnimationMontagePlayer implements AnimationDriver {
 
     /// Plays an animation montage starting in a specific section
     public MontageCallbackHandle playAnimation(final Holder.@NonNull Reference<@NonNull AnimationMontage> animMontage, @Nullable final String sectionName) {
-        fadeInStartWeight = getWeight();
-
         if (currentPlaying != null) {
-            // Cache the current pose of the montage played lastly
-            cachedLastMontagePose = getPose();
             interruptNotifies();
             montageCallbackHandle.triggerComplete(animMontage, true);
+
+            // The replaced montage plays on in a copy with its callbacks cut off.
+            AnimationMontagePlayer replaced = null;
+
+            if (getWeight() > 0.0F) {
+                replaced = new AnimationMontagePlayer();
+                replaced.cachedLastMontagePose = cachedLastMontagePose;
+                replaced.elapsedTime = elapsedTime;
+                replaced.lastUpdatedTime = lastUpdatedTime;
+                replaced.fadeTime = fadeTime;
+                replaced.sectionIndex = sectionIndex;
+                replaced.isFinished = isFinished;
+                replaced.fadingInOrOut = fadingInOrOut;
+                replaced.currentPlaying = currentPlaying;
+                replaced.montageCallbackHandle = new MontageCallbackHandle(currentPlaying);
+                replaced.montageCallbackHandle.invalidate();
+                replaced.setOutgoing(outgoing);
+            }
+
+            setOutgoing(replaced);
         }
 
         fadingInOrOut = true;
@@ -130,7 +153,9 @@ public final class AnimationMontagePlayer implements AnimationDriver {
     private void fadeOut(final Holder.@Nullable Reference<@NonNull AnimationMontage> override, final boolean interrupted) {
         montageCallbackHandle.triggerComplete(override, interrupted);
         cachedLastMontagePose = getPose();
-        fadeTime = currentPlaying.value().fadeOutTime() * getWeight();
+        float weight = getWeight();
+        setOutgoing(null);
+        fadeTime = currentPlaying.value().fadeOutTime() * weight;
         fadingInOrOut = false;
         isFinished = true;
     }
@@ -170,9 +195,22 @@ public final class AnimationMontagePlayer implements AnimationDriver {
         if (owner != null && currentPlaying != null && !isFinished) currentPlaying.value().interrupt(owner, lastUpdatedTime);
     }
 
+    private void setOutgoing(@Nullable AnimationMontagePlayer outgoing) {
+        this.outgoing = outgoing;
+        crossfade = outgoing == null ? null : new PoseBlendDriver(outgoing, playingPose,
+            () -> MathUtils.safeDivision(fadeInProgress(), getWeight(), 1.0F));
+    }
+
+    /// How far the current montage has faded in, from 0.0 to 1.0.
+    private float fadeInProgress() {
+        return currentPlaying == null ? 0.0F : MathUtils.safeDivision(fadeTime, currentPlaying.value().fadeInTime(), 1.0F);
+    }
+
     /// @param frameTime fixed to 0.05 in a server side, variable frame time in client side.
     @Override
     public void update(final float frameTime) {
+        if (outgoing != null) outgoing.update(frameTime);
+
         // Reset to 0 when no there's no playing animation
         if (currentPlaying == null) {
             elapsedTime = 0.0F;
@@ -187,6 +225,7 @@ public final class AnimationMontagePlayer implements AnimationDriver {
 
                 // fading-in has just completed.
                 if (wasFadingIn && !isFading) montageCallbackHandle.triggerBegin();
+                if (!isFading) setOutgoing(null);
             } else {
                 fadeTime = Math.clamp(fadeTime - frameTime, 0.0F, currentPlaying.value().fadeOutTime());
                 isFading = fadeTime > 0.0F;
@@ -256,25 +295,11 @@ public final class AnimationMontagePlayer implements AnimationDriver {
 
     @Override
     public Pose getPose() {
-        if (currentPlaying == null) return cachedLastMontagePose;
+        // While fading out, returns the raw pose so that it can be blended to the locomotion
+        // layer by `getWeight()`
+        if (currentPlaying == null || !fadingInOrOut) return cachedLastMontagePose;
 
-        if (fadingInOrOut) {
-            // When fading mode is set to "fade-in", and the time haven't reached the total
-            // fade in time, blend the cached last pose to animation pose to start
-            float fadeInTime = currentPlaying.value().fadeInTime();
-
-            if (fadeTime < fadeInTime) {
-                float share = MathUtils.safeDivision(fadeTime / fadeInTime, getWeight(), 1.0F);
-                return PoseOperators.blendPoses(cachedLastMontagePose, 1.0F - share, currentPlaying.value().getPose(elapsedTime), share);
-            }
-        } else {
-            // When fading mode is set to "fade-out", and the time hasn't reached the total
-            // fade out time, returns the raw pose so that it can be blended to the locomotion
-            // layer by `getWeight()`
-            return cachedLastMontagePose;
-        }
-
-        return currentPlaying.value().getPose(elapsedTime);
+        return crossfade == null ? playingPose.getPose() : crossfade.getPose();
     }
 
     @Override
@@ -294,7 +319,10 @@ public final class AnimationMontagePlayer implements AnimationDriver {
         }
 
         if (fadingInOrOut) {
-            return Mth.lerp(MathUtils.safeDivision(fadeTime, currentPlaying.value().fadeInTime(), 1.0F), fadeInStartWeight, 1.0F);
+            float progress = fadeInProgress();
+
+            // Rises from the outgoing montage's weight instead of 0, so the layer under it never shows through.
+            return outgoing == null ? progress : outgoing.getWeight() * (1.0F - progress) + progress;
         } else {
             return MathUtils.safeDivision(fadeTime, currentPlaying.value().fadeOutTime(), 0.0F);
         }
@@ -324,7 +352,6 @@ public final class AnimationMontagePlayer implements AnimationDriver {
             lastUpdatedTime = montagePlayerSource.lastUpdatedTime;
             elapsedTime = montagePlayerSource.elapsedTime;
             fadeTime = montagePlayerSource.fadeTime;
-            fadeInStartWeight = montagePlayerSource.fadeInStartWeight;
             sectionIndex = montagePlayerSource.sectionIndex;
             isFinished = montagePlayerSource.isFinished;
             fadingInOrOut = montagePlayerSource.fadingInOrOut;
@@ -334,6 +361,60 @@ public final class AnimationMontagePlayer implements AnimationDriver {
     @Override
     public String toString() {
         return currentPlaying + " " + elapsedTime;
+    }
+
+    /// Read-only view of the current montage's pose at [#elapsedTime]. Playback control stays on the player.
+    private final class PlayingPose implements AnimationDriver {
+        @Override
+        public Pose getPose() {
+            return currentPlaying == null ? cachedLastMontagePose : currentPlaying.value().getPose(elapsedTime);
+        }
+
+        @Override
+        public @Nullable PlayableAnimation getPlayingAnimation() {
+            return AnimationMontagePlayer.this.getPlayingAnimation();
+        }
+
+        @Override
+        public void update(final float frameTime) {
+        }
+
+        @Override
+        public float getTime() {
+            return elapsedTime;
+        }
+
+        @Override
+        public void start() {
+        }
+
+        @Override
+        public void terminate() {
+        }
+
+        @Override
+        public float getWeight() {
+            return fadeInProgress();
+        }
+
+        @Override
+        public boolean isFinished() {
+            return isFinished;
+        }
+
+        @Override
+        public boolean fadingInOrOut() {
+            return fadingInOrOut;
+        }
+
+        @Override
+        public float getFadeTime() {
+            return fadeTime;
+        }
+
+        @Override
+        public void syncDriverTo(@NonNull AnimationDriver source) {
+        }
     }
 
     /// A disposable montage playback callback handler

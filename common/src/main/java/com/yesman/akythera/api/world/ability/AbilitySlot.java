@@ -5,7 +5,9 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.core.reflection.ScriptType;
 import com.yesman.akythera.core.util.EnumerableDataBlock;
 import com.yesman.akythera.core.util.EnumerableDataBlockManager;
+import com.yesman.akythera.core.util.helper.ParseUtils;
 import net.minecraft.resources.Identifier;
+import org.jspecify.annotations.Nullable;
 
 /// One equippable slot on an [AbilitySystemComponent]. A slot holds at most one ability, and every
 /// give names the slot it fills.
@@ -18,11 +20,11 @@ public interface AbilitySlot extends EnumerableDataBlock {
         RecordCodecBuilder.mapCodec(
             instance ->
                 instance.group(
-                    AbilitySlotGroup.ENUM_MANAGER.getNameCodec().fieldOf("group").forGetter(AbilitySlot::group)
+                    AbilitySlotGroup.ENUM_MANAGER.getNameCodec().optionalFieldOf("group").forGetter(ParseUtils.provideOptional(AbilitySlot::group))
                 ).apply(instance, group -> new AbilitySlot() {
                     @Override
-                    public AbilitySlotGroup group() {
-                        return group;
+                    public @Nullable AbilitySlotGroup group() {
+                        return group.orElse(null);
                     }
 
                     @Override
@@ -39,8 +41,8 @@ public interface AbilitySlot extends EnumerableDataBlock {
         )
     );
 
-    /// The group this slot belongs to.
-    AbilitySlotGroup group();
+    /// The group this slot is listed under in UI, null for a slot no UI lists.
+    @Nullable AbilitySlotGroup group();
 
     @Override
     default EnumerableDataBlockManager<? extends EnumerableDataBlock> getEnumManager() {

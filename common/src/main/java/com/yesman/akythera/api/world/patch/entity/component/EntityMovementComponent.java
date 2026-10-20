@@ -42,6 +42,13 @@ public final class EntityMovementComponent implements MovementComponent, Dynamic
         owner.getOriginal().setPos(position);
     }
 
+    /// Keeps [Entity#onGround] through a level move.
+    ///
+    /// Vanilla [Entity#move] rewrites `onGround` on the side that controls the entity, and only a move
+    /// with a downward part that hits a block sets it true. A root motion step is usually horizontal,
+    /// so every step would set `onGround` false until the next tick's gravity move sets it true again,
+    /// and an animator that reads `onGround` each frame would leave the ground states while the entity
+    /// stands on the floor. A move up or down still lets vanilla decide.
     @Override
     public void move(final Vec3 delta) {
         Entity entity = owner.getOriginal();
