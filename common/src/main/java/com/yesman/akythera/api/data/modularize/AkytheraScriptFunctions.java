@@ -452,6 +452,22 @@ public final class AkytheraScriptFunctions {
             )
     );
 
+    /// The client registers [AkytheraClientScriptFunctions#selfRenderType]. A dedicated server, which has no
+    /// render types, registers a placeholder under the same id that answers null.
+    public static final Holder<ScriptFunction> SELF_RENDER_TYPE = AKYTHERA_REGISTRAR.register("self_render_type", () ->
+        ModPlatformProvider.get().getPhysicalSide().isClient()
+            ? AkytheraClientScriptFunctions.selfRenderType()
+            : ScriptModularizeHelper.makeCustomScript(
+                (Supplier<Object>) () -> null,
+                FunctionSignature.create(Object.class, List.of()),
+                "Get Entity Render Type",
+                "Render",
+                "The render type the entity's own model draws with",
+                true,
+                ScriptFunction.Usage.SCRIPT
+            )
+    );
+
     // ***********************************************
     // Widget
     // ***********************************************

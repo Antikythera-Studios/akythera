@@ -3,6 +3,7 @@ package com.yesman.akythera.client.api.data.modularize;
 import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.api.data.modularize.ScriptFunction;
 import com.yesman.akythera.api.data.serializable.LocalizedMessage;
+import com.yesman.akythera.client.api.component.impl.MeshComponent;
 import com.yesman.akythera.client.api.gui.AkytheraHUD;
 import com.yesman.akythera.client.api.gui.AkytheraScreen;
 import com.yesman.akythera.client.api.gui.AkytheraWidget;
@@ -53,6 +54,20 @@ public final class AkytheraClientScriptFunctions {
         if (textureId == null) return null;
 
         return Boolean.TRUE.equals(translucent) ? RenderTypes.entityTranslucent(textureId) : RenderTypes.entityCutout(textureId);
+    }
+
+    /// The `akythera:self_render_type` function. Answers null, which a [MeshComponent] draws as the entity's
+    /// own model render type.
+    public static ScriptFunction selfRenderType() {
+        return ScriptModularizeHelper.makeCustomScript(
+            (Supplier<RenderType>) () -> null,
+            FunctionSignature.create(RenderType.class, List.of()),
+            "Get Entity Render Type",
+            "Render",
+            "The render type the entity's own model draws with",
+            true,
+            ScriptFunction.Usage.SCRIPT
+        );
     }
 
     /// Whether [AkytheraClientConfig#getDefaultAnimationDriver] picks Player Animation Library.
