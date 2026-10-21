@@ -38,6 +38,7 @@ import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.client.resources.model.EquipmentClientInfo;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.data.AtlasIds;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.ARGB;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -206,12 +207,20 @@ public final class SkinnedArmorRenderer implements RenderableComponent<LivingEnt
 
         wornLayerType = wornModel.layerType();
 
+        List<Identifier> textures = wornLayers(wornStack, equipmentSlot, wornLayerType).stream()
+            .map(layer -> ClientComponentsFactory.getImpl().getArmorTexture(
+                wornStack, wornLayerType, layer, layer.getTextureLocation(wornLayerType)
+            ))
+            .toList();
+
         for (PatchComponent sibling : armature.getComponents().values()) {
             if (sibling instanceof MeshComponent body
                 && body.getMesh() != null
                 && body.getMesh().getOrHandleException(Akythera.LOGGER::error) instanceof SkeletalMesh bodyMesh
             ) {
-                wornMesh = VanillaModelBaker.bake(wornModel.model(), resolvedArmature, bodyMesh, wornStack.getItem(), equipmentSlot);
+                wornMesh = VanillaModelBaker.bake(
+                    wornModel.model(), resolvedArmature, bodyMesh, wornStack.getItem(), equipmentSlot, textures
+                );
                 break;
             }
         }

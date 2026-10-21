@@ -1,6 +1,7 @@
 package com.yesman.akythera.api.world.patch.entity;
 
 import com.yesman.akythera.api.animation.animator.AnimationInterfaceKey;
+import com.yesman.akythera.api.animation.notify.impl.LockMovementNotifyState;
 import com.yesman.akythera.api.component.UniqueComponent;
 import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.world.patch.AkytheraPatches;
@@ -10,6 +11,7 @@ import com.yesman.akythera.api.world.patch.item.WeaponStance;
 import com.yesman.akythera.api.world.patch.item.component.ReplaceAnimations;
 import com.yesman.akythera.api.world.patch.item.component.WeaponStanceVariationAdapter;
 import com.yesman.akythera.core.animation.animator.BlendingAnimator;
+import com.yesman.akythera.core.animation.driver.AnimationMontagePlayer;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.blueprint.EntityPatchBlueprint;
 import com.yesman.akythera.core.reflection.ScriptFunction;
@@ -17,6 +19,7 @@ import com.yesman.akythera.core.reflection.ScriptType;
 import net.minecraft.core.Holder;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
@@ -33,6 +36,9 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
     /// Slots equipment is read from, in priority order — the main hand answers before the off hand.
     private static final List<EquipmentSlot> STANCE_SLOTS = List.of(EquipmentSlot.MAINHAND, EquipmentSlot.OFFHAND);
 
+    /// Horizontal distance over one tick, in blocks, below which [#getMovementYaw] keeps its last direction.
+    private static final double MOVING_DISTANCE = 0.015D;
+
     /// What [#preTick] last resolved, or null while no [WeaponStanceVariationAdapter] matches.
     private WeaponStanceVariationAdapter.@Nullable Resolution stance;
 
@@ -45,6 +51,9 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
 
     /// This entity's own item patch per equipment slot, and the shared patch it was built from.
     private final Map<EquipmentSlot, SlotItemPatch> slotItemPatches = new EnumMap<>(EquipmentSlot.class);
+
+    /// What [#getMovementYaw] last returned.
+    private float movementYaw;
 
     public LivingEntityPatch(@NonNull T original) {
         super(original);
@@ -234,6 +243,52 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
     @ScriptFunction(pure = true, label = "Get Y Head Rot", desc = "The head's own yaw, which turns ahead of the body.")
     public float getYHeadRot() {
         return getOriginal().getYHeadRot();
+    }
+
+    @ScriptFunction(pure = true, label = "Get Y Body Rot (Partial)", desc = "The body's yaw between ticks, as the renderer turns the model.")
+    public float getYBodyRot(final float partialTick) {
+        return Mth.rotLerp(partialTick, getOriginal().yBodyRotO, getOriginal().yBodyRot);
+    }
+
+    @ScriptFunction(pure = true, label = "Get Head Yaw Offset", desc = "How far the head turns from the body between ticks, in degrees, as the renderer draws it. Positive is right.")
+    public float getHeadYawOffset(final float partialTick) {
+        float headRot = Mth.rotLerp(partialTick, getOriginal().yHeadRotO, getOriginal().yHeadRot);
+
+        if (!(getOriginal().getVehicle() instanceof LivingEntity vehicle)) {
+            return Mth.wrapDegrees(headRot - getYBodyRot(partialTick));
+        }
+
+        float headDiff = Mth.clamp(Mth.wrapDegrees(headRot - Mth.rotLerp(partialTick, vehicle.yBodyRotO, vehicle.yBodyRot)), -85.0F, 85.0F);
+
+        return Math.abs(headDiff) > 50.0F ? headDiff * 0.8F : headDiff;
+    }
+
+    @ScriptFunction(pure = true, label = "Get Movement Yaw", desc = "Direction of the last tick's horizontal movement relative to the body, in degrees. Negative is left. Keeps the last direction while the entity barely moves.")
+    public float getMovementYaw() {
+        T original = getOriginal();
+        double dx = original.getX() - original.xo;
+        double dz = original.getZ() - original.zo;
+
+        if (dx * dx + dz * dz > MOVING_DISTANCE * MOVING_DISTANCE) {
+            movementYaw = Mth.wrapDegrees((float)(Mth.atan2(dz, dx) * Mth.RAD_TO_DEG) - 90.0F - original.yBodyRot);
+        }
+
+        return movementYaw;
+    }
+
+    /// Returns the [LockMovementNotifyState] a playing montage holds at its playhead, or null.
+    public @Nullable LockMovementNotifyState getMovementLock() {
+        ArmatureComponent armatureComponent = getArmatureComponent();
+
+        if (armatureComponent == null) return null;
+
+        for (AnimationMontagePlayer montagePlayer : armatureComponent.getAnimator().getMontagePlayers()) {
+            LockMovementNotifyState lock = montagePlayer.getActiveNotifyState(LockMovementNotifyState.class);
+
+            if (lock != null) return lock;
+        }
+
+        return null;
     }
 
     @ScriptFunction(pure = true, label = "Is Baby")

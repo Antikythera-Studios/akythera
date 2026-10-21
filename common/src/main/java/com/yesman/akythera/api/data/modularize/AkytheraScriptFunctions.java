@@ -30,6 +30,10 @@ import com.yesman.akythera.core.animation.driver.AdditiveBlendDriver;
 import com.yesman.akythera.core.animation.driver.AnimationDriver;
 import com.yesman.akythera.core.animation.driver.EmptyAnimationDriver;
 import com.yesman.akythera.core.animation.driver.LayeredBlendPerBoneDriver;
+import com.yesman.akythera.core.animation.driver.LookAtDriver;
+import com.yesman.akythera.core.animation.driver.ModifyBoneDriver;
+import com.yesman.akythera.core.animation.driver.OrientationWarpDriver;
+import com.yesman.akythera.core.animation.driver.PlayRateDriver;
 import com.yesman.akythera.core.animation.driver.PoseBlendDriver;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.playable.AnimationMontage;
@@ -399,6 +403,36 @@ public final class AkytheraScriptFunctions {
             )
     );
 
+    public static final Holder<ScriptFunction> STOP_MONTAGE = AKYTHERA_REGISTRAR.register("stop_montage", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (BiFunction<Animator, ResourceKey, Boolean>) Animator::stopPlayingMontage,
+            FunctionSignature.create(
+                Boolean.class, List.of("animator", "montageId"),
+                Animator.class, ParseUtils.parameterized(ResourceKey.class, AnimationMontage.class)
+            ),
+            "Stop Montage",
+            "Animation/Animator",
+            "Fades out the montage if it is playing, and returns whether it was",
+            false,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> ANIM_MONTAGE_KEY = AKYTHERA_REGISTRAR.register("anim_montage_key", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (Function<AnimationMontage, ResourceKey>) montage ->
+                ScriptType.entryKey(AkytheraRegistries.DataPack.ANIM_MONTAGE_KEY, montage).orElse(null),
+            FunctionSignature.create(
+                ParseUtils.parameterized(ResourceKey.class, AnimationMontage.class), List.of("montage"), AnimationMontage.class
+            ),
+            "Montage Key",
+            "Animation/Animator",
+            "The id the montage is registered under",
+            true,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
     // ***********************************************
     // Render
     // ***********************************************
@@ -629,6 +663,83 @@ public final class AkytheraScriptFunctions {
             "Layered Blend per Bone",
             "Animation/Pose",
             "Hands the skeleton branch below a bone over to a second pose",
+            true,
+            ScriptFunction.Usage.ANIM_GRAPH
+        )
+    );
+
+    public static final Holder<ScriptFunction> PLAY_RATE = AKYTHERA_REGISTRAR.register("play_rate", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (BiFunction<AnimationDriver, Supplier, AnimationDriver>) (base, rate) -> new PlayRateDriver(base, (Supplier<Float>)rate),
+            FunctionSignature.create(AnimationDriver.class, List.of("base", "rate"), AnimationDriver.class, Supplier.class),
+            "Play Rate",
+            "Animation/Pose",
+            "Plays a pose at a rate, 1 being its own speed",
+            true,
+            ScriptFunction.Usage.ANIM_GRAPH
+        )
+    );
+
+    public static final Holder<ScriptFunction> LOOK_AT = AKYTHERA_REGISTRAR.register("look_at", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (ScriptFunction.QuintFunction<BlendingAnimator, AnimationDriver, String, Supplier, Supplier, AnimationDriver>) (animator, base, boneName, rotation, animationShare) ->
+                new LookAtDriver(animator, base, boneName, (Supplier<Vec3>)rotation, (Supplier<Float>)animationShare),
+            FunctionSignature.create(AnimationDriver.class, List.of("animator", "base", "boneName", "rotation", "animationShare"), BlendingAnimator.class, AnimationDriver.class, String.class, Supplier.class, Supplier.class),
+            "Look At",
+            "Animation/Pose",
+            "Turns a bone to a pitch, yaw and roll in model space, in degrees, keeping a share of the animation's own motion",
+            true,
+            ScriptFunction.Usage.ANIM_GRAPH
+        )
+    );
+
+    public static final Holder<ScriptFunction> MODIFY_BONE_LOCAL = AKYTHERA_REGISTRAR.register("modify_bone_local", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (ScriptFunction.QuadFunction<BlendingAnimator, AnimationDriver, String, Supplier, AnimationDriver>) (animator, base, boneName, rotation) ->
+                new ModifyBoneDriver(animator, base, boneName, ModifyBoneDriver.Space.LOCAL, (Supplier<Vec3>)rotation),
+            FunctionSignature.create(AnimationDriver.class, List.of("animator", "base", "boneName", "rotation"), BlendingAnimator.class, AnimationDriver.class, String.class, Supplier.class),
+            "Modify Bone (Local)",
+            "Animation/Pose",
+            "Adds an Euler rotation in degrees about the bone's own axes",
+            true,
+            ScriptFunction.Usage.ANIM_GRAPH
+        )
+    );
+
+    public static final Holder<ScriptFunction> MODIFY_BONE_PARENT = AKYTHERA_REGISTRAR.register("modify_bone_parent", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (ScriptFunction.QuadFunction<BlendingAnimator, AnimationDriver, String, Supplier, AnimationDriver>) (animator, base, boneName, rotation) ->
+                new ModifyBoneDriver(animator, base, boneName, ModifyBoneDriver.Space.PARENT, (Supplier<Vec3>)rotation),
+            FunctionSignature.create(AnimationDriver.class, List.of("animator", "base", "boneName", "rotation"), BlendingAnimator.class, AnimationDriver.class, String.class, Supplier.class),
+            "Modify Bone (Parent)",
+            "Animation/Pose",
+            "Adds an Euler rotation in degrees about the parent bone's axes",
+            true,
+            ScriptFunction.Usage.ANIM_GRAPH
+        )
+    );
+
+    public static final Holder<ScriptFunction> MODIFY_BONE_MODEL = AKYTHERA_REGISTRAR.register("modify_bone_model", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (ScriptFunction.QuadFunction<BlendingAnimator, AnimationDriver, String, Supplier, AnimationDriver>) (animator, base, boneName, rotation) ->
+                new ModifyBoneDriver(animator, base, boneName, ModifyBoneDriver.Space.MODEL, (Supplier<Vec3>)rotation),
+            FunctionSignature.create(AnimationDriver.class, List.of("animator", "base", "boneName", "rotation"), BlendingAnimator.class, AnimationDriver.class, String.class, Supplier.class),
+            "Modify Bone (Model)",
+            "Animation/Pose",
+            "Adds an Euler rotation in degrees about the model's axes",
+            true,
+            ScriptFunction.Usage.ANIM_GRAPH
+        )
+    );
+
+    public static final Holder<ScriptFunction> ORIENTATION_WARP = AKYTHERA_REGISTRAR.register("orientation_warp", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (ScriptFunction.QuintFunction<BlendingAnimator, AnimationDriver, String, String, Supplier, AnimationDriver>) (animator, base, hipBoneName, spineBoneName, angle) ->
+                new OrientationWarpDriver(animator, base, hipBoneName, spineBoneName, (Supplier<Float>)angle),
+            FunctionSignature.create(AnimationDriver.class, List.of("animator", "base", "hipBoneName", "spineBoneName", "angle"), BlendingAnimator.class, AnimationDriver.class, String.class, String.class, Supplier.class),
+            "Orientation Warp",
+            "Animation/Pose",
+            "Turns the hips by an angle in degrees and keeps the spine facing forward",
             true,
             ScriptFunction.Usage.ANIM_GRAPH
         )

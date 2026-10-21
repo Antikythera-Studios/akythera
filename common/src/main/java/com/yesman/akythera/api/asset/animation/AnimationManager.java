@@ -131,7 +131,7 @@ public final class AnimationManager extends DynamicAssetManager<@NonNull Animati
     public static AssetAccessor<AnimationClip> accessor(String namespace, String animPath, AssetAccessor<? extends Armature> armature) {
         Identifier fullPath = Identifier.fromNamespaceAndPath(
             namespace,
-            armature.identifier().getPath().replaceAll("armatures/", "animationsToReplace/") + "/" + animPath
+            armature.identifier().getPath().replaceAll("armatures/", "animations/") + "/" + animPath
         );
 
         return (AssetAccessor<AnimationClip>)INSTANCE.issuedAccessor.computeIfAbsent(

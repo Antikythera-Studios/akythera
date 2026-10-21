@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.stream.Stream;
 
-/// An asset manager for heavy-weight binary assets, like meshes, armatures, and animationsToReplace.
+/// An asset manager for heavy-weight binary assets, like meshes, armatures, and animations.
 ///
 /// Loading an asset is done on the first reference, not when the game starts.
 ///

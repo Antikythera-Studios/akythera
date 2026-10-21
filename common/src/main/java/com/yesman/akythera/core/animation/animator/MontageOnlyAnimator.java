@@ -8,6 +8,9 @@ import com.yesman.akythera.core.animation.playable.AnimationMontage;
 import net.minecraft.resources.ResourceKey;
 import org.jspecify.annotations.NonNull;
 
+import java.util.Collection;
+import java.util.List;
+
 /// An animator that only accommodates [AnimationMontage]. Mainly to optimize
 /// logical server entities whose don't need to sync locomotion.
 ///
@@ -30,7 +33,13 @@ public final class MontageOnlyAnimator implements Animator {
     }
 
     @Override
+    public Collection<AnimationMontagePlayer> getMontagePlayers() {
+        return List.of(montagePlayer);
+    }
+
+    @Override
     public void update(final float timeFrame, final float partialTick) {
+        montagePlayer.update(timeFrame);
     }
 
     @Override

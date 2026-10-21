@@ -33,6 +33,8 @@ public final class BlendSpace2D implements PlayableAnimation {
                 Codec.FLOAT.fieldOf("max_x").forGetter(BlendSpace2D::blendSpaceMaxX),
                 Codec.FLOAT.fieldOf("max_y").forGetter(BlendSpace2D::blendSpaceMaxY),
                 Codec.BOOL.fieldOf("loops").forGetter(BlendSpace2D::loops),
+                Codec.BOOL.optionalFieldOf("wrap_x", false).forGetter(BlendSpace2D::wrapX),
+                Codec.BOOL.optionalFieldOf("wrap_y", false).forGetter(BlendSpace2D::wrapY),
                 AnimationNode.CODEC.listOf().fieldOf("nodes").forGetter(bs2d -> new ArrayList<>(bs2d.nodeSpace.getAllPoints()))
             )
             .apply(instance, BlendSpace2D::new)
@@ -45,6 +47,8 @@ public final class BlendSpace2D implements PlayableAnimation {
     private final float smoothX;
     private final float smoothY;
     private final boolean loops;
+    private final boolean wrapX;
+    private final boolean wrapY;
     private final DelaunayTriangulation<AnimationNode> nodeSpace;
 
     private BlendSpace2D(
@@ -57,9 +61,13 @@ public final class BlendSpace2D implements PlayableAnimation {
         float maxX,
         float maxY,
         boolean loops,
+        boolean wrapX,
+        boolean wrapY,
         List<AnimationNode> nodes
     ) {
         this.loops = loops;
+        this.wrapX = wrapX;
+        this.wrapY = wrapY;
         this.fadeInTime = fadeInTime;
         this.fadeOutTime = fadeOutTime;
         this.smoothX = smoothX;
@@ -113,7 +121,7 @@ public final class BlendSpace2D implements PlayableAnimation {
         return new BlendSpace2D(
             fadeInTime, fadeOutTime, smoothX, smoothY,
             blendSpaceMinX(), blendSpaceMinY(), blendSpaceMaxX(), blendSpaceMaxY(),
-            loops, mirroredNodes
+            loops, wrapX, wrapY, mirroredNodes
         );
     }
 
@@ -127,6 +135,14 @@ public final class BlendSpace2D implements PlayableAnimation {
 
     public float smoothY() {
         return smoothY;
+    }
+
+    public boolean wrapX() {
+        return wrapX;
+    }
+
+    public boolean wrapY() {
+        return wrapY;
     }
 
     public float blendSpaceMinX() {
@@ -223,6 +239,8 @@ public final class BlendSpace2D implements PlayableAnimation {
     /// Creates [BlendSpace2D] by received nodes
     public static final class BlendSpace2DBuilder {
         boolean loops = false;
+        boolean wrapX = false;
+        boolean wrapY = false;
         float smoothX = 0.0F;
         float smoothY = 0.0F;
         float fadeInTime = 0.25F;
@@ -253,6 +271,16 @@ public final class BlendSpace2D implements PlayableAnimation {
 
         public BlendSpace2DBuilder loops(final boolean loops) {
             this.loops = loops;
+            return this;
+        }
+
+        public BlendSpace2DBuilder wrapX(final boolean wrapX) {
+            this.wrapX = wrapX;
+            return this;
+        }
+
+        public BlendSpace2DBuilder wrapY(final boolean wrapY) {
+            this.wrapY = wrapY;
             return this;
         }
 
@@ -302,6 +330,8 @@ public final class BlendSpace2D implements PlayableAnimation {
                 maxX,
                 maxY,
                 loops,
+                wrapX,
+                wrapY,
                 nodes
             );
         }

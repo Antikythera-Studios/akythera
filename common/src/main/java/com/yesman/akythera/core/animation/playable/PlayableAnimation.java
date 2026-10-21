@@ -43,6 +43,14 @@ public interface PlayableAnimation {
     /// Returns whether the animation should loop when it ends
     boolean loops();
 
+    default float rateScale() {
+        return 1.0F;
+    }
+
+    default float phaseOffset() {
+        return 0.0F;
+    }
+
     /// Raw root-bone transform at `time` — the actual root-motion displacement, NOT zeroed the way
     /// [#getPose] zeros it under root motion. Identity when the animation carries no root track.
     ///

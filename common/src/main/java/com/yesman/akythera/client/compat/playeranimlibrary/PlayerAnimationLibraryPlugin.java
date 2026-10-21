@@ -1,5 +1,6 @@
 package com.yesman.akythera.client.compat.playeranimlibrary;
 
+import com.yesman.akythera.api.asset.AnimatableObject;
 import com.yesman.akythera.api.world.patch.AkytheraPatches;
 import com.yesman.akythera.client.compat.IClientModPlugin;
 import com.yesman.akythera.core.Akythera;
@@ -7,11 +8,14 @@ import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.asset.armature.Bone;
 import com.yesman.akythera.core.util.helper.Matrix4fUtils;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.zigythebird.playeranim.accessors.IAvatarAnimationState;
+import com.zigythebird.playeranim.animation.AvatarAnimManager;
 import com.zigythebird.playeranim.api.PlayerAnimationFactory;
 import com.zigythebird.playeranim.util.RenderUtil;
 import com.zigythebird.playeranimcore.bones.PlayerAnimBone;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.geom.PartPose;
+import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.resources.Identifier;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
@@ -92,6 +96,16 @@ public final class PlayerAnimationLibraryPlugin implements IClientModPlugin {
         if (bendBone != null && pose.hasTransform(bendBone.getName())) {
             Vector3d rotations = pose.get(bendBone.getName()).rot().getEulerAnglesZYX(new Vector3d());
             palBone.bend = (float)-rotations.x();
+        }
+    }
+
+    public static void bindPreviewAnimManager(final LivingEntityRenderState renderState, final AnimatableObject animatableObject) {
+        if (renderState instanceof IAvatarAnimationState avatarAnimationState) {
+            // Add a headless anim manager, this would cause crash under the premise of animation-only usage
+            AvatarAnimManager avatarAnimManager = new AvatarAnimManager(null);
+            AkytheraAnimationLayer locomotionLayer = new AkytheraAnimationLayer(animatableObject);
+            avatarAnimManager.addAnimLayer(0, locomotionLayer);
+            avatarAnimationState.playerAnimLib$setAnimManager(avatarAnimManager);
         }
     }
 

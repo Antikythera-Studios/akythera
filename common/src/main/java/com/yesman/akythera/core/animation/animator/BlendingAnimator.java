@@ -5,6 +5,7 @@ import com.yesman.akythera.api.animation.animator.AnimationInterfaceKey;
 import com.yesman.akythera.api.animation.animator.AnimationLayer;
 import com.yesman.akythera.api.animation.animator.Animator;
 import com.yesman.akythera.api.component.ComponentAttachable;
+import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.event.BuiltInEventHooks;
 import com.yesman.akythera.api.event.entity.animation.InitBlendingAnimatorEvent;
 import com.yesman.akythera.core.animation.AnimationLayerSignature;
@@ -12,6 +13,7 @@ import com.yesman.akythera.core.animation.driver.*;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.playable.AnimationMontage;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
+import com.yesman.akythera.core.asset.armature.Armature;
 import com.yesman.akythera.core.blueprint.script.AnimatorScript;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
 import net.minecraft.core.Holder;
@@ -20,6 +22,7 @@ import org.jetbrains.annotations.ApiStatus;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -112,6 +115,11 @@ public final class BlendingAnimator implements Animator {
     }
 
     @Override
+    public Collection<AnimationMontagePlayer> getMontagePlayers() {
+        return animLayers.values().stream().map(AnimationLayer::montagePlayer).toList();
+    }
+
+    @Override
     public void tick() {
         for (AnimationLayer animLayer : animLayers.values()) {
             animLayer.tick(owner);
@@ -152,7 +160,11 @@ public final class BlendingAnimator implements Animator {
 
     @Override
     public Pose getPose() {
-        return animScript.getFinalPose(animLayers);
+        Pose pose = animScript.getFinalPose(animLayers);
+        ArmatureComponent armatureComponent = owner.findComponent(ArmatureComponent.class);
+        Armature armature = armatureComponent == null ? null : armatureComponent.getArmature().get();
+
+        return armature == null ? pose : armature.applyJointConstraints(pose);
     }
 
     /// Presence of named pose cache must be validated first. Use [#hasPoseCache] to conduct it.

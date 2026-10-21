@@ -51,6 +51,18 @@ public class AnimatorControlCommand {
                             )
                         )
                     )
+                    .then(Commands.literal("stop_montage")
+                        .then(Commands.argument("targets", EntityArgument.entities())
+                            .then(Commands.argument("animation", ResourceKeyArgument.key(AkytheraRegistries.DataPack.ANIM_MONTAGE_KEY))
+                                .executes(commandContext ->
+                                    stopAnimation(
+                                        EntityArgument.getEntities(commandContext, "targets"),
+                                        ResourceKeyArgument.getRegistryKey(commandContext, "animation", AkytheraRegistries.DataPack.ANIM_MONTAGE_KEY, ERROR_ANIM_MONTAGE)
+                                    )
+                                )
+                            )
+                        )
+                    )
                     .then(Commands.literal("soft_pause")
                         .then(Commands.argument("targets", EntityArgument.entities())
                             .then(Commands.argument("paused", BoolArgumentType.bool())
@@ -82,6 +94,22 @@ public class AnimatorControlCommand {
             if (entityPatch != null && entityPatch.getArmatureComponent() != null) {
                 successEntityNum++;
                 entityPatch.getArmatureComponent().getAnimator().playAnimMontage(montageKey, section);
+            }
+        }
+
+        return successEntityNum;
+    }
+
+    public static int stopAnimation(Collection<? extends Entity> targetEntities, ResourceKey<@NonNull AnimationMontage> montageKey) {
+        int successEntityNum = 0;
+
+        for (Entity entity : targetEntities) {
+            EntityPatch<?> entityPatch = AkytheraPatches.getEntityPatch(entity);
+
+            if (entityPatch != null && entityPatch.getArmatureComponent() != null
+                && entityPatch.getArmatureComponent().getAnimator().stopPlayingMontage(montageKey)
+            ) {
+                successEntityNum++;
             }
         }
 

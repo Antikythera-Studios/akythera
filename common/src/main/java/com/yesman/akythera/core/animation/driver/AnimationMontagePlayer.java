@@ -1,5 +1,6 @@
 package com.yesman.akythera.core.animation.driver;
 
+import com.yesman.akythera.api.animation.notify.AnimationNotifyState;
 import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.animation.keyframe.Pose;
@@ -11,6 +12,7 @@ import com.yesman.akythera.core.math.TimeWindow;
 import com.yesman.akythera.core.util.helper.MathUtils;
 import com.yesman.akythera.core.util.helper.PoseOperators;
 import net.minecraft.core.Holder;
+import net.minecraft.util.Mth;
 import net.minecraft.util.StringUtil;
 import org.jetbrains.annotations.ApiStatus;
 import org.jspecify.annotations.NonNull;
@@ -23,8 +25,8 @@ import java.util.List;
 ///
 /// The player automatically be faded out when the animation elapse time
 /// reaches [AnimationMontage#getTotalFrameTime] if [AnimationMontage#loops()]
-/// is false. Otherwise, the montage will be the blended in final pose forever
-/// so manual call of [#terminate] will be required.
+/// is false. Otherwise, the playback restarts from the beginning until [#terminate]
+/// is called.
 ///
 /// The player will start increase [#elapsedTime] and fully deactivated until
 /// [#fadeTime] becomes 1 or 0 in each case. This means the fade-in and fade-out
@@ -34,6 +36,9 @@ public final class AnimationMontagePlayer implements AnimationDriver {
     /// Cached last pose before call [#playAnimation] or [#terminate]
     @NonNull
     private Pose cachedLastMontagePose = Pose.EMPTY_POSE;
+
+    /// [#getWeight] of the montage [#playAnimation] replaced. The fade-in starts from here.
+    private float fadeInStartWeight;
 
     /// Current playing time
     private float elapsedTime;
@@ -60,9 +65,12 @@ public final class AnimationMontagePlayer implements AnimationDriver {
 
     /// Plays an animation montage starting in a specific section
     public MontageCallbackHandle playAnimation(final Holder.@NonNull Reference<@NonNull AnimationMontage> animMontage, @Nullable final String sectionName) {
+        fadeInStartWeight = getWeight();
+
         if (currentPlaying != null) {
             // Cache the current pose of the montage played lastly
             cachedLastMontagePose = getPose();
+            montageCallbackHandle.triggerComplete(animMontage, true);
         }
 
         fadingInOrOut = true;
@@ -110,9 +118,14 @@ public final class AnimationMontagePlayer implements AnimationDriver {
             return;
         }
 
-        montageCallbackHandle.triggerComplete(animMontage, true);
+        fadeOut(animMontage, true);
+    }
+
+    /// Completes the montage and fades it out from the current weight.
+    private void fadeOut(final Holder.@Nullable Reference<@NonNull AnimationMontage> override, final boolean interrupted) {
+        montageCallbackHandle.triggerComplete(override, interrupted);
         cachedLastMontagePose = getPose();
-        fadeTime = currentPlaying.value().fadeOutTime();
+        fadeTime = currentPlaying.value().fadeOutTime() * getWeight();
         fadingInOrOut = false;
         isFinished = true;
     }
@@ -185,13 +198,21 @@ public final class AnimationMontagePlayer implements AnimationDriver {
                 // Exceeds the section & animation total time bound by increment
                 if (currentSectionWindow != null && !currentSectionWindow.isIn(elapsedTime + frameTime) || elapsedTime + frameTime > currentPlaying.value().getTotalFrameTime()) {
                     String nextSectionName = sectionInfo.getNextSection(currentSectionName);
+                    float totalTime = currentPlaying.value().getTotalFrameTime();
 
-                    if (nextSectionName == null) {
+                    if (nextSectionName == null && currentSectionWindow.to() >= totalTime) {
+                        if (currentPlaying.value().loops()) {
+                            lastUpdatedTime = elapsedTime - totalTime;
+                            elapsedTime = elapsedTime + frameTime - totalTime;
+                        } else {
+                            elapsedTime = totalTime;
+                            fadeOut(null, false);
+                        }
+                    } else if (nextSectionName == null) {
                         // No transition defined → pause at the section end and hold the pose. Stay active
                         // so the caller can jumpToSection (play another sequence) or terminate() explicitly.
-                        float end = Math.min(currentSectionWindow.to(), currentPlaying.value().getTotalFrameTime());
-                        elapsedTime = end;
-                        lastUpdatedTime = end; // so notifies between here and `end` don't re-fire each tick
+                        elapsedTime = currentSectionWindow.to();
+                        lastUpdatedTime = elapsedTime; // so notifies between here and the section end don't re-fire each tick
                     } else {
                         // Set elapsed times to the next section
                         float deltaMinus = currentSectionWindow.to() - elapsedTime;
@@ -211,6 +232,12 @@ public final class AnimationMontagePlayer implements AnimationDriver {
         return currentPlaying;
     }
 
+    /// Returns the notify state of `type` whose time window holds the playhead. Null once the montage
+    /// started fading out.
+    public <T extends AnimationNotifyState<?>> @Nullable T getActiveNotifyState(final Class<T> type) {
+        return currentPlaying == null || isFinished ? null : currentPlaying.value().notifyTrack().getNotifyStateAt(type, elapsedTime);
+    }
+
     @Override
     public Pose getPose() {
         if (currentPlaying == null) return cachedLastMontagePose;
@@ -218,8 +245,11 @@ public final class AnimationMontagePlayer implements AnimationDriver {
         if (fadingInOrOut) {
             // When fading mode is set to "fade-in", and the time haven't reached the total
             // fade in time, blend the cached last pose to animation pose to start
-            if (fadeTime < currentPlaying.value().fadeInTime()) {
-                return PoseOperators.blendPoses(cachedLastMontagePose, 1.0F - getWeight(), currentPlaying.value().getPose(elapsedTime), getWeight());
+            float fadeInTime = currentPlaying.value().fadeInTime();
+
+            if (fadeTime < fadeInTime) {
+                float share = MathUtils.safeDivision(fadeTime / fadeInTime, getWeight(), 1.0F);
+                return PoseOperators.blendPoses(cachedLastMontagePose, 1.0F - share, currentPlaying.value().getPose(elapsedTime), share);
             }
         } else {
             // When fading mode is set to "fade-out", and the time hasn't reached the total
@@ -248,7 +278,7 @@ public final class AnimationMontagePlayer implements AnimationDriver {
         }
 
         if (fadingInOrOut) {
-            return MathUtils.safeDivision(fadeTime, currentPlaying.value().fadeInTime(), 1.0F);
+            return Mth.lerp(MathUtils.safeDivision(fadeTime, currentPlaying.value().fadeInTime(), 1.0F), fadeInStartWeight, 1.0F);
         } else {
             return MathUtils.safeDivision(fadeTime, currentPlaying.value().fadeOutTime(), 0.0F);
         }
@@ -278,6 +308,7 @@ public final class AnimationMontagePlayer implements AnimationDriver {
             lastUpdatedTime = montagePlayerSource.lastUpdatedTime;
             elapsedTime = montagePlayerSource.elapsedTime;
             fadeTime = montagePlayerSource.fadeTime;
+            fadeInStartWeight = montagePlayerSource.fadeInStartWeight;
             sectionIndex = montagePlayerSource.sectionIndex;
             isFinished = montagePlayerSource.isFinished;
             fadingInOrOut = montagePlayerSource.fadingInOrOut;

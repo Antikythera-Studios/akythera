@@ -7,6 +7,7 @@ import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.util.helper.MathUtils;
 import com.yesman.akythera.core.util.helper.ParseUtils;
 import net.minecraft.core.Holder;
+import net.minecraft.util.Mth;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -69,15 +70,13 @@ public final class AnimationPlayer implements AnimationDriver {
             fadeTime = Math.clamp(fadeTime - frameTime, 0.0F, playableAnimation.value().fadeOutTime());
         }
 
-        elapsedTime += frameTime;
+        elapsedTime += frameTime * playableAnimation.value().rateScale();
         float totalFrameTime = playableAnimation.value().getTotalFrameTime();
 
         if (elapsedTime > totalFrameTime) {
-            boolean loopback = ParseUtils.nvl(loops, playableAnimation.value().loops());
-
             // Clamp to the max frame time when not looping, or apply modular operation
             // to restart animation from exceeded time
-            if (loopback) {
+            if (loops()) {
                 elapsedTime %= totalFrameTime;
             } else {
                 elapsedTime = totalFrameTime;
@@ -89,6 +88,14 @@ public final class AnimationPlayer implements AnimationDriver {
     @Override
     public float getTime() {
         return elapsedTime;
+    }
+
+    @Override
+    public float getPhase() {
+        PlayableAnimation playable = playableAnimation.value();
+        float phase = MathUtils.safeDivision(elapsedTime, playable.getTotalFrameTime(), 0.0F) - playable.phaseOffset();
+
+        return loops() ? Mth.frac(phase) : Math.clamp(phase, 0.0F, 1.0F);
     }
 
     @Override
@@ -117,10 +124,17 @@ public final class AnimationPlayer implements AnimationDriver {
 
     @Override
     public void syncDriverTo(@NonNull AnimationDriver source) {
+        PlayableAnimation playable = playableAnimation.value();
+        float phase = source.getPhase() + playable.phaseOffset();
+
         fadeTime = source.getFadeTime();
-        elapsedTime = source.getTime();
-        lastUpdatedTime = source.getTime();
+        elapsedTime = (loops() ? Mth.frac(phase) : Math.min(phase, 1.0F)) * playable.getTotalFrameTime();
+        lastUpdatedTime = elapsedTime;
         isFinished = source.isFinished();
+    }
+
+    private boolean loops() {
+        return ParseUtils.nvl(loops, playableAnimation.value().loops());
     }
 
     @Override

@@ -16,6 +16,7 @@ import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayPa
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayAbilityCue;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundTerminateAbilityCue;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayAnimMontage;
+import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundStopAnimMontage;
 import com.yesman.akythera.core.networking.payload.serverbound.ServerBoundAbilityTrigger;
 
 import java.util.ArrayList;
@@ -26,13 +27,15 @@ import java.util.List;
 /// Called on each platform to register payload channel
 public final class AkytheraPayloadTypes {
 	public static final List<PayloadChannel<?>> CLIENT_BOUND = new ArrayList<>();
+	public static final List<PayloadChannel<?>> COMMON_CLIENT_BOUND = new ArrayList<>();
 	public static final List<PayloadChannel<?>> SERVER_BOUND = new ArrayList<>();
 	public static final List<PayloadChannel<?>> BI_DIRECTIONAL = new ArrayList<>();
 
 	static {
 		// client bound packets
 		CLIENT_BOUND.add(new PayloadChannel<>(ClientBoundPlayAnimMontage.TYPE, ClientBoundPlayAnimMontage.STREAM_CODEC, () -> AkytheraClientBoundPayloadHandler::handlePlayMontage));
-		CLIENT_BOUND.add(new PayloadChannel<>(ClientBoundDataBlockSync.TYPE, ClientBoundDataBlockSync.STREAM_CODEC, () -> AkytheraClientBoundPayloadHandler::handleBlockSync));
+		CLIENT_BOUND.add(new PayloadChannel<>(ClientBoundStopAnimMontage.TYPE, ClientBoundStopAnimMontage.STREAM_CODEC, () -> AkytheraClientBoundPayloadHandler::handleStopMontage));
+		COMMON_CLIENT_BOUND.add(new PayloadChannel<>(ClientBoundDataBlockSync.TYPE, ClientBoundDataBlockSync.STREAM_CODEC, () -> AkytheraClientBoundPayloadHandler::handleBlockSync));
 
 		CLIENT_BOUND.add(new PayloadChannel<>(ClientBoundAbilityTagSync.TYPE, ClientBoundAbilityTagSync.STREAM_CODEC, () -> AkytheraClientBoundPayloadHandler::handleAbilityTagSync));
 

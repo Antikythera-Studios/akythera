@@ -67,6 +67,11 @@ public final class CachedPoseReference implements AnimationDriver {
     }
 
     @Override
+    public float getPhase() {
+        return ref().getPhase();
+    }
+
+    @Override
     public void start() {
         if (controlReferenceDriver) ref().start();
     }

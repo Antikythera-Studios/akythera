@@ -47,18 +47,12 @@ public interface AnimationLoader extends AssetLoader {
         return metadata().importType() == ImportType.ADDITIVE ? toAdditive(clip) : clip;
     }
 
-    /// Rewrites every keyframe as the transform relative to the reference pose named by [#metadata].
+    /// Rewrites every keyframe as the transform relative to the reference pose named by [#metadata], or this clip.
     ///
     /// @see Transform#relativeTo
     private AnimationClip toAdditive(final AnimationClip source) throws ResourceLoadingFailureException {
         AssetAccessor<AnimationClip> refPoseProvider = metadata().refPoseProvider();
-
-        if (refPoseProvider == null) {
-            throw new ResourceLoadingFailureException(
-                resourcePath(), "An additive animation needs 'ref_pose_provider' in its metadata.");
-        }
-
-        AnimationClip refPoseClip = refPoseProvider.get();
+        AnimationClip refPoseClip = refPoseProvider == null ? source : refPoseProvider.get();
 
         if (refPoseClip == null) {
             throw new ResourceLoadingFailureException(
@@ -146,7 +140,7 @@ public interface AnimationLoader extends AssetLoader {
         COMMON("common"),
 
         /// Read the animation data as a *relative* transform from reference pose,
-        /// specified in [Metadata#refPoseProvider], [Metadata#refPoseTimeStamp]
+        /// specified in [Metadata#refPoseProvider] (this animation when absent), [Metadata#refPoseTimeStamp]
         ADDITIVE("additive");
 
         public static final Codec<ImportType> CODEC = StringRepresentable.fromEnum(ImportType::values);

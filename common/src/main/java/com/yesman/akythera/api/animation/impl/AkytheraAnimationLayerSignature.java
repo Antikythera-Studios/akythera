@@ -5,7 +5,7 @@ import com.yesman.akythera.core.animation.AnimationLayerSignature;
 public enum AkytheraAnimationLayerSignature implements AnimationLayerSignature {
     // Base layer covers all bones
     BASE,
-    // Extra layer that controls upper body bones. Typically used for item use animationsToReplace
+    // Extra layer that controls upper body bones. Typically used for item use animations
     UPPER_BODY,
     ;
 
