@@ -14,6 +14,7 @@ import com.yesman.akythera.core.asset.armature.Armature;
 import com.yesman.akythera.core.asset.loader.ArmatureLoader;
 import com.yesman.akythera.core.networking.NetworkingHelper;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayAnimMontage;
+import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundStopAnimMontage;
 import com.yesman.akythera.core.reflection.ScriptFunction;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
 import net.minecraft.core.Holder;
@@ -22,6 +23,10 @@ import net.minecraft.resources.ResourceKey;
 import org.jetbrains.annotations.ApiStatus;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
 
 /// A component that update each animation player and calculates total pose by blending
 /// a pose from each animation player
@@ -106,6 +111,14 @@ public interface Animator {
 
         if (animMontageKey == null || getMontagePlayer(animMontageKey).getPlayingMontage() == montageHolder) {
             getMontagePlayer(animMontageKey).terminate(montageHolder);
+
+            if (getOwner() instanceof EntityPatch<?> entityPatch && entityPatch.isLogicalServer()) {
+                NetworkingHelper.getInstance().sendToPlayersTrackingEntityWithSelfIfPlayer(
+                    entityPatch.getOriginal(),
+                    new ClientBoundStopAnimMontage(Optional.ofNullable(animMontageKey), entityPatch.getId())
+                );
+            }
+
             return true;
         }
 
@@ -116,6 +129,11 @@ public interface Animator {
     ///
     /// Montage players are both in client and server, to synchronize playing
     AnimationMontagePlayer getMontagePlayer(final ResourceKey<@NonNull AnimationMontage> animMontageKey);
+
+    /// Returns every montage player of this animator
+    default Collection<AnimationMontagePlayer> getMontagePlayers() {
+        return List.of();
+    }
 
     @ScriptFunction(pure = true, label = "Soft Pause Animator", desc = """
     Sets the animator as *soft paused*

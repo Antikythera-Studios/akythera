@@ -6,6 +6,7 @@ import net.minecraft.resources.FileToIdConverter;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
+import net.minecraft.util.profiling.InactiveProfiler;
 import net.minecraft.util.profiling.ProfilerFiller;
 import org.jspecify.annotations.NullMarked;
 
@@ -45,6 +46,10 @@ public final class EnumerableDataBlockReloadListener<T extends EnumerableDataBlo
             "Loaded {} data pack {} entries: {}",
             lastLoadedEntries.size(), enumManager.getEnumType(), lastLoadedEntries.keySet()
         );
+    }
+
+    public void loadNow(final ResourceManager resourceManager) {
+        apply(prepare(resourceManager, InactiveProfiler.INSTANCE), resourceManager, InactiveProfiler.INSTANCE);
     }
 
     public Map<Identifier, T> getLastLoadedEntries() {

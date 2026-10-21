@@ -183,6 +183,18 @@ public final class MathUtils {
         return divisor == 0.0F ? fallbackValue : dividend / divisor;
     }
 
+    public static float approachWrapped(final float current, final float goal, final float maxStep, final float min, final float max) {
+        float period = max - min;
+        float delta = Mth.positiveModulo(goal - current + period * 0.5F, period) - period * 0.5F;
+
+        return min + Mth.positiveModulo(current + absoluteClamp(delta, maxStep) - min, period);
+    }
+
+	@ScriptFunction(pure = true, label = "Speed Match Rate", desc = "Playback rate that moves an animation's authored ground speed to the real speed, clamped")
+    public static float speedMatchRate(final float speed, final float groundSpeed, final float minRate, final float maxRate) {
+        return Mth.clamp(safeDivision(speed, groundSpeed, 1.0F), minRate, maxRate);
+    }
+
     /// Returns a quotient, or 0 when the divisor is too close to 0 to divide by.
     ///
     /// A divisor within [#EPSILON] of 0 yields 0 rather than an infinity: one degenerate value must

@@ -15,7 +15,7 @@ import java.util.function.Supplier;
 /// Typically, the cached assets should be reset when resource reloading (F3+T)
 /// is triggered. The newly created assets are returned by [#get]
 ///
-/// Useful for heavy binary assets like meshes, armatures, and animationsToReplace
+/// Useful for heavy binary assets like meshes, armatures, and animations
 public interface AssetAccessor<T> extends Supplier<T> {
     /// Returns a referencing asset and if the asset is not loaded, it tries to
     /// load an asset.

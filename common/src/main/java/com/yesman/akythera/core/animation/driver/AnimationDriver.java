@@ -5,6 +5,8 @@ import com.yesman.akythera.core.animation.animator.BlendingAnimator;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.reflection.ScriptFunction;
+import com.yesman.akythera.core.util.helper.MathUtils;
+import net.minecraft.util.Mth;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -38,6 +40,17 @@ public interface AnimationDriver {
     @ScriptFunction(pure = true, label = "Get Time", desc = "Playback time the driver has simulated so far, in seconds")
     float getTime();
 
+    @ScriptFunction(pure = true, label = "Get Phase", desc = "Playback position in the current loop, from 0 to 1, counted from the animation's phase offset")
+    default float getPhase() {
+        PlayableAnimation playing = getPlayingAnimation();
+
+        if (playing == null) return 0.0F;
+
+        float phase = MathUtils.safeDivision(getTime(), playing.getTotalFrameTime(), 0.0F) - playing.phaseOffset();
+
+        return playing.loops() ? Mth.frac(phase) : Math.clamp(phase, 0.0F, 1.0F);
+    }
+
     /// Activates the driver with fading-in animation pose
     void start();
 
@@ -49,7 +62,7 @@ public interface AnimationDriver {
     /// The return value gradually increases until 1.0 when being activated, and decreases
     /// until 0.0 when the driver is being deactivated.
     ///
-    /// The return value is referred to when blending animationsToReplace in [BlendingAnimator]. (Client side animator)
+    /// The return value is referred to when blending animations in [BlendingAnimator]. (Client side animator)
     /// So it's negligible in server side.
     @ScriptFunction(pure = true, label = "Get Weight", desc = "Fade weight, rising to 1.0 while fading in and falling to 0.0 while fading out")
     float getWeight();
@@ -70,6 +83,6 @@ public interface AnimationDriver {
     /// Returns a current fading in/out time.
     float getFadeTime();
 
-    /// Synchronize the driver's playback time with `source` driver.
+    /// Synchronize the driver's playback phase with `source` driver.
     void syncDriverTo(@NonNull AnimationDriver source);
 }

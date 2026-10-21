@@ -23,8 +23,11 @@
   ],
   "mixins": [
     "common.MixinEntity",
+    "common.MixinLivingEntity",
+    "common.MixinMappedRegistry",
     "common.MixinMinecraftServer",
     "common.MixinPersistentEntitySectionManager",
+    "common.MixinRegistryDataLoader",
     "common.MixinRegistryLoadTask"
   ],
   "injectors": {

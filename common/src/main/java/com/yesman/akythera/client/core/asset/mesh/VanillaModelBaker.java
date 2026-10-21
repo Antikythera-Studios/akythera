@@ -1,5 +1,6 @@
 package com.yesman.akythera.client.core.asset.mesh;
 
+import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.yesman.akythera.client.core.asset.loader.VertexBuilder;
 import com.yesman.akythera.core.Akythera;
@@ -7,15 +8,21 @@ import com.yesman.akythera.core.asset.armature.Armature;
 import com.yesman.akythera.core.asset.armature.Bone;
 import it.unimi.dsi.fastutil.floats.FloatArrayList;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.model.Model;
 import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.packs.resources.Resource;
+import net.minecraft.util.ARGB;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.Item;
 import org.joml.Vector3f;
 import org.jspecify.annotations.Nullable;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -57,7 +64,7 @@ public final class VanillaModelBaker {
     private static final float MAX_INFLATION = 0.125F;
 
     /// Distance under which a body vertex sits on a side of its part's bounds, in blocks.
-    private static final float FACE_TOLERANCE = 1.0E-4F;
+    private static final float FACE_TOLERANCE = 1.0F / 64.0F;
 
     /// Share of an edge its longest component holds for the edge to follow that axis.
     private static final float AXIS_ALIGNED = 0.999F;
@@ -77,6 +84,14 @@ public final class VanillaModelBaker {
     /// Squared length of the normal under which a triangle has no area.
     private static final float NO_AREA = 1.0E-12F;
 
+    private static final float SEAM_AREA = 1.0E-6F;
+
+    private static final float SEAM_NUDGE = 1.0F / 32.0F;
+
+    private static final int PAINT_SAMPLES = 8;
+
+    private static final float MINORITY_PAINT = 0.15F;
+
     private static final Map<BakeKey, Optional<Bake>> BAKED = new HashMap<>();
 
     private VanillaModelBaker() {
@@ -85,17 +100,22 @@ public final class VanillaModelBaker {
     /// `model` in its initial pose, rebuilt over `body`. Null when `model` holds no cube, or when the
     /// bake failed. `item` and `slot` say what the model is worn as, and are kept with a new bake.
     public static @Nullable SkeletalMesh bake(
-        final Model<?> model, final Armature armature, final SkeletalMesh body, final Item item, final EquipmentSlot slot
+        final Model<?> model,
+        final Armature armature,
+        final SkeletalMesh body,
+        final Item item,
+        final EquipmentSlot slot,
+        final List<Identifier> textures
     ) {
-        return BAKED.computeIfAbsent(new BakeKey(model, armature, body), _ -> {
+        return BAKED.computeIfAbsent(new BakeKey(model, armature, body, textures), _ -> {
             try {
                 model.resetPose();
 
-                SkeletalMesh.SkeletalMeshBuilder builder = build(model.root(), armature, body);
+                SkeletalMesh.SkeletalMeshBuilder builder = build(model.root(), armature, body, textures);
 
                 return builder == null
                     ? Optional.<Bake>empty()
-                    : Optional.of(new Bake(model, armature, item, slot, builder, new SkeletalMesh(builder)));
+                    : Optional.of(new Bake(model, armature, item, slot, textures, builder, new SkeletalMesh(builder)));
             } catch (RuntimeException e) {
                 Akythera.LOGGER.error("Failed at baking a vanilla model {}", model.getClass().getName(), e);
 
@@ -113,6 +133,12 @@ public final class VanillaModelBaker {
     /// cube keeps its own faces and no vertex is weighted. Null when `root` holds no cube.
     public static SkeletalMesh.@Nullable SkeletalMeshBuilder build(
         final ModelPart root, final Armature armature, final @Nullable SkeletalMesh body
+    ) {
+        return build(root, armature, body, List.of());
+    }
+
+    public static SkeletalMesh.@Nullable SkeletalMeshBuilder build(
+        final ModelPart root, final Armature armature, final @Nullable SkeletalMesh body, final List<Identifier> textures
     ) {
         Skin skin = new Skin(body);
         Map<String, Region> regions = new HashMap<>();
@@ -188,20 +214,47 @@ public final class VanillaModelBaker {
 
                         if (!onSide) continue;
 
+                        Vector3f[] points = new Vector3f[3];
+                        float[] cornerS = new float[3];
+                        float[] cornerT = new float[3];
+
                         for (int corner = 0; corner < 3; corner++) {
                             int position = shell.triangles[triangle + corner];
-                            Vector3f point = new Vector3f();
 
-                            for (int component = 0; component < 3; component++) {
-                                float share = (skin.positions[position * 3 + component] - shell.min.get(component))
-                                    / (shell.max.get(component) - shell.min.get(component));
+                            points[corner] = wrapped(
+                                new Vector3f(skin.positions[position * 3], skin.positions[position * 3 + 1], skin.positions[position * 3 + 2]),
+                                shell, cubeMin, cubeMax
+                            );
 
-                                point.setComponent(component, Mth.lerp(share, cubeMin.get(component), cubeMax.get(component)));
+                            Vector3f offset = points[corner].sub(corners[0], new Vector3f());
+
+                            cornerS[corner] = offset.dot(acrossEdge) / acrossEdge.lengthSquared();
+                            cornerT[corner] = offset.dot(alongEdge) / alongEdge.lengthSquared();
+                        }
+
+                        boolean seam = Math.abs(
+                            (cornerS[1] - cornerS[0]) * (cornerT[2] - cornerT[0]) - (cornerS[2] - cornerS[0]) * (cornerT[1] - cornerT[0])
+                        ) < SEAM_AREA;
+
+                        for (int corner = 0; corner < 3; corner++) {
+                            int position = shell.triangles[triangle + corner];
+                            Vector3f point = points[corner];
+                            Vector3f centroid = shell.centroids.get(skin.heaviestBones[position]);
+                            float s = cornerS[corner];
+                            float t = cornerT[corner];
+
+                            if (seam && centroid != null) {
+                                Vector3f toward = wrapped(centroid, shell, cubeMin, cubeMax).sub(point);
+
+                                toward.fma(-toward.dot(normal) / normal.lengthSquared(), normal);
+
+                                if (toward.lengthSquared() > CUT_TOLERANCE * CUT_TOLERANCE) {
+                                    toward.normalize(SEAM_NUDGE);
+                                    s += toward.dot(acrossEdge) / acrossEdge.lengthSquared();
+                                    t += toward.dot(alongEdge) / alongEdge.lengthSquared();
+                                }
                             }
 
-                            Vector3f offset = point.sub(corners[0], new Vector3f());
-                            float s = offset.dot(acrossEdge) / acrossEdge.lengthSquared();
-                            float t = offset.dot(alongEdge) / alongEdge.lengthSquared();
                             float w0 = (1.0F - s) * (1.0F - t);
                             float w1 = s * (1.0F - t);
                             float w2 = s * t;
@@ -323,6 +376,115 @@ public final class VanillaModelBaker {
 
         if (positions.isEmpty()) return null;
 
+        List<NativeImage> paint = new ArrayList<>();
+
+        try {
+            for (Identifier texture : textures) {
+                Optional<Resource> resource = Minecraft.getInstance().getResourceManager().getResource(texture);
+
+                if (resource.isEmpty()) continue;
+
+                try (InputStream stream = resource.get().open()) {
+                    paint.add(NativeImage.read(stream));
+                } catch (IOException e) {
+                    Akythera.LOGGER.warn("Failed at reading the armor texture {}", texture, e);
+                }
+            }
+
+            for (List<VertexBuilder> part : paint.isEmpty() ? List.<List<VertexBuilder>>of() : builder.partBuilders.values()) {
+                if (part.isEmpty()) continue;
+
+                int lowest = part.getFirst().position();
+                int highest = lowest;
+
+                for (VertexBuilder vertex : part) {
+                    float y = positions.getFloat(vertex.position() * 3 + 1);
+
+                    if (y < positions.getFloat(lowest * 3 + 1)) lowest = vertex.position();
+                    if (y > positions.getFloat(highest * 3 + 1)) highest = vertex.position();
+                }
+
+                int below = output.heaviestBone(lowest);
+                float boundary = Float.NaN;
+
+                for (VertexBuilder vertex : part) {
+                    float y = positions.getFloat(vertex.position() * 3 + 1);
+
+                    if (output.heaviestBone(vertex.position()) != below && (Float.isNaN(boundary) || y < boundary)) boundary = y;
+                }
+
+                if (Float.isNaN(boundary)) continue;
+
+                float paintedBelow = 0.0F;
+                float paintedAbove = 0.0F;
+
+                for (int corner = 0; corner + 2 < part.size(); corner += 3) {
+                    int[] triangle = {part.get(corner).position(), part.get(corner + 1).position(), part.get(corner + 2).position()};
+                    Vector3f a = new Vector3f(positions.getFloat(triangle[0] * 3), positions.getFloat(triangle[0] * 3 + 1), positions.getFloat(triangle[0] * 3 + 2));
+                    Vector3f b = new Vector3f(positions.getFloat(triangle[1] * 3), positions.getFloat(triangle[1] * 3 + 1), positions.getFloat(triangle[1] * 3 + 2));
+                    Vector3f c = new Vector3f(positions.getFloat(triangle[2] * 3), positions.getFloat(triangle[2] * 3 + 1), positions.getFloat(triangle[2] * 3 + 2));
+                    Vector3f cross = b.sub(a, new Vector3f()).cross(c.sub(a, new Vector3f()));
+
+                    if (cross.lengthSquared() < NO_AREA || cross.maxComponent() == 1) continue;
+
+                    int hitsBelow = 0;
+                    int hitsAbove = 0;
+                    int samples = 0;
+
+                    for (int i = 1; i < PAINT_SAMPLES; i++) {
+                        for (int j = 1; i + j < PAINT_SAMPLES; j++) {
+                            float wa = (float) i / PAINT_SAMPLES;
+                            float wb = (float) j / PAINT_SAMPLES;
+                            float wc = 1.0F - wa - wb;
+                            float u = wa * uvs.getFloat(triangle[0] * 2) + wb * uvs.getFloat(triangle[1] * 2) + wc * uvs.getFloat(triangle[2] * 2);
+                            float v = wa * uvs.getFloat(triangle[0] * 2 + 1) + wb * uvs.getFloat(triangle[1] * 2 + 1) + wc * uvs.getFloat(triangle[2] * 2 + 1);
+                            boolean painted = false;
+
+                            samples++;
+
+                            for (NativeImage image : paint) {
+                                int x = Mth.floor(u * image.getWidth());
+                                int y = Mth.floor(v * image.getHeight());
+
+                                painted |= x >= 0 && y >= 0 && x < image.getWidth() && y < image.getHeight() && ARGB.alpha(image.getPixel(x, y)) != 0;
+                            }
+
+                            if (!painted) continue;
+
+                            if (wa * a.y + wb * b.y + wc * c.y < boundary) {
+                                hitsBelow++;
+                            } else {
+                                hitsAbove++;
+                            }
+                        }
+                    }
+
+                    float area = (float) Math.sqrt(cross.lengthSquared()) * 0.5F;
+
+                    paintedBelow += area * hitsBelow / samples;
+                    paintedAbove += area * hitsAbove / samples;
+                }
+
+                float total = paintedBelow + paintedAbove;
+
+                if (total <= 0.0F || Math.min(paintedBelow, paintedAbove) / total > MINORITY_PAINT) continue;
+
+                int rides = paintedBelow >= paintedAbove ? below : output.heaviestBone(highest);
+
+                for (VertexBuilder vertex : part) {
+                    int from = deformationFromTo.getInt(vertex.position() * 2);
+
+                    if (deformationFromTo.getInt(vertex.position() * 2 + 1) <= from) continue;
+
+                    boneIds.set(from, rides);
+                    weights.set(weightIds.getInt(from), 1.0F);
+                    deformationFromTo.set(vertex.position() * 2 + 1, from + 1);
+                }
+            }
+        } finally {
+            paint.forEach(NativeImage::close);
+        }
+
         builder.weights(weights.toFloatArray())
             .deformationFromToArray(deformationFromTo.toIntArray())
             .affectingBoneIdArray(boneIds.toIntArray())
@@ -332,6 +494,18 @@ public final class VanillaModelBaker {
             .uvs(uvs.toFloatArray());
 
         return builder;
+    }
+
+    private static Vector3f wrapped(final Vector3f bodyPoint, final Shell shell, final Vector3f cubeMin, final Vector3f cubeMax) {
+        Vector3f point = new Vector3f();
+
+        for (int component = 0; component < 3; component++) {
+            float share = (bodyPoint.get(component) - shell.min.get(component)) / (shell.max.get(component) - shell.min.get(component));
+
+            point.setComponent(component, Mth.lerp(share, cubeMin.get(component), cubeMax.get(component)));
+        }
+
+        return point;
     }
 
     /// The point of the quad `corners` at `s` of the way from its first corner to its second and `t` of the
@@ -396,6 +570,20 @@ public final class VanillaModelBaker {
             return index;
         }
 
+        int heaviestBone(final int index) {
+            int heaviest = -1;
+            float heaviestWeight = 0.0F;
+
+            for (int entry = deformationFromTo.getInt(index * 2); entry < deformationFromTo.getInt(index * 2 + 1); entry++) {
+                if (weights.getFloat(weightIds.getInt(entry)) > heaviestWeight) {
+                    heaviestWeight = weights.getFloat(weightIds.getInt(entry));
+                    heaviest = boneIds.getInt(entry);
+                }
+            }
+
+            return heaviest;
+        }
+
         /// Adds the weights of the vertex at `index` into `influence`, by bone id.
         void read(final int index, final float[] influence) {
             for (int entry = deformationFromTo.getInt(index * 2); entry < deformationFromTo.getInt(index * 2 + 1); entry++) {
@@ -416,11 +604,17 @@ public final class VanillaModelBaker {
     /// @param slot    the slot that item was worn in
     /// @param builder what [#mesh] was built from
     public record Bake(
-        Model<?> model, Armature armature, Item item, EquipmentSlot slot, SkeletalMesh.SkeletalMeshBuilder builder, SkeletalMesh mesh
+        Model<?> model,
+        Armature armature,
+        Item item,
+        EquipmentSlot slot,
+        List<Identifier> textures,
+        SkeletalMesh.SkeletalMeshBuilder builder,
+        SkeletalMesh mesh
     ) {
     }
 
-    private record BakeKey(Model<?> model, Armature armature, SkeletalMesh body) {
+    private record BakeKey(Model<?> model, Armature armature, SkeletalMesh body, List<Identifier> textures) {
     }
 
     /// The body a model is baked over, read once. Holds nothing without a body.
@@ -489,7 +683,17 @@ public final class VanillaModelBaker {
                     max.max(position);
                 }
 
-                shells.put(part.getKey(), new Shell(owned, min, max));
+                Map<Integer, Vector3f> centroids = new HashMap<>();
+                Map<Integer, Integer> counts = new HashMap<>();
+
+                for (int index : owned) {
+                    body.getPosition(index, position);
+                    centroids.computeIfAbsent(heaviestBones[index], _ -> new Vector3f()).add(position);
+                    counts.merge(heaviestBones[index], 1, Integer::sum);
+                }
+
+                centroids.forEach((bone, sum) -> sum.div(counts.get(bone)));
+                shells.put(part.getKey(), new Shell(owned, min, max, centroids));
             }
 
             triangles = indices.toIntArray();
@@ -602,7 +806,7 @@ public final class VanillaModelBaker {
     /// @param triangles position indices, three per triangle
     /// @param min       the least coordinate its vertices reach, per axis
     /// @param max       the greatest coordinate its vertices reach, per axis
-    private record Shell(int[] triangles, Vector3f min, Vector3f max) {
+    private record Shell(int[] triangles, Vector3f min, Vector3f max, Map<Integer, Vector3f> centroids) {
     }
 
     /// The part of a [Skin] one model part is baked over.

@@ -14,13 +14,14 @@ import com.yesman.akythera.core.math.Transform;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.LogicalSide;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
+import net.minecraft.util.ExtraCodecs;
 import net.minecraft.world.entity.Entity;
 import org.jspecify.annotations.NonNull;
 
 /// A simple playable animation with fundamental metadata defined in [PlayableAnimation]
 ///
 /// Objects synchronized by DFU, but not meant to support animation networking. This is
-/// for animationsToReplace that supposed to be played only in client side by client properties.
+/// for animations that supposed to be played only in client side by client properties.
 /// (e.g. Entity locomotion, jump)
 ///
 /// Notify track entries are restricted to [LogicalSide#CLIENT] notifies — sequences are
@@ -33,7 +34,9 @@ public record AnimationSequence(
     float fadeInTime,
     float fadeOutTime,
     boolean loops,
-    boolean rootMotion
+    boolean rootMotion,
+    float rateScale,
+    float phaseOffset
 ) implements PlayableAnimation {
     public static final MapCodec<AnimationSequence> MAP_CODEC = RecordCodecBuilder.mapCodec(
         instance ->
@@ -43,7 +46,9 @@ public record AnimationSequence(
                 Codec.FLOAT.fieldOf("fade_in_time").forGetter(AnimationSequence::fadeInTime),
                 Codec.FLOAT.fieldOf("fade_out_time").forGetter(AnimationSequence::fadeOutTime),
                 Codec.BOOL.fieldOf("loops").forGetter(AnimationSequence::loops),
-                Codec.BOOL.fieldOf("root_motion").forGetter(AnimationSequence::rootMotion)
+                Codec.BOOL.fieldOf("root_motion").forGetter(AnimationSequence::rootMotion),
+                ExtraCodecs.POSITIVE_FLOAT.optionalFieldOf("rate_scale", 1.0F).forGetter(AnimationSequence::rateScale),
+                Codec.floatRange(0.0F, 1.0F).optionalFieldOf("phase_offset", 0.0F).forGetter(AnimationSequence::phaseOffset)
             )
             .apply(instance, AnimationSequence::new)
     );
@@ -52,7 +57,14 @@ public record AnimationSequence(
 
     /// Convenience: no notifies, default fade times
     public AnimationSequence(final AssetAccessor<AnimationClip> animClip, final boolean loops, final boolean rootMotion) {
-        this(AnimationNotifyTrack.EMPTY, animClip, DEFAULT_FADE_TIME, DEFAULT_FADE_TIME, loops, rootMotion);
+        this(AnimationNotifyTrack.EMPTY, animClip, DEFAULT_FADE_TIME, DEFAULT_FADE_TIME, loops, rootMotion, 1.0F, 0.0F);
+    }
+
+    public AnimationSequence(
+        final AnimationNotifyTrack notifyTrack, final AssetAccessor<AnimationClip> animClip, final float fadeInTime,
+        final float fadeOutTime, final boolean loops, final boolean rootMotion
+    ) {
+        this(notifyTrack, animClip, fadeInTime, fadeOutTime, loops, rootMotion, 1.0F, 0.0F);
     }
 
     /// This sequence over the mirrored twin of its clip, see [AnimationManager#getMirrorAnimation].
@@ -60,7 +72,7 @@ public record AnimationSequence(
     @Override
     public AnimationSequence mirrored() {
         return new AnimationSequence(
-            notifyTrack, AnimationManager.getMirrorAnimation(animClip), fadeInTime, fadeOutTime, loops, rootMotion);
+            notifyTrack, AnimationManager.getMirrorAnimation(animClip), fadeInTime, fadeOutTime, loops, rootMotion, rateScale, phaseOffset);
     }
 
     @Override

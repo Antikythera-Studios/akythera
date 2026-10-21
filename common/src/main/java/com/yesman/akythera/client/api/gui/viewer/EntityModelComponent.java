@@ -14,11 +14,13 @@ import com.yesman.akythera.api.asset.AnimatableObject;
 import com.yesman.akythera.api.asset.AssetAccessor;
 import com.yesman.akythera.api.lifecycle.ComponentsFactory;
 import com.yesman.akythera.client.compat.playeranimlibrary.AkytheraAnimationLayer;
+import com.yesman.akythera.client.compat.playeranimlibrary.PlayerAnimationLibraryPlugin;
 import com.yesman.akythera.client.core.asset.loader.MeshLoader;
 import com.yesman.akythera.client.core.asset.mesh.Mesh;
 import com.yesman.akythera.client.core.asset.mesh.SkeletalMesh;
 import com.yesman.akythera.client.core.renderer.PatchModelRenderer;
 import com.yesman.akythera.client.core.renderer.RenderUtils;
+import com.yesman.akythera.compat.CompatibleMod;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.animation.driver.AnimationMontagePlayer;
 import com.yesman.akythera.core.animation.keyframe.AnimationClip;
@@ -30,8 +32,7 @@ import com.yesman.akythera.core.math.Transform;
 import com.yesman.akythera.core.util.LogicalSide;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
 import com.yesman.akythera.core.util.helper.Matrix4fUtils;
-import com.zigythebird.playeranim.accessors.IAvatarAnimationState;
-import com.zigythebird.playeranim.animation.AvatarAnimManager;
+import com.yesman.akythera.platform.ModPlatformProvider;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.model.EntityModel;
@@ -398,12 +399,8 @@ public final class EntityModelComponent implements Model3DViewerComponent, Anima
         // Pre-init armature here even tho not provided as a constructor parameter
         armature = ComponentsFactory.getImpl().getExternalArmatureMappingFor(entityType);
 
-        if (renderState instanceof IAvatarAnimationState avatarAnimationState && armature != null) {
-            // Add a headless anim manager, this would cause crash under the premise of animation-only usage
-            AvatarAnimManager avatarAnimManager = new AvatarAnimManager(null);
-            AkytheraAnimationLayer locomotionLayer = new AkytheraAnimationLayer(this);
-            avatarAnimManager.addAnimLayer(0, locomotionLayer);
-            avatarAnimationState.playerAnimLib$setAnimManager(avatarAnimManager);
+        if (armature != null && ModPlatformProvider.get().isModLoaded(CompatibleMod.PLAYER_ANIMATION_LIBRARY.getModId())) {
+            PlayerAnimationLibraryPlugin.bindPreviewAnimManager(renderState, this);
         }
 
         return renderState;

@@ -100,6 +100,11 @@ public final class AnimationStateMachine<O extends ComponentAttachable>
         return getCurrentStateDriver().getTime();
     }
 
+    @Override
+    public float getPhase() {
+        return getCurrentStateDriver().getPhase();
+    }
+
     /// Starts the state machine only when it's not running.
     @Override
     public void start() {

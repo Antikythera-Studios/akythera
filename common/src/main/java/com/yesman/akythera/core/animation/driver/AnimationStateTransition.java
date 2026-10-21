@@ -11,7 +11,7 @@ import java.util.function.BiFunction;
 /// A transition type that is used in [AnimationStateMachine].
 ///
 /// @param blendTime           An animation switching time span to the next state.
-/// @param transferElapsedTime Whether the elapsed time of the previous state will be copied to the next state driver.
+/// @param transferElapsedTime Whether the next state driver starts at the previous state's playback phase.
 public record AnimationStateTransition<O extends ComponentAttachable>(
     FSMAnimationState nextState,
     BiFunction<AnimationStateMachine<O>.AnimationStateInstance, AnimationStateMachine<O>.AnimationStateInstance, Boolean> canTransitFunction,

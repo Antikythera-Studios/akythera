@@ -15,7 +15,7 @@ import org.jspecify.annotations.Nullable;
 /// An "Injection Point" where you can dynamically
 /// reload animation entries from [BlendingAnimator]
 ///
-/// Practical uses would be a weapon specific animationsToReplace
+/// Practical uses would be a weapon specific animations
 /// like holding greatsword, spear, which you can't replace
 /// just by default locomotion.
 ///
@@ -113,6 +113,11 @@ public abstract class AbstractAnimationInterface implements AnimationDriver {
     @Override
     public final float getTime() {
         return animDriver.getTime();
+    }
+
+    @Override
+    public final float getPhase() {
+        return animDriver.getPhase();
     }
 
     @Override

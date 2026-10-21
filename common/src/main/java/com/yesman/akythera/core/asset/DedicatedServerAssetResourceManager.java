@@ -1,13 +1,19 @@
 package com.yesman.akythera.core.asset;
 
+import com.google.common.base.Suppliers;
+import com.yesman.akythera.platform.ModPlatformProvider;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.PackResources;
+import net.minecraft.server.packs.PackType;
+import net.minecraft.server.packs.resources.MultiPackResourceManager;
 import net.minecraft.server.packs.resources.PreparableReloadListener;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -16,13 +22,14 @@ import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 /// Reads assets on a dedicated server, where the game mounts the data tree only.
 ///
 /// Assets ship at `data/<namespace>/assets/<path>`, so an id is rewritten into that subdirectory on
 /// the way in and rewritten back on the way out of a listing. Callers keep addressing assets as
-/// `<namespace>:<path>`.
+/// `<namespace>:<path>`. An asset missing there is read from the mods' own `assets/<namespace>/<path>`.
 ///
 /// The delegate is the server's own data pack resource manager, captured on each data pack reload.
 @NullMarked
@@ -33,6 +40,10 @@ public final class DedicatedServerAssetResourceManager implements ResourceManage
     /// The server's data pack resource manager. Null until the first data pack reload.
     /// Written on the reload thread, read on the server thread.
     private volatile @Nullable ResourceManager dataPackResourceManager;
+
+    private final Supplier<ResourceManager> modAssetResourceManager = Suppliers.memoize(() ->
+        new MultiPackResourceManager(PackType.CLIENT_RESOURCES, ModPlatformProvider.get().openModPacks())
+    );
 
     /// `<namespace>:<path>` -> `<namespace>:assets/<path>`
     private static Identifier toDataPackPath(final Identifier assetPath) {
@@ -66,6 +77,10 @@ public final class DedicatedServerAssetResourceManager implements ResourceManage
         return resourceManager == null ? ResourceManager.Empty.INSTANCE : resourceManager;
     }
 
+    private ResourceManager assets() {
+        return modAssetResourceManager.get();
+    }
+
     /// ***************************************************************
     /// [PreparableReloadListener]
     /// ***************************************************************
@@ -88,27 +103,42 @@ public final class DedicatedServerAssetResourceManager implements ResourceManage
 
     @Override
     public Set<String> getNamespaces() {
-        return delegate().getNamespaces();
+        Set<String> namespaces = new HashSet<>(assets().getNamespaces());
+        namespaces.addAll(delegate().getNamespaces());
+
+        return namespaces;
     }
 
     @Override
     public Optional<Resource> getResource(final Identifier identifier) {
-        return delegate().getResource(toDataPackPath(identifier));
+        return delegate().getResource(toDataPackPath(identifier)).or(() -> assets().getResource(identifier));
     }
 
     @Override
     public List<Resource> getResourceStack(final Identifier identifier) {
-        return delegate().getResourceStack(toDataPackPath(identifier));
+        List<Resource> stack = new ArrayList<>(assets().getResourceStack(identifier));
+        stack.addAll(delegate().getResourceStack(toDataPackPath(identifier)));
+
+        return stack;
     }
 
     @Override
     public Map<Identifier, Resource> listResources(final String path, final Predicate<Identifier> predicate) {
-        return toAssetPaths(delegate().listResources(ASSET_DIRECTORY + path, id -> predicate.test(toAssetPath(id))));
+        Map<Identifier, Resource> listed = new TreeMap<>(assets().listResources(path, predicate));
+        listed.putAll(toAssetPaths(delegate().listResources(ASSET_DIRECTORY + path, id -> predicate.test(toAssetPath(id)))));
+
+        return listed;
     }
 
     @Override
     public Map<Identifier, List<Resource>> listResourceStacks(final String path, final Predicate<Identifier> predicate) {
-        return toAssetPaths(delegate().listResourceStacks(ASSET_DIRECTORY + path, id -> predicate.test(toAssetPath(id))));
+        Map<Identifier, List<Resource>> listed = new TreeMap<>();
+
+        assets().listResourceStacks(path, predicate).forEach((id, stack) -> listed.put(id, new ArrayList<>(stack)));
+        toAssetPaths(delegate().listResourceStacks(ASSET_DIRECTORY + path, id -> predicate.test(toAssetPath(id))))
+            .forEach((id, stack) -> listed.computeIfAbsent(id, _ -> new ArrayList<>()).addAll(stack));
+
+        return listed;
     }
 
     @Override

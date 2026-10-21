@@ -49,6 +49,11 @@ public abstract class AbstractBlendDriver implements AnimationDriver {
     }
 
     @Override
+    public float getPhase() {
+        return dominant().getPhase();
+    }
+
+    @Override
     public void start() {
         base.start();
         blend.start();

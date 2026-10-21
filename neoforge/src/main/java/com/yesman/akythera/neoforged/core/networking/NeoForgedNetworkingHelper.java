@@ -4,6 +4,8 @@ import com.yesman.akythera.core.networking.NetworkingHelper;
 import com.yesman.akythera.core.networking.PayloadContext;
 import com.yesman.akythera.core.networking.payload.AkytheraPayloadTypes;
 import com.yesman.akythera.core.util.ClientOnly;
+import net.minecraft.network.ConnectionProtocol;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
@@ -79,6 +81,17 @@ public final class NeoForgedNetworkingHelper extends NetworkingHelper {
                 mapContext((BiConsumer<CustomPacketPayload, PayloadContext>)payloadChannel.handler().get())
             )
         );
+
+        AkytheraPayloadTypes.COMMON_CLIENT_BOUND.forEach(payloadChannel -> {
+            BiConsumer<CustomPacketPayload, PayloadContext> handler = (BiConsumer<CustomPacketPayload, PayloadContext>)payloadChannel.handler().get();
+
+            payloadRegistrar.commonToClient(
+                (CustomPacketPayload.Type<CustomPacketPayload>)payloadChannel.type(),
+                (StreamCodec<? super FriendlyByteBuf, CustomPacketPayload>)(StreamCodec<?, ?>)payloadChannel.streamCodec(),
+                (payload, context) -> handler.accept(
+                    payload, PayloadContext.createContext(context.protocol() == ConnectionProtocol.PLAY ? context.player() : null))
+            );
+        });
 
         AkytheraPayloadTypes.SERVER_BOUND.forEach(payloadChannel ->
             payloadRegistrar.playToServer(

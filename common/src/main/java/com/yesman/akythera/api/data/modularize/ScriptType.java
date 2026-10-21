@@ -216,18 +216,20 @@ public record ScriptType(
             key -> lookupEntry(key)
                 .map(holder -> DataResult.success(holder.value()))
                 .orElseGet(() -> DataResult.error(() -> "No " + registry.identifier() + " entry " + key.identifier())),
-            value -> {
-                RegistryEntryLookupEvent.ByValue<T> event = new RegistryEntryLookupEvent.ByValue<>(registry, value);
-                BuiltInEventHooks.Registry.LOOKUP_ENTRY_BY_VALUE.post(event);
-
-                return Optional.ofNullable(event.getResult())
-                    .or(() -> StaticRegistryAccess.getRegistryAccess().lookupOrThrow(registry).getResourceKey(value))
-                    .map(DataResult::success)
-                    .orElseGet(() -> DataResult.error(() -> value + " is not registered in " + registry.identifier()));
-            }
+            value -> entryKey(registry, value)
+                .map(DataResult::success)
+                .orElseGet(() -> DataResult.error(() -> value + " is not registered in " + registry.identifier()))
         );
 
         return new ScriptType(type, codec, Map.of(), null, null, null, registry);
+    }
+
+    public static <T> Optional<ResourceKey<T>> entryKey(final ResourceKey<? extends Registry<T>> registry, final T value) {
+        RegistryEntryLookupEvent.ByValue<T> event = new RegistryEntryLookupEvent.ByValue<>(registry, value);
+        BuiltInEventHooks.Registry.LOOKUP_ENTRY_BY_VALUE.post(event);
+
+        return Optional.ofNullable(event.getResult())
+            .or(() -> StaticRegistryAccess.getRegistryAccess().lookupOrThrow(registry).getResourceKey(value));
     }
 
     /// The entry `key` names, answered by [BuiltInEventHooks.Registry#LOOKUP_ENTRY_BY_KEY] subscribers

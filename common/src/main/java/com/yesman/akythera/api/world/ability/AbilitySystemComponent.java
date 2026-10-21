@@ -1304,6 +1304,7 @@ public final class AbilitySystemComponent
     // ***************************************************************
 
     @Override
+    @ScriptFunction(pure = true, label = "Get Owner", category = "Ability")
     public LivingEntityPatch<?> getOwner() {
         return owner;
     }

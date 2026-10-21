@@ -20,7 +20,7 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 
-/// Load animationsToReplace from binary files. Instances are dedicated for loading a resource specified by [#resourcePath].
+/// Load animations from binary files. Instances are dedicated for loading a resource specified by [#resourcePath].
 public final class BinaryAnimationLoader implements AnimationLoader, BinaryAssetLoader {
     private final Identifier resourcePath;
     private final Resource resource;

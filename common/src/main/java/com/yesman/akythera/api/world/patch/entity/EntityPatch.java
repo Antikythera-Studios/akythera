@@ -16,6 +16,7 @@ import com.yesman.akythera.core.reflection.ScriptFunction;
 import com.yesman.akythera.core.reflection.ScriptType;
 import com.yesman.akythera.core.util.ClientOnly;
 import com.yesman.akythera.core.util.LogicalSide;
+import net.minecraft.SharedConstants;
 import net.minecraft.core.Holder;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerPlayer;
@@ -486,6 +487,28 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
     @ScriptFunction(pure = true, label = "Is Sprinting")
     public boolean isSprinting() {
         return getOriginal().isSprinting();
+    }
+
+    @ScriptFunction(pure = true, label = "Is Swimming", desc = "Returns whether the entity sprint-swims.")
+    public boolean isSwimming() {
+        return getOriginal().isSwimming();
+    }
+
+    @ScriptFunction(pure = true, label = "Is Visually Swimming", desc = "Returns whether the entity holds the swimming pose.")
+    public boolean isVisuallySwimming() {
+        return getOriginal().isVisuallySwimming();
+    }
+
+    @ScriptFunction(pure = true, label = "Is Visually Crawling", desc = "Returns whether the entity holds the swimming pose out of water.")
+    public boolean isVisuallyCrawling() {
+        return getOriginal().isVisuallyCrawling();
+    }
+
+    @ScriptFunction(pure = true, label = "Get Horizontal Speed", desc = "Ground speed over the last tick, in blocks per second.")
+    public float getHorizontalSpeed() {
+        Entity original = getOriginal();
+
+        return (float)(Mth.length(original.getX() - original.xo, original.getZ() - original.zo) * SharedConstants.TICKS_PER_SECOND);
     }
 
     @ScriptFunction(pure = true, label = "Is Crouching", desc = "Returns whether the entity holds the crouch pose.")

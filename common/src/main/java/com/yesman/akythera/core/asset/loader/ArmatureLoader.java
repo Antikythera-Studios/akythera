@@ -68,21 +68,23 @@ public interface ArmatureLoader extends AssetLoader {
         throw new ResourceLoadingFailureException(resourcePath, "Found neither binary(.akasset) nor json(.json) asset file");
     }
 
-    record Metadata(List<MirrorBonePair> mirrorBonePairs) {
+    record Metadata(List<MirrorBonePair> mirrorBonePairs, List<JointConstraint> jointConstraints) {
         /// The fields as they sit at the root of a sidecar, so a reader that carries fields of its
         /// own can place them alongside instead of under a section.
         public static final MapCodec<Metadata> MAP_CODEC = RecordCodecBuilder.mapCodec(
             instance ->
                 instance.group(
                     MirrorBonePair.CODEC.listOf().optionalFieldOf("mirror_bone_pairs", List.of())
-                        .forGetter(Metadata::mirrorBonePairs)
+                        .forGetter(Metadata::mirrorBonePairs),
+                    JointConstraint.CODEC.listOf().optionalFieldOf("joint_constraints", List.of())
+                        .forGetter(Metadata::jointConstraints)
                 ).apply(instance, Metadata::new)
         );
 
         public static final Codec<Metadata> CODEC = MAP_CODEC.codec();
 
         /// What an asset without a sidecar file is read with.
-        public static final Metadata DEFAULT = new Metadata(List.of());
+        public static final Metadata DEFAULT = new Metadata(List.of(), List.of());
 
         /// [#mirrorBonePairs] as a lookup, each pair entered from both ends.
         public Map<String, String> mirrorBoneMap() {
@@ -105,6 +107,18 @@ public interface ArmatureLoader extends AssetLoader {
                     Codec.STRING.fieldOf("first").forGetter(MirrorBonePair::first),
                     Codec.STRING.fieldOf("second").forGetter(MirrorBonePair::second)
                 ).apply(instance, MirrorBonePair::new)
+        );
+    }
+
+    record JointConstraint(String joint, String bend, float maxBend, float maxStretch) {
+        public static final Codec<JointConstraint> CODEC = RecordCodecBuilder.create(
+            instance ->
+                instance.group(
+                    Codec.STRING.fieldOf("joint").forGetter(JointConstraint::joint),
+                    Codec.STRING.fieldOf("bend").forGetter(JointConstraint::bend),
+                    Codec.floatRange(0.0F, 180.0F).optionalFieldOf("max_bend", 180.0F).forGetter(JointConstraint::maxBend),
+                    Codec.floatRange(1.0F, Float.MAX_VALUE).optionalFieldOf("max_stretch", 1.0F).forGetter(JointConstraint::maxStretch)
+                ).apply(instance, JointConstraint::new)
         );
     }
 

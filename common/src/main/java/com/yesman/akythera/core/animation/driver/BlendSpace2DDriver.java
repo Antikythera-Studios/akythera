@@ -12,6 +12,7 @@ import com.yesman.akythera.core.math.algorithm.DelaunayTriangulation.Triangle;
 import com.yesman.akythera.core.util.helper.MathUtils;
 import com.yesman.akythera.core.util.helper.PoseOperators;
 import net.minecraft.core.Holder;
+import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.NonNull;
 
@@ -43,15 +44,17 @@ public final class BlendSpace2DDriver implements AnimationDriver {
     private boolean isFinished;
     /// true if fading in, false if fading out
     private boolean fadingInOrOut;
-    private float elapsedTime;
+    private float phase;
 
-    /// Last [AnimationDriver#tick] elapsedTime — passed as `prevElapsedTime`
-    /// to the winner node's notify dispatch. Mirrors
+    /// Last [AnimationDriver#tick] phase, the start of the winner node's notify window. Mirrors
     /// `AnimationPlayer#lastUpdatedTime`.
-    private float lastUpdatedTime;
+    private float lastUpdatedPhase;
 
     private float targetX;
     private float targetY;
+
+    /// Whether the next [#update] takes the inputs as they are, without smoothing from the last ones.
+    private boolean snapToInputs = true;
 
     /// Cached enclosing triangle. -1 until the first update finds one.
     private int cachedTriangleIndex = NO_TRIANGLE;
@@ -64,10 +67,8 @@ public final class BlendSpace2DDriver implements AnimationDriver {
     private float cachedWeight2;
     private float cachedWeight3;
 
-    /// Weighted clip length of the cached corner mix — the wall-clock loop bound.
-    /// Recomputed every [#update]; MAX_VALUE means "no usable mix yet" and callers
-    /// fall back to raw elapsed-time sampling.
-    private float cachedTotalTime = Float.MAX_VALUE;
+    /// Weighted loop length of the cached corner mix, in seconds. Recomputed every [#update].
+    private float cachedCycleTime;
 
     /// Index *within the cached triangle* (0,1,2) of the winner. Set when the
     /// cached weights are refreshed; consumed by [#tick] to address the
@@ -97,24 +98,10 @@ public final class BlendSpace2DDriver implements AnimationDriver {
 
     @Override
     public Pose getPose() {
-        // Phase-sync: the clock wraps at the *weighted* total (see update), so sampling
-        // corners at raw elapsedTime freezes any shorter clip on its last keyframe until
-        // the wrap. Sample each corner at the shared phase scaled to its own length.
-        float t1, t2, t3;
-
-        if (cachedTotalTime > 0.0F && cachedTotalTime != Float.MAX_VALUE) {
-            float phase = elapsedTime / cachedTotalTime;
-            t1 = phase * cachedAnim1.getTotalFrameTime();
-            t2 = phase * cachedAnim2.getTotalFrameTime();
-            t3 = phase * cachedAnim3.getTotalFrameTime();
-        } else {
-            t1 = t2 = t3 = elapsedTime;
-        }
-
         return PoseOperators.blendPoses(
-            Pair.of(cachedAnim1.getPose(t1), cachedWeight1),
-            Pair.of(cachedAnim2.getPose(t2), cachedWeight2),
-            Pair.of(cachedAnim3.getPose(t3), cachedWeight3)
+            Pair.of(cachedAnim1.getPose(timeOf(cachedAnim1, phase)), cachedWeight1),
+            Pair.of(cachedAnim2.getPose(timeOf(cachedAnim2, phase)), cachedWeight2),
+            Pair.of(cachedAnim3.getPose(timeOf(cachedAnim3, phase)), cachedWeight3)
         );
     }
 
@@ -129,20 +116,11 @@ public final class BlendSpace2DDriver implements AnimationDriver {
     ///
     /// Experimental and TODO: test blend space root motion
     public Transform getBlendedRootMotion(final float time) {
-        float t1, t2, t3;
+        float timePhase = MathUtils.safeDivision(time, cachedCycleTime, 0.0F);
 
-        if (cachedTotalTime > 0.0F && cachedTotalTime != Float.MAX_VALUE) {
-            float phase = time / cachedTotalTime;
-            t1 = phase * cachedAnim1.getTotalFrameTime();
-            t2 = phase * cachedAnim2.getTotalFrameTime();
-            t3 = phase * cachedAnim3.getTotalFrameTime();
-        } else {
-            t1 = t2 = t3 = time;
-        }
-
-        Vec3 loc = cachedAnim1.getRootMotionTransform(t1).loc().scale(cachedWeight1)
-            .add(cachedAnim2.getRootMotionTransform(t2).loc().scale(cachedWeight2))
-            .add(cachedAnim3.getRootMotionTransform(t3).loc().scale(cachedWeight3));
+        Vec3 loc = cachedAnim1.getRootMotionTransform(timeOf(cachedAnim1, timePhase)).loc().scale(cachedWeight1)
+            .add(cachedAnim2.getRootMotionTransform(timeOf(cachedAnim2, timePhase)).loc().scale(cachedWeight2))
+            .add(cachedAnim3.getRootMotionTransform(timeOf(cachedAnim3, timePhase)).loc().scale(cachedWeight3));
 
         return Transform.fromTranslation(loc);
     }
@@ -155,20 +133,23 @@ public final class BlendSpace2DDriver implements AnimationDriver {
             fadeTime = Math.clamp(fadeTime - frameTime, 0.0F, blendSpace2D.value().fadeOutTime());
         }
 
-        elapsedTime += frameTime;
+        BlendSpace2D blendSpace = blendSpace2D.value();
+        DelaunayTriangulation<BlendSpace2D.AnimationNode> nodeSpace = blendSpace.getNodeSpace();
+        float smoothX = blendSpace.smoothX() <= 0.0F ? Float.MAX_VALUE : blendSpace.smoothX();
+        float smoothY = blendSpace.smoothY() <= 0.0F ? Float.MAX_VALUE : blendSpace.smoothY();
 
-        DelaunayTriangulation<BlendSpace2D.AnimationNode> nodeSpace = blendSpace2D.value().getNodeSpace();
-        float smoothX = blendSpace2D.value().smoothX() <= 0.0F ? Float.MAX_VALUE : blendSpace2D.value().smoothX();
-        float smoothY = blendSpace2D.value().smoothY() <= 0.0F ? Float.MAX_VALUE : blendSpace2D.value().smoothY();
+        if (snapToInputs) {
+            smoothX = Float.MAX_VALUE;
+            smoothY = Float.MAX_VALUE;
+            snapToInputs = false;
+        }
 
-        targetX = Math.clamp(
-            targetX + MathUtils.absoluteClamp(xUpdater.get() - targetX, smoothX * frameTime),
-            nodeSpace.minX(), nodeSpace.maxX()
-        );
-        targetY = Math.clamp(
-            targetY + MathUtils.absoluteClamp(yUpdater.get() - targetY, smoothY * frameTime),
-            nodeSpace.minY(), nodeSpace.maxY()
-        );
+        targetX = blendSpace.wrapX()
+            ? MathUtils.approachWrapped(targetX, xUpdater.get(), smoothX * frameTime, nodeSpace.minX(), nodeSpace.maxX())
+            : Math.clamp(targetX + MathUtils.absoluteClamp(xUpdater.get() - targetX, smoothX * frameTime), nodeSpace.minX(), nodeSpace.maxX());
+        targetY = blendSpace.wrapY()
+            ? MathUtils.approachWrapped(targetY, yUpdater.get(), smoothY * frameTime, nodeSpace.minY(), nodeSpace.maxY())
+            : Math.clamp(targetY + MathUtils.absoluteClamp(yUpdater.get() - targetY, smoothY * frameTime), nodeSpace.minY(), nodeSpace.maxY());
 
         // Fast path: the cached triangle still contains the control point.
         // Common case — control inputs drift smoothly between ticks.
@@ -190,19 +171,27 @@ public final class BlendSpace2DDriver implements AnimationDriver {
             }
         }
 
-        cachedTotalTime =
-            cachedAnim1.getTotalFrameTime() * cachedWeight1 +
-            cachedAnim2.getTotalFrameTime() * cachedWeight2 +
-            cachedAnim3.getTotalFrameTime() * cachedWeight3;
+        cachedCycleTime =
+            cachedAnim1.getTotalFrameTime() / cachedAnim1.rateScale() * cachedWeight1 +
+            cachedAnim2.getTotalFrameTime() / cachedAnim2.rateScale() * cachedWeight2 +
+            cachedAnim3.getTotalFrameTime() / cachedAnim3.rateScale() * cachedWeight3;
 
-        if (elapsedTime > cachedTotalTime) {
-            if (blendSpace2D.value().loops()) {
-                elapsedTime %= cachedTotalTime;
+        phase += MathUtils.safeDivision(frameTime, cachedCycleTime, 0.0F);
+
+        if (phase >= 1.0F) {
+            if (blendSpace.loops()) {
+                phase = Mth.frac(phase);
             } else {
-                elapsedTime = cachedTotalTime;
+                phase = 1.0F;
                 isFinished = true;
             }
         }
+    }
+
+    private float timeOf(final PlayableAnimation animation, final float atPhase) {
+        float shifted = atPhase + animation.phaseOffset();
+
+        return (blendSpace2D.value().loops() ? Mth.frac(shifted) : Math.min(shifted, 1.0F)) * animation.getTotalFrameTime();
     }
 
     /// Recomputes barycentric weights for `triangleIndex` and writes them
@@ -253,29 +242,29 @@ public final class BlendSpace2DDriver implements AnimationDriver {
             default -> cachedAnim3;
         };
 
-        // Map blended-clock times onto the winner clip's own timeline (phase sync,
-        // mirrors getPose) so notify keyframes fire at the authored moments.
-        float scale = (cachedTotalTime > 0.0F && cachedTotalTime != Float.MAX_VALUE)
-            ? winner.getTotalFrameTime() / cachedTotalTime : 1.0F;
-
-        winner.tick(owner, lastUpdatedTime * scale, elapsedTime * scale);
-        lastUpdatedTime = elapsedTime;
+        winner.tick(owner, timeOf(winner, lastUpdatedPhase), timeOf(winner, phase));
+        lastUpdatedPhase = phase;
     }
 
-    /// Runs on the blended clock: wraps at the weighted total of the cached corner
-    /// mix. getPose() maps it onto each corner's own timeline (phase sync).
+    /// Runs on the blended clock: the phase times the weighted loop length of the cached corner mix.
     @Override
     public float getTime() {
-        return elapsedTime;
+        return phase * cachedCycleTime;
+    }
+
+    @Override
+    public float getPhase() {
+        return phase;
     }
 
     @Override
     public void start() {
         fadingInOrOut = true;
         isFinished = false;
-        elapsedTime = 0.0F;
-        lastUpdatedTime = 0.0F;
+        phase = 0.0F;
+        lastUpdatedPhase = 0.0F;
         cachedTriangleIndex = NO_TRIANGLE;
+        snapToInputs = true;
     }
 
     @Override
@@ -309,8 +298,8 @@ public final class BlendSpace2DDriver implements AnimationDriver {
 
     @Override
     public void syncDriverTo(@NonNull AnimationDriver source) {
-        elapsedTime = source.getTime();
-        lastUpdatedTime = source.getTime();
+        phase = source.getPhase();
+        lastUpdatedPhase = phase;
         isFinished = source.isFinished();
     }
 }

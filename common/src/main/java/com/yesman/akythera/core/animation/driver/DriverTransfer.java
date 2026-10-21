@@ -59,6 +59,11 @@ public abstract class DriverTransfer implements AnimationDriver {
     }
 
     @Override
+    public float getPhase() {
+        return to.getPhase();
+    }
+
+    @Override
     public void start() {
         finished = false;
         alpha = 0.0F;

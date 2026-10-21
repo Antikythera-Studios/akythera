@@ -12,9 +12,11 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.packs.PackType;
+import net.minecraft.server.packs.resources.ResourceManager;
 
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -34,6 +36,7 @@ public final class EnumerableDataBlockSync {
 
     public static void registerEvents() {
         ModPlatformProvider.get().registerDataPackSyncCallback(EnumerableDataBlockSync::syncToPlayer);
+        ModPlatformProvider.get().registerConfigurationPayloads(EnumerableDataBlockSync::syncPayloads);
 
         // Client leaves a world -> evict data pack entries
         BuiltInEventHooks.Registry.REGISTRY_ACCESS_UNLOAD.registerEvent(
@@ -45,9 +48,17 @@ public final class EnumerableDataBlockSync {
         return LISTENERS.values().stream().map(EnumerableDataBlockReloadListener::getEnumManager).toList();
     }
 
+    public static void loadBeforeRegistries(final ResourceManager resourceManager) {
+        LISTENERS.values().forEach(listener -> listener.loadNow(resourceManager));
+    }
+
+    private static List<CustomPacketPayload> syncPayloads() {
+        return LISTENERS.entrySet().stream().map(entry -> encodePayload(entry.getKey(), entry.getValue())).toList();
+    }
+
     private static void syncToPlayer(ServerPlayer player, boolean joined) {
         NetworkingHelper.PayloadBundleBuilder bundle = NetworkingHelper.PayloadBundleBuilder.create();
-        LISTENERS.forEach((id, listener) -> bundle.and(encodePayload(id, listener)));
+        syncPayloads().forEach(bundle::and);
         bundle.send((first, rest) -> NetworkingHelper.getInstance().sendToClient(player, first, rest));
     }
 

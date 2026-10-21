@@ -24,6 +24,7 @@ import org.jspecify.annotations.Nullable;
 /// @param transformInheritPolicy the elements of that space the mesh takes on
 public record MeshComponentBlueprint(
     @Nullable AssetAccessor<? extends Mesh<?>> mesh,
+    @Nullable AssetAccessor<? extends Mesh<?>> slimMesh,
     @Nullable PureNode renderTypeGetter,
     Transform transform,
     TransformInheritPolicy transformInheritPolicy,
@@ -36,20 +37,23 @@ public record MeshComponentBlueprint(
             instance.group(
                 MeshManager.CODEC.optionalFieldOf("mesh")
                     .forGetter(ParseUtils.provideOptional(MeshComponentBlueprint::mesh)),
+                MeshManager.CODEC.optionalFieldOf("slim_mesh")
+                    .forGetter(ParseUtils.provideOptional(MeshComponentBlueprint::slimMesh)),
                 PureNode.CODEC.optionalFieldOf("render_type_getter")
                     .forGetter(ParseUtils.provideOptional(MeshComponentBlueprint::renderTypeGetter)),
                 TRANSFORM_CODEC.forGetter(MeshComponentBlueprint::transform),
                 TRANSFORM_INHERIT_POLICY_CODEC.forGetter(MeshComponentBlueprint::transformInheritPolicy),
                 ENABLED_CODEC.forGetter(MeshComponentBlueprint::enabled)
             )
-            .apply(instance, (mesh, renderTypeGetter, transform, transformInheritPolicy, enabled) ->
-                new MeshComponentBlueprint(mesh.orElse(null), renderTypeGetter.orElse(null), transform, transformInheritPolicy, enabled))
+            .apply(instance, (mesh, slimMesh, renderTypeGetter, transform, transformInheritPolicy, enabled) ->
+                new MeshComponentBlueprint(mesh.orElse(null), slimMesh.orElse(null), renderTypeGetter.orElse(null), transform, transformInheritPolicy, enabled))
     );
 
     @Override
     public MeshComponent instantiate(final ComponentAttachable host) {
         MeshComponent component = new MeshComponent(
             mesh,
+            slimMesh,
             renderTypeGetter,
             ownerOf(host),
             armatureOf(host),

@@ -3,9 +3,11 @@ package com.yesman.akythera.platform;
 import com.mojang.serialization.Codec;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.resources.PreparableReloadListener;
 import org.jspecify.annotations.NullMarked;
@@ -13,6 +15,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.io.File;
 import java.util.Collection;
+import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -36,6 +39,8 @@ public interface ModPlatform {
 
     /// Returns mod info by mod id
     Collection<ModInfo> getLoadedMods();
+
+    List<PackResources> openModPacks();
 
     /// Creates a custom registry
     <T> Registry<T> createRegistry(final ResourceKey<Registry<T>> id);
@@ -64,6 +69,8 @@ public interface ModPlatform {
     /// content: once when the player joins, and for every online player after /reload.
     /// `joined` is true on first join, false on /reload re-sync.
     void registerDataPackSyncCallback(final BiConsumer<ServerPlayer, Boolean> callback);
+
+    void registerConfigurationPayloads(final Supplier<List<CustomPacketPayload>> payloads);
 
     PhysicalSide getPhysicalSide();
 

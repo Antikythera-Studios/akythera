@@ -9,6 +9,7 @@ import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.math.TimeWindow;
 import com.yesman.akythera.core.util.LogicalSide;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.Map;
@@ -84,6 +85,15 @@ public final class AnimationNotifyTrack {
         return notifyStates.entrySet().stream()
             .map(entry -> new NotifyStateInTimeWindow(entry.getValue(), entry.getKey()))
             .collect(Collectors.toList());
+    }
+
+    /// Returns the first notify state of `type` whose time window holds `time`, or null.
+    public <T extends AnimationNotifyState<?>> @Nullable T getNotifyStateAt(final Class<T> type, final float time) {
+        for (Map.Entry<TimeWindow, AnimationNotifyState<?>> entry : notifyStates.entrySet()) {
+            if (entry.getKey().isIn(time) && type.isInstance(entry.getValue())) return type.cast(entry.getValue());
+        }
+
+        return null;
     }
 
     public boolean isEmpty() {

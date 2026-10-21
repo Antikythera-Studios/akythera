@@ -28,6 +28,7 @@ import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundOpenWi
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayAbilityCue;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayAnimMontage;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayParticleSystem;
+import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundStopAnimMontage;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundTerminateAbilityCue;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.EnumerableDataBlockSync;
@@ -341,13 +342,29 @@ public interface AkytheraClientBoundPayloadHandler {
     }
 
     static void handlePlayMontage(ClientBoundPlayAnimMontage payload, PayloadContext context) {
-        AkytheraPatches.getEntityPatchOptional(context.receiver()).ifPresent(entityPatch -> {
+        Entity entity = entityOf(payload.entityId());
+
+        if (entity == null) return;
+
+        AkytheraPatches.getEntityPatchOptional(entity).ifPresent(entityPatch -> {
             if (entityPatch.getArmatureComponent() == null) return;
 
             entityPatch.getArmatureComponent().getAnimator().playAnimMontage(
                 ResourceKey.create(AkytheraRegistries.DataPack.ANIM_MONTAGE_KEY, payload.montageId()),
                 payload.montageSection()
             );
+        });
+    }
+
+    static void handleStopMontage(final ClientBoundStopAnimMontage payload, final PayloadContext context) {
+        Entity entity = entityOf(payload.entityId());
+
+        if (entity == null) return;
+
+        AkytheraPatches.getEntityPatchOptional(entity).ifPresent(entityPatch -> {
+            if (entityPatch.getArmatureComponent() == null) return;
+
+            entityPatch.getArmatureComponent().getAnimator().stopPlayingMontage(payload.montage().orElse(null));
         });
     }
 }

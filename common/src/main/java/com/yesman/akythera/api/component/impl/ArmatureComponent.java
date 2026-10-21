@@ -84,6 +84,9 @@ public class ArmatureComponent
     /// Whether this armature takes part, see [PatchComponent#isEnabled].
     private boolean enabled = true;
 
+    /// Whether [#frameUpdate] ran since the last [#tick]. A client has no frame for an entity it doesn't draw.
+    private boolean frameUpdatedSinceTick;
+
     public ArmatureComponent(
         final ComponentAttachable owner,
         final AssetAccessor<? extends Armature> armature,
@@ -118,20 +121,27 @@ public class ArmatureComponent
     @Override
     public void tick() {
         // The client advances animation time in [#frameUpdate], once per frame. A server has no frame,
-        // so its tick does it—before [Animator#tick], whose notify window is
-        // [lastUpdatedTime, elapsedTime] and so has to see the time this tick moved to.
+        // and neither has a client entity nothing drew this tick (the first-person player), so the tick
+        // does it—before [Animator#tick], whose notify window is [lastUpdatedTime, elapsedTime] and so
+        // has to see the time this tick moved to.
         //
         // Time only. The skeleton itself is built on demand, in [#ensureServerPose].
         if (owner.logicalSide() == LogicalSide.SERVER) {
             getAnimator().update(SERVER_FRAME_TIME, 1.0F);
+        } else if (!frameUpdatedSinceTick) {
+            getAnimator().update(SERVER_FRAME_TIME, 1.0F);
+
+            if (rootMotionComponent != null) rootMotionComponent.frameUpdate(SERVER_FRAME_TIME);
         }
 
+        frameUpdatedSinceTick = false;
         getAnimator().tick();
         if (rootMotionComponent != null) rootMotionComponent.tick();
     }
 
     @Override
     public void frameUpdate(float frameTime, float partialTick) {
+        frameUpdatedSinceTick = true;
         getAnimator().update(frameTime, partialTick);
         updateBoundTransforms();
 

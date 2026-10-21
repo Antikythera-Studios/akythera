@@ -27,7 +27,7 @@ import org.jspecify.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 
-/// Load animationsToReplace from json files. Instances are dedicated for loading a resource specified by [#resourcePath].
+/// Load animations from json files. Instances are dedicated for loading a resource specified by [#resourcePath].
 ///
 /// Deprecated: Use [BinaryAnimationLoader] with .akasset extension to accelerate asset loading process
 @Deprecated
