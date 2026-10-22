@@ -53,9 +53,15 @@ public interface TransformComponent extends PatchComponent {
 
     /// This component's transform in world space, or null when the walk reaches no entity.
     default @Nullable Transform worldTransform() {
+        return worldTransform(1.0F);
+    }
+
+    /// [#worldTransform] with the entity placed as it is drawn `partialTick` after its last tick, see
+    /// [EntityPatch#getModelTransform(float)].
+    default @Nullable Transform worldTransform(final float partialTick) {
         EntityPatch<?> entity = entityOf(host());
 
-        return entity == null ? null : entity.getModelTransform().mul(modelTransform());
+        return entity == null ? null : entity.getModelTransform(partialTick).mul(modelTransform());
     }
 
     /// The space `host` gives the components attached under it, in the patch's model space.

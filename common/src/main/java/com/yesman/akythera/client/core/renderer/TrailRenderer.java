@@ -41,11 +41,11 @@ public final class TrailRenderer {
     /// Invocations per work group, matching `layout(local_size_x)` in the compute source.
     private static final int WORK_GROUP_SIZE = 64;
 
-    /// `Header` of the compute source: eight 4-byte words.
-    private static final int HEADER_BYTES = 32;
+    /// `Header` of the compute source: five 4-byte words.
+    private static final int HEADER_BYTES = 20;
 
-    /// `Control` of the compute source: two positions.
-    private static final int CONTROL_BYTES = 24;
+    /// Floats of one control in [Trail#controls], the `Control` of the compute source: two positions, u and alpha.
+    public static final int CONTROL_FLOATS = 8;
 
     /// [com.mojang.blaze3d.vertex.DefaultVertexFormat#PARTICLE].
     private static final int VERTEX_BYTES = 28;
@@ -134,19 +134,16 @@ public final class TrailRenderer {
                 buffer.putInt(controlOffset)
                     .putInt(trail.controlCount())
                     .putInt(vertexOffset)
-                    .putInt(trail.quadCount())
                     .putInt(ARGB.toABGR(trail.color()))
-                    .putInt(trail.lightCoords())
-                    .putFloat(trail.tail())
-                    .putInt(0);
+                    .putInt(trail.lightCoords());
 
                 controlOffset += trail.controlCount();
                 vertexOffset += trail.quadCount() * 4;
             }
         });
-        GpuBufferSlice controls = storage.write(controlCount * CONTROL_BYTES, buffer -> {
+        GpuBufferSlice controls = storage.write(controlCount * CONTROL_FLOATS * Float.BYTES, buffer -> {
             for (Trail trail : queued) {
-                for (int i = 0; i < trail.controlCount() * 6; i++) {
+                for (int i = 0; i < trail.controlCount() * CONTROL_FLOATS; i++) {
                     buffer.putFloat(trail.controls()[i]);
                 }
             }
@@ -208,13 +205,15 @@ public final class TrailRenderer {
         return program;
     }
 
-    /// One trail's draw.
+    /// One trail's draw: a quad between each two neighboring control edges.
     ///
-    /// @param controls     the control edges, oldest first, camera-relative: origin side then far side, six floats each
+    /// @param controls     the control edges, oldest first, [#CONTROL_FLOATS] each: the origin side and the far side,
+    ///                     camera-relative, then the texture's u and the alpha multiplier
     /// @param controlCount at least 2
-    /// @param tail         where the visible range starts, in segments from the first control edge
-    /// @param quadCount    the quads the visible range is cut into
     /// @param color        ARGB
-    public record Trail(RenderType renderType, float[] controls, int controlCount, float tail, int quadCount, int color, int lightCoords) {
+    public record Trail(RenderType renderType, float[] controls, int controlCount, int color, int lightCoords) {
+        public int quadCount() {
+            return controlCount - 1;
+        }
     }
 }

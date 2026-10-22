@@ -83,7 +83,7 @@ public class AkytheraParticleSystem extends NoRenderParticle {
         previousTransform = transform;
 
         if (attachment != null) {
-            Transform socketTransform = attachment.worldTransform(level);
+            Transform socketTransform = attachment.worldTransform(level, 1.0F);
 
             if (socketTransform == null) {
                 remove();

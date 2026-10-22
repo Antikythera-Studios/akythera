@@ -15,6 +15,8 @@ public final class AkytheraParticles {
 
     /// Plays `blueprint` at `transform` in the client level, following `attachment` from its first tick when given.
     /// Null without a level, or off the render thread, where an integrated server runs its scripts.
+    ///
+    /// The system takes its first tick here, since the particle engine ticks what is added only from its next tick on.
     public static @Nullable AkytheraParticleSystem play(
         final ParticleSystemBlueprint blueprint, final Transform transform, final @Nullable ParticleAttachment attachment
     ) {
@@ -23,7 +25,9 @@ public final class AkytheraParticles {
         if (minecraft.level == null || !minecraft.isSameThread()) return null;
 
         AkytheraParticleSystem system = new AkytheraParticleSystem(minecraft.level, blueprint, transform, attachment);
-        minecraft.particleEngine.add(system);
+        system.tick();
+
+        if (system.isAlive()) minecraft.particleEngine.add(system);
 
         return system;
     }
@@ -45,7 +49,7 @@ public final class AkytheraParticles {
         if (blueprint == null || entity == null || socketPath == null || minecraft.level == null) return null;
 
         ParticleAttachment attachment = new ParticleAttachment(entity.getOriginal().getId(), socketPath);
-        Transform transform = attachment.worldTransform(minecraft.level);
+        Transform transform = attachment.worldTransform(minecraft.level, 1.0F);
 
         return transform == null ? null : play(blueprint, transform, attachment);
     }

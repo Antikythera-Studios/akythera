@@ -320,11 +320,20 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
     /// the way vanilla's living entity renderer turns the model, and scaled by the entity's scale. Posing only a renderer
     /// applies (sleeping, dying, a renderer's own model scale) is left out.
     public Transform getModelTransform() {
+        return getModelTransform(1.0F);
+    }
+
+    /// [#getModelTransform] as the entity is drawn `partialTick` after its last tick, between its old and current
+    /// position and body yaw.
+    public Transform getModelTransform(final float partialTick) {
         float scale = getOriginal() instanceof LivingEntity livingEntity ? livingEntity.getScale() : 1.0F;
+        float yRot = getOriginal() instanceof LivingEntity livingEntity
+            ? Mth.rotLerp(partialTick, livingEntity.yBodyRotO, livingEntity.yBodyRot)
+            : getOriginal().getYRot(partialTick);
 
         return new Transform(
-            getOriginal().position(),
-            new Quaterniond().rotationY((180.0F - getVisualYRot()) * Mth.DEG_TO_RAD),
+            getOriginal().oldPosition().lerp(getOriginal().position(), partialTick),
+            new Quaterniond().rotationY((180.0F - yRot) * Mth.DEG_TO_RAD),
             new Vec3(scale, scale, scale)
         );
     }

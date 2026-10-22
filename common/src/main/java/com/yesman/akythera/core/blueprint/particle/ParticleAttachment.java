@@ -30,15 +30,16 @@ public record ParticleAttachment(int entityId, String socketPath) {
         ParticleAttachment::new
     );
 
-    /// The component's transform in world space, or null when the entity, its patch or the component is gone. An item
-    /// patch's component is the one the slot's [EquipmentSlotBinder] attached, and is gone while none binds the slot.
-    public @Nullable Transform worldTransform(final Level level) {
+    /// The component's transform in world space with the entity placed as it is drawn `partialTick` after its last tick,
+    /// or null when the entity, its patch or the component is gone. An item patch's component is the one the slot's
+    /// [EquipmentSlotBinder] attached, and is gone while none binds the slot.
+    public @Nullable Transform worldTransform(final Level level, final float partialTick) {
         EntityPatch<?> patch = AkytheraPatches.getEntityPatch(level.getEntity(entityId));
 
         if (patch == null) return null;
 
-        if (socketPath.isEmpty()) return patch.getModelTransform();
+        if (socketPath.isEmpty()) return patch.getModelTransform(partialTick);
 
-        return patch.getComponentAt(socketPath) instanceof TransformComponent component ? component.worldTransform() : null;
+        return patch.getComponentAt(socketPath) instanceof TransformComponent component ? component.worldTransform(partialTick) : null;
     }
 }
