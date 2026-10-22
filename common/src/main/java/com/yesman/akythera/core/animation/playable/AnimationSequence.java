@@ -81,8 +81,13 @@ public record AnimationSequence(
     }
 
     @Override
-    public void interrupt(final ComponentAttachable owner, final float elapsedTime) {
-        notifyTrack.interrupt(this, owner, elapsedTime);
+    public void frameUpdate(final ComponentAttachable owner, final float prevElapsedTime, final float currentElapsedTime) {
+        notifyTrack.frameUpdate(this, owner, prevElapsedTime, currentElapsedTime);
+    }
+
+    @Override
+    public void interrupt(final ComponentAttachable owner, final float lastTickTime, final float lastFrameTime) {
+        notifyTrack.interrupt(this, owner, lastTickTime, lastFrameTime);
     }
 
     @Override

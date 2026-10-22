@@ -4,6 +4,7 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.animation.notify.AnimationNotifyState;
+import com.yesman.akythera.api.animation.notify.NotifyTriggerThread;
 import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
 import com.yesman.akythera.core.animation.driver.AnimationMontagePlayer;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
@@ -27,7 +28,7 @@ public final class LockMovementNotifyState extends AnimationNotifyState<LivingEn
     private final Rotation rotation;
 
     public LockMovementNotifyState(final Rotation rotation) {
-        super(LogicalSide.BOTH);
+        super(LogicalSide.BOTH, NotifyTriggerThread.WORLD);
         this.rotation = rotation;
     }
 

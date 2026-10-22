@@ -44,6 +44,9 @@ public class AkytheraParticleSystem extends NoRenderParticle {
     /// Where the emitters put their particles and look up the pieces they name.
     private final ParticleHost host;
 
+    /// How far past a tick the system started, in ticks. 0 for a system started on a tick.
+    private float startPartialTick;
+
     /// Plays in `level`, through [ParticleHost#LEVEL].
     ///
     /// @param transform  where the system starts, in world space
@@ -94,11 +97,22 @@ public class AkytheraParticleSystem extends NoRenderParticle {
             transform = socketTransform;
         }
 
-        float seconds = age++ / 20.0F;
+        float seconds = Math.max(age++ - startPartialTick, 0.0F) / 20.0F;
 
         emitters.forEach(emitter -> emitter.tick(seconds));
 
         if (emitters.stream().allMatch(AkytheraParticleEmitter::isFinished)) remove();
+    }
+
+    /// Runs the first tick `partialTick` past the last tick, for a system started between two ticks.
+    public void start(final float partialTick) {
+        startPartialTick = partialTick;
+        tick();
+    }
+
+    /// How far past the last tick the running tick is, in ticks: the start's partial tick in the first tick, else 0.
+    public float tickPartialTick() {
+        return age == 1 ? startPartialTick : 0.0F;
     }
 
     @Override

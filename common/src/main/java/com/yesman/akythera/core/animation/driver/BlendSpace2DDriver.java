@@ -51,6 +51,9 @@ public final class BlendSpace2DDriver implements AnimationDriver {
     /// `AnimationPlayer#lastUpdatedTime`.
     private float lastUpdatedPhase;
 
+    /// Last phase a frame ran the winner node's notifies to. Mirrors `AnimationPlayer#lastFrameTime`.
+    private float lastFramePhase;
+
     /// Whether [#terminate] ran since the last [#start]. A terminated play fades out without driving notifies.
     private boolean terminated;
 
@@ -132,8 +135,20 @@ public final class BlendSpace2DDriver implements AnimationDriver {
         return Transform.fromTranslation(loc);
     }
 
+    /// Runs the winner's notifies of the time the last frame moved to, whose pose is the one drawn now, then moves the
+    /// time.
     @Override
     public void update(final float frameTime) {
+        // The owner is known from the first tick on. Until then, the frames' notifies wait
+        if (owner != null) {
+            if (!terminated && cachedTriangleIndex != NO_TRIANGLE) {
+                PlayableAnimation winner = winner();
+                winner.frameUpdate(owner, timeOf(winner, lastFramePhase), timeOf(winner, phase));
+            }
+
+            lastFramePhase = phase;
+        }
+
         if (fadingInOrOut) {
             fadeTime = Math.clamp(fadeTime + frameTime, 0.0F, blendSpace2D.value().fadeInTime());
         } else {
@@ -253,12 +268,12 @@ public final class BlendSpace2DDriver implements AnimationDriver {
         lastUpdatedPhase = phase;
     }
 
-    /// Ends the winner's notify states the last tick sits inside, for a play that stops before its end.
+    /// Ends the winner's notify states the playback sits inside, for a play that stops before its end.
     private void interruptNotifies() {
         if (owner == null || terminated || cachedTriangleIndex == NO_TRIANGLE) return;
 
         PlayableAnimation winner = winner();
-        winner.interrupt(owner, timeOf(winner, lastUpdatedPhase));
+        winner.interrupt(owner, timeOf(winner, lastUpdatedPhase), timeOf(winner, lastFramePhase));
     }
 
     private PlayableAnimation winner() {
@@ -289,6 +304,7 @@ public final class BlendSpace2DDriver implements AnimationDriver {
         terminated = false;
         phase = 0.0F;
         lastUpdatedPhase = 0.0F;
+        lastFramePhase = 0.0F;
         cachedTriangleIndex = NO_TRIANGLE;
         snapToInputs = true;
     }
@@ -328,6 +344,7 @@ public final class BlendSpace2DDriver implements AnimationDriver {
     public void syncDriverTo(@NonNull AnimationDriver source) {
         phase = source.getPhase();
         lastUpdatedPhase = phase;
+        lastFramePhase = phase;
         isFinished = source.isFinished();
     }
 }

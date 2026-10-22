@@ -3,6 +3,7 @@ package com.yesman.akythera.api.animation.notify.impl;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.animation.notify.AnimationNotifyState;
+import com.yesman.akythera.api.animation.notify.NotifyTriggerThread;
 import com.yesman.akythera.api.data.modularize.ScriptFunction;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.math.TimeWindow;
@@ -29,7 +30,7 @@ public final class MotionWarpingNotifyState extends AnimationNotifyState<EntityP
     private final ScriptFunction.ScriptUniFunction<EntityPatch<?>, Vec3> positionProvider;
 
     public MotionWarpingNotifyState(final ScriptFunction.ScriptUniFunction<EntityPatch<?>, Vec3> positionProvider) {
-        super(LogicalSide.BOTH);
+        super(LogicalSide.BOTH, NotifyTriggerThread.WORLD);
         this.positionProvider = positionProvider;
     }
 

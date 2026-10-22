@@ -4,6 +4,7 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.animation.notify.AnimationNotifyState;
+import com.yesman.akythera.api.animation.notify.NotifyTriggerThread;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.client.api.particle.AkytheraParticleSystem;
 import com.yesman.akythera.client.api.particle.AkytheraParticles;
@@ -15,6 +16,7 @@ import com.yesman.akythera.core.blueprint.particle.ParticleSystemBlueprint;
 import com.yesman.akythera.core.math.TimeWindow;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.LogicalSide;
+import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceKey;
 
 import java.util.Map;
@@ -22,7 +24,7 @@ import java.util.WeakHashMap;
 
 /// Plays a particle system that follows a socket of the entity, over the notify state's time window: every emitter
 /// with a time span, a trail or spawn rate one, takes the window's length as its time span
-/// ([ParticleEmitterBlueprint#withTimeSpan]).
+/// ([ParticleEmitterBlueprint#withTimeSpan]). Checked every frame, so the system starts on the frame the window does.
 public final class TrailParticleNotifyState extends AnimationNotifyState<EntityPatch<?>> {
     public static final MapCodec<TrailParticleNotifyState> CODEC = RecordCodecBuilder.mapCodec(inst ->
         inst.group(
@@ -40,7 +42,7 @@ public final class TrailParticleNotifyState extends AnimationNotifyState<EntityP
     private final Map<EntityPatch<?>, AkytheraParticleSystem> playing = new WeakHashMap<>();
 
     public TrailParticleNotifyState(final ResourceKey<ParticleSystemBlueprint> particleSystem, final String socket) {
-        super(LogicalSide.CLIENT);
+        super(LogicalSide.CLIENT, NotifyTriggerThread.RENDER);
 
         this.particleSystem = particleSystem;
         this.socket = socket;
@@ -62,7 +64,8 @@ public final class TrailParticleNotifyState extends AnimationNotifyState<EntityP
         AkytheraParticleSystem system = AkytheraParticles.playAttached(
             new ParticleSystemBlueprint(blueprint.emitters().stream().map(emitter -> emitter.withTimeSpan(span)).toList(), blueprint.variables()),
             owner,
-            socket
+            socket,
+            Minecraft.getInstance().getDeltaTracker().getGameTimeDeltaPartialTick(false)
         );
 
         if (system != null) playing.put(owner, system);

@@ -25,6 +25,9 @@ public final class AnimationPlayer implements AnimationDriver {
     /// Last time updated in fixed tick. Memorized for [PlayableAnimation#tick].
     private float lastUpdatedTime;
 
+    /// Last time a frame ran the notifies to. Memorized for [PlayableAnimation#frameUpdate].
+    private float lastFrameTime;
+
     // true if fading in, false if fading out
     private boolean fadingInOrOut;
 
@@ -55,6 +58,7 @@ public final class AnimationPlayer implements AnimationDriver {
         fadeTime = 0.0F;
         elapsedTime = 0.0F;
         lastUpdatedTime = 0.0F;
+        lastFrameTime = 0.0F;
     }
 
     @Override
@@ -74,13 +78,20 @@ public final class AnimationPlayer implements AnimationDriver {
         lastUpdatedTime = elapsedTime;
     }
 
-    /// Ends the notify states the last tick sits inside, for a play that stops before its end.
+    /// Ends the notify states the playback sits inside, for a play that stops before its end.
     private void interruptNotifies() {
-        if (owner != null && !terminated) playableAnimation.value().interrupt(owner, lastUpdatedTime);
+        if (owner != null && !terminated) playableAnimation.value().interrupt(owner, lastUpdatedTime, lastFrameTime);
     }
 
+    /// Runs the notifies of the time the last frame moved to, whose pose is the one drawn now, then moves the time.
     @Override
     public void update(float frameTime) {
+        // The owner is known from the first tick on. Until then, the frames' notifies wait
+        if (owner != null) {
+            if (!terminated && getWeight() >= 0.01F) playableAnimation.value().frameUpdate(owner, lastFrameTime, elapsedTime);
+            lastFrameTime = elapsedTime;
+        }
+
         if (fadingInOrOut) {
             fadeTime = Math.clamp(fadeTime + frameTime, 0.0F, playableAnimation.value().fadeInTime());
         } else {
@@ -147,6 +158,7 @@ public final class AnimationPlayer implements AnimationDriver {
         fadeTime = source.getFadeTime();
         elapsedTime = (loops() ? Mth.frac(phase) : Math.min(phase, 1.0F)) * playable.getTotalFrameTime();
         lastUpdatedTime = elapsedTime;
+        lastFrameTime = elapsedTime;
         isFinished = source.isFinished();
     }
 

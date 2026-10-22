@@ -2,6 +2,7 @@ package com.yesman.akythera.api.animation.notify.impl;
 
 import com.mojang.serialization.MapCodec;
 import com.yesman.akythera.api.animation.notify.AnimationNotifyState;
+import com.yesman.akythera.api.animation.notify.NotifyTriggerThread;
 import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
 import com.yesman.akythera.core.animation.driver.AnimationMontagePlayer;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
@@ -15,7 +16,7 @@ public final class CancelOnMoveNotifyState extends AnimationNotifyState<LivingEn
     public static final MapCodec<CancelOnMoveNotifyState> CODEC = MapCodec.unit(CancelOnMoveNotifyState::new);
 
     public CancelOnMoveNotifyState() {
-        super(LogicalSide.BOTH);
+        super(LogicalSide.BOTH, NotifyTriggerThread.WORLD);
     }
 
     @Override

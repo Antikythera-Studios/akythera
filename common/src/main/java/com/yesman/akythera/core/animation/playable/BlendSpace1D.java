@@ -50,7 +50,11 @@ public final class BlendSpace1D implements PlayableAnimation {
     }
 
     @Override
-    public void interrupt(ComponentAttachable owner, float elapsedTime) {
+    public void frameUpdate(ComponentAttachable owner, float prevElapsedTime, float currentElapsedTime) {
+    }
+
+    @Override
+    public void interrupt(ComponentAttachable owner, float lastTickTime, float lastFrameTime) {
     }
 
     /// Instantiated version of [BlendSpace2D]. To keep the design intention of [PlayableAnimation] and [AnimationDriver]

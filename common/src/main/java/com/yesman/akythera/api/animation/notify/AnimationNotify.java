@@ -20,15 +20,17 @@ public abstract class AnimationNotify<T extends ComponentAttachable> {
         .dispatch(AnimationNotify::mapCodec, Function.identity());
 
     protected final LogicalSide logicalSide;
+    protected final NotifyTriggerThread triggeringThread;
 
-    public AnimationNotify(LogicalSide logicalSide) {
+    public AnimationNotify(final LogicalSide logicalSide, final NotifyTriggerThread triggeringThread) {
         this.logicalSide = logicalSide;
+        this.triggeringThread = triggeringThread;
     }
 
     /// Tries activating notify after the logical side validation, receives current and previous elapsed times.
     /// Notify won't be triggered if `owner` is not assignable to <T>.
     @ApiStatus.Internal @SuppressWarnings("unchecked")
-    public final void tryActivate(PlayableAnimation animation, final ComponentAttachable owner, float prevElapsedTime, float currentElapsedTime) {
+    public final void tryActivate(final PlayableAnimation animation, final ComponentAttachable owner, final float prevElapsedTime, final float currentElapsedTime) {
         if (!logicalSide.accepts(owner.logicalSide())) {
             return;
         }
@@ -45,8 +47,12 @@ public abstract class AnimationNotify<T extends ComponentAttachable> {
         return logicalSide;
     }
 
+    public NotifyTriggerThread triggeringThread() {
+        return triggeringThread;
+    }
+
     /// A task that is executed once an animation playback time reaches the timestamp
-    public abstract void onNotified(T owner, PlayableAnimation animation, float prevElapsedTime, float currentElapsedTime);
+    public abstract void onNotified(final T owner, PlayableAnimation animation, final float prevElapsedTime, final float currentElapsedTime);
 
     /// Returns map codec for serializing this notify
     public abstract MapCodec<? extends AnimationNotify<?>> mapCodec();

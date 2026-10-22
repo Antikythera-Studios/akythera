@@ -3,6 +3,7 @@ package com.yesman.akythera.api.animation.notify.impl;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.animation.notify.AnimationNotify;
+import com.yesman.akythera.api.animation.notify.NotifyTriggerThread;
 import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.util.LogicalSide;
@@ -25,7 +26,7 @@ public final class PlaySoundNotify extends AnimationNotify<ComponentAttachable> 
     /// Local sounds are always played in client since notify itself already
     /// replicated from server to clients. No need to send sound playing packet twice.
     public PlaySoundNotify(Holder<@NonNull SoundEvent> soundEvent) {
-        super(LogicalSide.CLIENT);
+        super(LogicalSide.CLIENT, NotifyTriggerThread.WORLD);
 
         this.soundEvent = soundEvent;
     }

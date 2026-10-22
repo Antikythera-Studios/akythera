@@ -332,7 +332,7 @@ public interface AkytheraClientBoundPayloadHandler {
                 ParticleAttachment attachment = payload.attachment().orElse(null);
                 Transform socketTransform = attachment == null ? null : attachment.worldTransform(context.receiver().level(), 1.0F);
                 AkytheraParticleSystem system = AkytheraParticles.play(
-                    blueprint, socketTransform == null ? Transform.fromTranslation(payload.position()) : socketTransform, attachment
+                    blueprint, socketTransform == null ? Transform.fromTranslation(payload.position()) : socketTransform, attachment, 0.0F
                 );
 
                 if (system != null) system.setParameters(payload.parameters());

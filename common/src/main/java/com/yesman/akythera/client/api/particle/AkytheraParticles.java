@@ -17,15 +17,17 @@ public final class AkytheraParticles {
     /// Null without a level, or off the render thread, where an integrated server runs its scripts.
     ///
     /// The system takes its first tick here, since the particle engine ticks what is added only from its next tick on.
+    ///
+    /// @param partialTick how far past the last tick the system starts: 0 on a tick, the frame's between two ticks
     public static @Nullable AkytheraParticleSystem play(
-        final ParticleSystemBlueprint blueprint, final Transform transform, final @Nullable ParticleAttachment attachment
+        final ParticleSystemBlueprint blueprint, final Transform transform, final @Nullable ParticleAttachment attachment, final float partialTick
     ) {
         Minecraft minecraft = Minecraft.getInstance();
 
         if (minecraft.level == null || !minecraft.isSameThread()) return null;
 
         AkytheraParticleSystem system = new AkytheraParticleSystem(minecraft.level, blueprint, transform, attachment);
-        system.tick();
+        system.start(partialTick);
 
         if (system.isAlive()) minecraft.particleEngine.add(system);
 
@@ -34,7 +36,7 @@ public final class AkytheraParticles {
 
     @ScriptFunction(label = "Play Particle", category = "Particle", desc = "Plays a particle system at a position for the local player. Null on the server")
     public static @Nullable AkytheraParticleSystem play(final ParticleSystemBlueprint blueprint, final Vec3 position) {
-        return blueprint == null || position == null ? null : play(blueprint, Transform.fromTranslation(position), null);
+        return blueprint == null || position == null ? null : play(blueprint, Transform.fromTranslation(position), null, 0.0F);
     }
 
     @ScriptFunction(label = "Play Particle Attached", category = "Particle", desc = """
@@ -44,13 +46,20 @@ public final class AkytheraParticles {
     public static @Nullable AkytheraParticleSystem playAttached(
         final ParticleSystemBlueprint blueprint, final EntityPatch<?> entity, final String socketPath
     ) {
+        return playAttached(blueprint, entity, socketPath, 0.0F);
+    }
+
+    /// [#playAttached] started `partialTick` past the last tick, see [#play(ParticleSystemBlueprint, Transform, ParticleAttachment, float)].
+    public static @Nullable AkytheraParticleSystem playAttached(
+        final ParticleSystemBlueprint blueprint, final EntityPatch<?> entity, final String socketPath, final float partialTick
+    ) {
         Minecraft minecraft = Minecraft.getInstance();
 
         if (blueprint == null || entity == null || socketPath == null || minecraft.level == null) return null;
 
         ParticleAttachment attachment = new ParticleAttachment(entity.getOriginal().getId(), socketPath);
-        Transform transform = attachment.worldTransform(minecraft.level, 1.0F);
+        Transform transform = attachment.worldTransform(minecraft.level, partialTick);
 
-        return transform == null ? null : play(blueprint, transform, attachment);
+        return transform == null ? null : play(blueprint, transform, attachment, partialTick);
     }
 }

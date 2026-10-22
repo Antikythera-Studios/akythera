@@ -25,18 +25,19 @@ import java.util.function.UnaryOperator;
 
 /// A ribbon a [TrailParticleBlueprint] describes, swept by the emitter it follows.
 ///
-/// Every tick samples the edge at the tick and up to [TrailParticleBlueprint#interpolation] edges evenly between it and
-/// the last tick's, each stamped with its time in ticks. The edges between are the fewest that keep two edges at most
-/// the trail's length × [TrailParticleBlueprint#interpolationSpacing] apart, on the side of the edge that moved further.
-/// A frame draws the edges between `now - trailLifetime` and `now`, where `now` is the frame's time,
-/// `age + partialTick`. While sampling, the frame closes the trail with one more edge at the emitter as the frame draws
-/// it, so the trail reaches its socket. An edge is drawn translucent by its lifetime left, see
-/// [TrailParticleBlueprint#fadeOut].
+/// Times are in ticks since the tick before the trail spawned: a tick is at `age`, a frame at `age + partialTick`.
 ///
-/// Its lifetime is what is left of its [TrailSpawnRule]'s time span when it spawns, rounded up to whole ticks, and it
-/// samples until the lifetime ends. A sample places the emitter by its own age, never by the emitter's last tick, since
-/// the particle engine ticks the trail and its system in no set order. A socket is placed as its entity is drawn at the
-/// sampled time, see [ParticleAttachment#worldTransform].
+/// Every tick samples the edge at the tick and up to [TrailParticleBlueprint#interpolation] edges evenly between it and
+/// the last edge, each stamped with its time. The edges between are the fewest that keep two edges at most the trail's
+/// length × [TrailParticleBlueprint#interpolationSpacing] apart, on the side of the edge that moved further. A frame
+/// draws the edges between `now - trailLifetime` and `now`, where `now` is the frame's time. While sampling, the frame
+/// closes the trail with one more edge at the emitter as the frame draws it, so the trail reaches its socket. An edge
+/// is drawn translucent by its lifetime left, see [TrailParticleBlueprint#fadeOut].
+///
+/// It samples from [#startTick] to [#endTick], what is left of its [TrailSpawnRule]'s time span. The first frame past
+/// the end, or past its system's stop, keeps the edge it draws as the last one. A sample places the emitter by the
+/// trail's own time, never by the emitter's last tick, since the particle engine ticks the trail and its system in no
+/// set order. A socket is placed as its entity is drawn at the sampled time, see [ParticleAttachment#worldTransform].
 @ScriptType
 public class AkytheraTrailParticle extends Particle implements AkytheraParticle {
     private final ParticleState state;
@@ -47,6 +48,13 @@ public class AkytheraTrailParticle extends Particle implements AkytheraParticle 
 
     /// Seconds since the emitter started at the moment the trail spawned.
     private final float spawnTime;
+
+    /// The time the trail spawned at: how far past a tick its system's tick ran, see
+    /// [AkytheraParticleSystem#tickPartialTick].
+    private final float startTick;
+
+    /// The time the trail stops sampling at, the end of its [TrailSpawnRule]'s time span.
+    private final float endTick;
 
     /// How far the trail's far side is from the emitter's origin along the emitter's +Y axis, in blocks.
     private float length;
@@ -68,19 +76,21 @@ public class AkytheraTrailParticle extends Particle implements AkytheraParticle 
         this.blueprint = blueprint;
         this.attachment = emitter.getSystem().getAttachment();
         this.spawnTime = emitter.getSpawnTime();
+        this.startTick = emitter.getSystem().tickPartialTick();
+        this.endTick = this.startTick + (emitter.getBlueprint().spawn().duration() - this.spawnTime) * 20.0F;
         this.length = blueprint.length();
-        this.source = Objects.requireNonNullElse(sourceTransform(0.0F, 0.0F), emitter.getWorldTransform());
+        this.source = Objects.requireNonNullElse(sourceTransform(this.startTick, this.startTick), emitter.getWorldTransform());
         this.previousSource = this.source;
         this.hasPhysics = false;
         this.setSize(blueprint.properties().bbWidth(), blueprint.properties().bbHeight());
-        this.lifetime = Math.max(1, Mth.ceil((emitter.getBlueprint().spawn().duration() - this.spawnTime) * 20.0F));
-        this.edges.add(edgeOf(this.source, 0.0F));
+        this.lifetime = Math.max(1, Mth.ceil(this.endTick));
+        this.edges.add(edgeOf(this.source, this.startTick));
     }
 
     @Override
     public void emitterInit(final AkytheraParticleEmitter emitter) {
         state.runInitializers(this);
-        edges.set(0, edgeOf(source, 0.0F));
+        edges.set(0, edgeOf(source, startTick));
     }
 
     @Override
@@ -93,9 +103,9 @@ public class AkytheraTrailParticle extends Particle implements AkytheraParticle 
         if (!state.update(this)) return;
 
         if (sampling) {
-            // The emitter finishes on the tick the time span ends, so a finished emitter stops the trail early only before then
-            boolean stopped = age > lifetime || getEmitter().isFinished() && age < lifetime;
-            Transform sampled = stopped ? null : sourceTransform(age, 0.0F);
+            // Past the end, this tick's sample is the last one, unless a frame already kept its own
+            boolean ends = age >= endTick;
+            Transform sampled = getEmitter().isFinished() && !ends ? null : sourceTransform(age, 0.0F);
 
             if (sampled == null) {
                 sampling = false;
@@ -112,10 +122,11 @@ public class AkytheraTrailParticle extends Particle implements AkytheraParticle 
 
                 for (int i = 1; i <= steps; i++) {
                     float delta = (float)i / steps;
-                    edges.add(edgeOf(Transform.slerp(previousSource, source, delta), age - 1 + delta));
+                    edges.add(edgeOf(Transform.slerp(previousSource, source, delta), Mth.lerp(delta, last.time(), age)));
                 }
 
                 setPos(source.loc().x, source.loc().y, source.loc().z);
+                sampling = !ends;
             }
         }
 
@@ -129,17 +140,25 @@ public class AkytheraTrailParticle extends Particle implements AkytheraParticle 
         if (!sampling && (edges.size() < 2 || edges.getLast().time() <= cutoff)) remove();
     }
 
-    /// This frame's draw, with the edges camera-relative, or null when nothing of the trail is visible.
+    /// This frame's draw, with the edges camera-relative, or null when nothing of the trail is visible. The first frame
+    /// past [#endTick] or its system's stop keeps its newest edge and ends the sampling.
     ///
     /// @param tint     multiplies the trail's color, ARGB
     /// @param textures turns the blueprint's texture into the one drawn
     public TrailRenderer.@Nullable Trail extractTrail(final Vec3 cameraPosition, final float partialTick, final int tint, final UnaryOperator<Identifier> textures) {
         float now = age + partialTick;
+        Transform head = sampling && now > edges.getLast().time() ? sourceTransform(now, partialTick) : null;
+
+        if (sampling && (now >= endTick || getEmitter().isFinished())) {
+            if (head != null) edges.add(edgeOf(head, now));
+
+            sampling = false;
+        }
+
         float cutoff = now - blueprint.trailLifetime();
         List<Edge> controls = new ArrayList<>(edges);
-        Transform head = sampling && partialTick > 0.0F && age < lifetime ? sourceTransform(now, partialTick) : null;
 
-        if (head != null) controls.add(edgeOf(head, now));
+        if (sampling && head != null) controls.add(edgeOf(head, now));
 
         int first = 0;
 
@@ -189,14 +208,14 @@ public class AkytheraTrailParticle extends Particle implements AkytheraParticle 
         );
     }
 
-    /// Where the emitter is `ticks` after the trail spawned, in world space, or null once its socket is gone: the
-    /// socket's transform with its entity drawn `partialTick` after its last tick, else the system's, with the
-    /// emitter's placement at `ticks`.
-    private @Nullable Transform sourceTransform(final float ticks, final float partialTick) {
+    /// Where the emitter is at the trail's `time`, in world space, or null once its socket is gone: the socket's
+    /// transform with its entity drawn `partialTick` after its last tick, else the system's, with the emitter's
+    /// placement at `time`.
+    private @Nullable Transform sourceTransform(final float time, final float partialTick) {
         Transform system = attachment == null ? getEmitter().getSystem().getTransform() : attachment.worldTransform(level, partialTick);
         ParticleEmitterBlueprint emitter = getEmitter().getBlueprint();
 
-        return system == null ? null : system.mul(emitter.placementAt(emitter.spawn().spanTime(spawnTime + ticks / 20.0F)));
+        return system == null ? null : system.mul(emitter.placementAt(emitter.spawn().spanTime(spawnTime + (time - startTick) / 20.0F)));
     }
 
     private Edge edgeOf(final Transform transform, final float time) {

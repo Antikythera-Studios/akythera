@@ -38,7 +38,7 @@ public final class AkytheraClientScriptFunctions {
         return ScriptModularizeHelper.makeCustomScript(
             (BiFunction<String, Boolean, RenderType>) AkytheraClientScriptFunctions::entityRenderTypeOf,
             FunctionSignature.create(RenderType.class, List.of("texture", "translucent"), String.class, Boolean.class),
-            "Entity Render Type",
+            "Make Entity Render Type",
             "Render",
             "The entity render type drawing a texture",
             true,

@@ -22,14 +22,16 @@ public abstract class AnimationNotifyState<T extends ComponentAttachable> {
         .dispatch(AnimationNotifyState::mapCodec, Function.identity());
 
     protected final LogicalSide logicalSide;
+    protected final NotifyTriggerThread triggeringThread;
 
-    public AnimationNotifyState(LogicalSide logicalSide) {
+    public AnimationNotifyState(final LogicalSide logicalSide, final NotifyTriggerThread triggeringThread) {
         this.logicalSide = logicalSide;
+        this.triggeringThread = triggeringThread;
     }
 
     /// Checks elapsed times and activate notify in condition
     @ApiStatus.Internal @SuppressWarnings("unchecked")
-    public final void tryActivate(PlayableAnimation animation, final ComponentAttachable owner, TimeWindow timeWindow, float prevElapsedTime, float currentElapsedTime) {
+    public final void tryActivate(final PlayableAnimation animation, final ComponentAttachable owner, final TimeWindow timeWindow, final float prevElapsedTime, final float currentElapsedTime) {
         if (!logicalSide.accepts(owner.logicalSide())) {
             return;
         }
@@ -54,7 +56,7 @@ public abstract class AnimationNotifyState<T extends ComponentAttachable> {
 
     /// Ends the notify early, for an animation stopped inside the notify's window
     @ApiStatus.Internal @SuppressWarnings("unchecked")
-    public final void tryInterrupt(PlayableAnimation animation, final ComponentAttachable owner) {
+    public final void tryInterrupt(final PlayableAnimation animation, final ComponentAttachable owner) {
         if (!logicalSide.accepts(owner.logicalSide())) {
             return;
         }
@@ -68,19 +70,24 @@ public abstract class AnimationNotifyState<T extends ComponentAttachable> {
     /// Called when notify triggered at first. Note that [#onTick] is triggered in the same tick
     ///
     /// @param timeWindow the window the notify runs in, in the animation's elapsed time
-    public abstract void onBegin(T owner, PlayableAnimation animation, TimeWindow timeWindow);
+    public abstract void onBegin(final T owner, final PlayableAnimation animation, final TimeWindow timeWindow);
 
-    /// Called in each tick when notify is in time window
-    public abstract void onTick(T owner, PlayableAnimation animation, float prevElapsedTime, float currentElapsedTime);
+    /// Called in each tick when notify is in time window, or in each frame for a client's [NotifyTriggerThread#RENDER]
+    /// notify
+    public abstract void onTick(final T owner, final PlayableAnimation animation, final float prevElapsedTime, final float currentElapsedTime);
 
     /// Called when the playback time gets through the last time window, or when the animation stops inside the window.
     /// Note that [#onTick] is triggered in the same tick
     ///
     /// @param interrupted whether the animation stopped before the window's end
-    public abstract void onEnd(T owner, PlayableAnimation animation, boolean interrupted);
+    public abstract void onEnd(final T owner, final PlayableAnimation animation, final boolean interrupted);
 
     public final LogicalSide logicalSide() {
         return logicalSide;
+    }
+
+    public final NotifyTriggerThread triggeringThread() {
+        return triggeringThread;
     }
 
     /// Returns map codec for serializing this notify

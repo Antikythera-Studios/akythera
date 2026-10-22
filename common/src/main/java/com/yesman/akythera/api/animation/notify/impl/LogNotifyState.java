@@ -3,6 +3,7 @@ package com.yesman.akythera.api.animation.notify.impl;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.animation.notify.AnimationNotifyState;
+import com.yesman.akythera.api.animation.notify.NotifyTriggerThread;
 import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
@@ -20,7 +21,7 @@ public final class LogNotifyState extends AnimationNotifyState<ComponentAttachab
     );
 
     public LogNotifyState(LogicalSide side) {
-        super(side);
+        super(side, NotifyTriggerThread.WORLD);
     }
 
     @Override

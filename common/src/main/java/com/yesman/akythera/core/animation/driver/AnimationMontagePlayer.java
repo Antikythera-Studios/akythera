@@ -53,6 +53,16 @@ public final class AnimationMontagePlayer implements AnimationDriver {
     /// Last time updated in fixed tick. Memorized for [AnimationNotifyTrack].
     private float lastUpdatedTime;
 
+    /// Last time a frame ran the notifies to. Memorized for [AnimationNotifyTrack#frameUpdate].
+    private float lastFrameTime;
+
+    /// The end of the section the playback left since the last tick, which the next tick runs the notifies to first.
+    /// NaN while the playback left no section.
+    private float leftSectionEnd = Float.NaN;
+
+    /// Where the playback restarted after leaving [#leftSectionEnd]'s section.
+    private float leftSectionRestart;
+
     /// In the montage player, the fading time is regarded as extended playtime of montage.
     private float fadeTime;
 
@@ -87,6 +97,7 @@ public final class AnimationMontagePlayer implements AnimationDriver {
                 replaced.cachedLastMontagePose = cachedLastMontagePose;
                 replaced.elapsedTime = elapsedTime;
                 replaced.lastUpdatedTime = lastUpdatedTime;
+                replaced.lastFrameTime = lastFrameTime;
                 replaced.fadeTime = fadeTime;
                 replaced.sectionIndex = sectionIndex;
                 replaced.isFinished = isFinished;
@@ -104,6 +115,8 @@ public final class AnimationMontagePlayer implements AnimationDriver {
         isFinished = false;
         elapsedTime = 0.0F;
         lastUpdatedTime = 0.0F;
+        lastFrameTime = 0.0F;
+        leftSectionEnd = Float.NaN;
         fadeTime = 0.0F;
         currentPlaying = animMontage;
         montageCallbackHandle = new MontageCallbackHandle(animMontage);
@@ -178,6 +191,8 @@ public final class AnimationMontagePlayer implements AnimationDriver {
         if (window != null) {
             elapsedTime = window.from();
             lastUpdatedTime = window.from();
+            lastFrameTime = window.from();
+            leftSectionEnd = Float.NaN;
         }
     }
 
@@ -186,13 +201,20 @@ public final class AnimationMontagePlayer implements AnimationDriver {
     public void tick(final ComponentAttachable owner) {
         this.owner = owner;
 
+        if (currentPlaying != null && !Float.isNaN(leftSectionEnd)) {
+            currentPlaying.value().tick(owner, lastUpdatedTime, leftSectionEnd);
+            lastUpdatedTime = leftSectionRestart;
+        }
+
+        leftSectionEnd = Float.NaN;
+
         if (currentPlaying != null) currentPlaying.value().tick(owner, lastUpdatedTime, elapsedTime);
         lastUpdatedTime = elapsedTime;
     }
 
-    /// Ends the playing montage's notify states the last tick sits inside, for a montage that stops before its end.
+    /// Ends the playing montage's notify states the playback sits inside, for a montage that stops before its end.
     private void interruptNotifies() {
-        if (owner != null && currentPlaying != null && !isFinished) currentPlaying.value().interrupt(owner, lastUpdatedTime);
+        if (owner != null && currentPlaying != null && !isFinished) currentPlaying.value().interrupt(owner, lastUpdatedTime, lastFrameTime);
     }
 
     private void setOutgoing(@Nullable AnimationMontagePlayer outgoing) {
@@ -206,10 +228,18 @@ public final class AnimationMontagePlayer implements AnimationDriver {
         return currentPlaying == null ? 0.0F : MathUtils.safeDivision(fadeTime, currentPlaying.value().fadeInTime(), 1.0F);
     }
 
+    /// Runs the notifies of the time the last frame moved to, whose pose is the one drawn now, then moves the time.
+    ///
     /// @param frameTime fixed to 0.05 in a server side, variable frame time in client side.
     @Override
     public void update(final float frameTime) {
         if (outgoing != null) outgoing.update(frameTime);
+
+        // The owner is known from the first tick on. Until then, the frames' notifies wait
+        if (owner != null) {
+            if (currentPlaying != null) currentPlaying.value().frameUpdate(owner, lastFrameTime, elapsedTime);
+            lastFrameTime = elapsedTime;
+        }
 
         // Reset to 0 when no there's no playing animation
         if (currentPlaying == null) {
@@ -234,6 +264,8 @@ public final class AnimationMontagePlayer implements AnimationDriver {
                 if (fadeTime <= 0.0F) {
                     elapsedTime = 0.0F;
                     lastUpdatedTime = 0.0F;
+                    lastFrameTime = 0.0F;
+                    leftSectionEnd = Float.NaN;
                     currentPlaying = null;
                     cachedLastMontagePose = Pose.EMPTY_POSE;
                     return;
@@ -268,14 +300,19 @@ public final class AnimationMontagePlayer implements AnimationDriver {
                         // No transition defined → pause at the section end and hold the pose. Stay active
                         // so the caller can jumpToSection (play another sequence) or terminate() explicitly.
                         elapsedTime = sectionEnd;
-                        lastUpdatedTime = sectionEnd; // so notifies between here and `sectionEnd` don't re-fire each tick
                         return;
                     }
 
-                    float deltaMinus = sectionEnd - elapsedTime;
                     float deltaPlus = elapsedTime + frameTime - sectionEnd;
-                    lastUpdatedTime = restartTime - deltaMinus;
                     elapsedTime = restartTime + deltaPlus;
+
+                    // The next tick runs the notifies to the section's end, then from the restart
+                    if (Float.isNaN(leftSectionEnd)) leftSectionEnd = sectionEnd;
+                    leftSectionRestart = restartTime;
+
+                    // The section's end is never drawn, so its notifies run here
+                    if (owner != null) currentPlaying.value().frameUpdate(owner, lastFrameTime, sectionEnd);
+                    lastFrameTime = restartTime;
                 } else {
                     elapsedTime += frameTime;
                 }
@@ -350,6 +387,7 @@ public final class AnimationMontagePlayer implements AnimationDriver {
             && currentPlaying == montagePlayerSource.currentPlaying)
         {
             lastUpdatedTime = montagePlayerSource.lastUpdatedTime;
+            lastFrameTime = montagePlayerSource.lastFrameTime;
             elapsedTime = montagePlayerSource.elapsedTime;
             fadeTime = montagePlayerSource.fadeTime;
             sectionIndex = montagePlayerSource.sectionIndex;

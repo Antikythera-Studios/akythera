@@ -71,8 +71,14 @@ public interface PlayableAnimation {
     /// Designed to run owner attached [AnimationNotifyTrack]
     void tick(final ComponentAttachable owner, final float prevElapsedTime, final float currentElapsedTime);
 
-    /// Ends the notify states `elapsedTime` sits inside, for a play stopped there
-    void interrupt(final ComponentAttachable owner, final float elapsedTime);
+    /// Runs the owner attached [AnimationNotifyTrack]'s notifies a frame checks, see [AnimationNotifyTrack#frameUpdate]
+    void frameUpdate(final ComponentAttachable owner, final float prevElapsedTime, final float currentElapsedTime);
+
+    /// Ends the notify states the playback sits inside, for a play stopped there
+    ///
+    /// @param lastTickTime  the time the last [#tick] ran to
+    /// @param lastFrameTime the time the last [#frameUpdate] ran to
+    void interrupt(final ComponentAttachable owner, final float lastTickTime, final float lastFrameTime);
 
     /// Polymorphic codec for [PlayableAnimation] driven classes. JSON shape:
     ///
