@@ -1,7 +1,6 @@
 package com.yesman.akythera.core.util.helper;
 
 import com.mojang.datafixers.util.Pair;
-import com.yesman.akythera.api.asset.AssetAccessor;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.asset.armature.Armature;
 import com.yesman.akythera.core.asset.armature.Bone;
@@ -98,40 +97,61 @@ public final class PoseOperators {
         return pose;
     }
 
-    /// @param boneName the bone the layered pose starts taking over from. The bone itself keeps the
-    /// base pose; its descendants ramp toward `layered` over `depth` bones.
-    /// @param depth    bones to ramp the blend over. 0 or less hands the whole branch below `boneName`
-    /// to `layered` at once.
+    /// Mixes `layered` onto `base` bone by bone.
+    ///
+    /// @param boneWeights        the share of `layered` per bone id of `armature`
+    /// @param weight             scales every bone's share
+    /// @param meshSpaceRotation  whether rotations mix in model space instead of each bone's own
     public static Pose layeredBlendPerBone(
-        final Pose base, final Pose layered, final String boneName, final int depth,
-        final AssetAccessor<? extends Armature> armature
+        final Pose base, final Pose layered, final Armature armature, final float[] boneWeights, final float weight,
+        final boolean meshSpaceRotation
     ) {
-        Bone rootBone = armature.get().getRootBone();
         Pose pose = new Pose();
-        layeredBlendRecursively(rootBone, boneName, base, layered, pose, 0.0F, depth <= 0 ? 1.0F : 1.0F / depth,
-            boneName.equals(rootBone.getName()));
+        layeredBlendRecursively(
+            armature.getRootBone(), base, layered, pose, boneWeights, weight, meshSpaceRotation,
+            new Quaterniond(), new Quaterniond(), new Quaterniond()
+        );
 
         return pose;
     }
 
+    /// @param baseParent    the parent's model rotation in `base`, read only when blending in model space
+    /// @param layeredParent the parent's model rotation in `layered`
+    /// @param destParent    the parent's model rotation in `dest`
     private static void layeredBlendRecursively(
-        final Bone bone, final String boneName, final Pose base, final Pose layered, final Pose dest,
-        final float weight, final float increment, final boolean isLayer
+        final Bone bone, final Pose base, final Pose layered, final Pose dest, final float[] boneWeights,
+        final float weight, final boolean meshSpaceRotation,
+        final Quaterniond baseParent, final Quaterniond layeredParent, final Quaterniond destParent
     ) {
-        boolean isLayerNext;
+        String name = bone.getName();
+        float share = boneWeights[bone.getId()] * weight;
+        Transform baseTransform = base.orElseIdentity(name);
+        Transform layeredTransform = layered.orElseIdentity(name);
+        Transform mixed = share <= 0.0F ? baseTransform : Transform.lerp(baseTransform, layeredTransform, share);
 
-        if (isLayer) {
-            dest.putBoneTransform(bone.getName(), Transform.lerp(base.orElseIdentity(bone.getName()), layered.orElseIdentity(bone.getName()), weight));
-            isLayerNext = true;
-        } else {
-            dest.putBoneTransform(bone.getName(), base.orElseIdentity(bone.getName()));
-            isLayerNext = boneName.equals(bone.getName());
+        Quaterniond baseModel = baseParent;
+        Quaterniond layeredModel = layeredParent;
+        Quaterniond destModel = destParent;
+
+        if (meshSpaceRotation) {
+            Quaterniond rest = bone.getLocalTransform().getNormalizedRotation(new Quaterniond());
+            baseModel = new Quaterniond(baseParent).mul(rest).mul(baseTransform.rot());
+            layeredModel = new Quaterniond(layeredParent).mul(rest).mul(layeredTransform.rot());
+
+            if (share > 0.0F) {
+                Quaterniond frame = new Quaterniond(destParent).mul(rest);
+                Quaterniond desired = new Quaterniond(baseModel).slerp(layeredModel, share);
+                mixed = new Transform(mixed.loc(), frame.conjugate().mul(desired).normalize(), mixed.sca());
+            }
+
+            destModel = new Quaterniond(destParent).mul(rest).mul(mixed.rot());
         }
 
-        float nextWeight = Math.min(1.0F, weight + (isLayerNext ? increment : 0.0F));
+        dest.putBoneTransform(name, mixed);
 
         for (Bone childBone : bone.getChildBones()) {
-            layeredBlendRecursively(childBone, boneName, base, layered, dest, nextWeight, increment, isLayerNext);
+            layeredBlendRecursively(
+                childBone, base, layered, dest, boneWeights, weight, meshSpaceRotation, baseModel, layeredModel, destModel);
         }
     }
 
