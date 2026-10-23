@@ -59,9 +59,6 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
     /// Whether [#animationReplacements] were written through their mirrored twins.
     private boolean replacementsMirrored;
 
-    /// Whether [LivingEntity#yBodyRot]
-    private boolean syncBodyYRot = true;
-
     /// What [#getMovementYaw] last returned.
     private float movementYaw;
 
@@ -115,13 +112,6 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
         slotBinders().values().forEach(EquipmentSlotBinder::refresh);
 
         super.postTick();
-    }
-
-    @Override
-    public void postTickClient() {
-        super.postTickClient();
-
-        if (syncBodyYRot) getOriginal().setYBodyRot(getOriginal().getYRot());
     }
 
     /// The adapter that established the current stance, the item patch declaring it and the slot that
@@ -384,13 +374,5 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
     @ScriptFunction(pure = true, label = "Is Dead or Dying")
     public boolean isDeadOrDying() {
         return getOriginal().isDeadOrDying();
-    }
-
-    // ***************************************************************
-    // Common Setters
-    // ***************************************************************
-    @ScriptFunction(label = "Set Sync Body Yaw", desc = "Determines whether the body yaw rotation sync to entity's model yaw.")
-    public void setSyncBodyYRot(final boolean flag) {
-        syncBodyYRot = flag;
     }
 }
