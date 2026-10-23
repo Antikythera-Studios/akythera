@@ -22,6 +22,7 @@ import com.yesman.akythera.api.world.patch.item.WeaponStance;
 import com.yesman.akythera.client.api.data.modularize.AkytheraClientScriptTypes;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.animation.AnimationLayerSignature;
+import com.yesman.akythera.core.animation.driver.LayeredBlendPerBoneDriver;
 import com.yesman.akythera.core.animation.playable.AnimationMontage;
 import com.yesman.akythera.core.blueprint.AbilityBlueprint;
 import com.yesman.akythera.core.blueprint.particle.ParticleBlueprint;
@@ -228,6 +229,11 @@ public final class AkytheraScriptTypes {
 
     public static final Holder<ScriptType> QUATERNIOND = AKYTHERA_REGISTRAR.register("quaterniond", () -> new ScriptType(Quaterniond.class, QuaternionUtils.CODEC));
     public static final Holder<ScriptType> TRANSFORM = AKYTHERA_REGISTRAR.register("transform", () -> new ScriptType(Transform.class, Transform.CODEC));
+
+    // Animation
+
+    public static final Holder<ScriptType> LAYER_SETUP = AKYTHERA_REGISTRAR.register("layer_setup",
+        () -> new ScriptType(LayeredBlendPerBoneDriver.LayerSetup.class, LayeredBlendPerBoneDriver.LayerSetup.CODEC));
 
     // Widget
 
