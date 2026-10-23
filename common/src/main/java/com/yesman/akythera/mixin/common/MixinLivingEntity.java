@@ -58,7 +58,8 @@ public abstract class MixinLivingEntity {
         }
     }
 
-    /// Aims the vanilla body turn at the view yaw while the entity moves, when its [EntityMovementComponent] asks for it.
+    /// Aims the vanilla body turn at the view yaw while [LivingEntityPatch#faceBodyToView] is sampled, or while the
+    /// entity moves when its [EntityMovementComponent] asks for it.
     @ModifyArg(
         at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/LivingEntity;tickHeadTurn(F)V"),
         method = "tick()V"
@@ -67,6 +68,8 @@ public abstract class MixinLivingEntity {
         LivingEntity self = (LivingEntity)(Object)this;
 
         if (!(((EntityAccessor)self).akythera$getEntityPatch() instanceof EntityPatch<?> patch)) return yBodyRotTarget;
+
+        if (patch instanceof LivingEntityPatch<?> livingPatch && livingPatch.consumeBodyFacesViewRequest()) return self.getYRot();
 
         EntityMovementComponent movement = patch.getComponent(EntityMovementComponent.class);
 

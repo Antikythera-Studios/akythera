@@ -62,6 +62,9 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
     /// What [#getMovementYaw] last returned.
     private float movementYaw;
 
+    /// Whether [#faceBodyToView] ran since the last tick's body turn.
+    private boolean bodyFacesViewRequested;
+
     public LivingEntityPatch(@NonNull T original) {
         super(original);
     }
@@ -329,6 +332,21 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
         }
 
         return movementYaw;
+    }
+
+    /// Asks the next tick to aim the vanilla body turn at [LivingEntity#getYRot], which eases the body toward it.
+    @ScriptFunction(pure = true, label = "Face Body To View", desc = "Turns the body smoothly toward the view yaw while this node is sampled, e.g. in a blend space input. Returns the value unchanged.")
+    public float faceBodyToView(final float value) {
+        bodyFacesViewRequested = true;
+        return value;
+    }
+
+    /// Returns whether [#faceBodyToView] ran since the last call, and clears the request.
+    public boolean consumeBodyFacesViewRequest() {
+        boolean requested = bodyFacesViewRequested;
+        bodyFacesViewRequested = false;
+
+        return requested;
     }
 
     /// Returns the [LockMovementNotifyState] a playing montage holds at its playhead, or null.
