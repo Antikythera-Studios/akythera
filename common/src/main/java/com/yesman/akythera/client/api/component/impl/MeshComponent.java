@@ -11,7 +11,6 @@ import com.yesman.akythera.api.data.modularize.node.ScriptCaller;
 import com.yesman.akythera.api.data.modularize.node.ScriptNode;
 import com.yesman.akythera.api.data.modularize.node.ScriptRecorder;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
-import com.yesman.akythera.api.world.patch.entity.PlayerPatch;
 import com.yesman.akythera.client.api.component.RenderableComponent;
 import com.yesman.akythera.client.api.lifecycle.ClientComponentsFactory;
 import com.yesman.akythera.client.core.asset.mesh.Mesh;
@@ -34,8 +33,6 @@ import net.minecraft.client.renderer.entity.layers.RenderLayer;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.texture.OverlayTexture;
-import net.minecraft.world.entity.player.PlayerModelType;
-import net.minecraft.world.entity.player.PlayerSkin;
 import org.joml.Matrix4f;
 import org.jspecify.annotations.Nullable;
 
@@ -61,8 +58,6 @@ public final class MeshComponent implements RenderableComponent<LivingEntityRend
 
     /// The mesh drawn, or null for a component that names none and draws nothing.
     private final @Nullable AssetAccessor<? extends Mesh<?>> mesh;
-
-    private final @Nullable AssetAccessor<? extends Mesh<?>> slimMesh;
 
     /// A tree over [#owner] answering the [RenderType] to draw with; anything else, or no tree, draws
     /// with the entity's own model render type.
@@ -95,7 +90,6 @@ public final class MeshComponent implements RenderableComponent<LivingEntityRend
 
     public MeshComponent(
         final @Nullable AssetAccessor<? extends Mesh<?>> mesh,
-        final @Nullable AssetAccessor<? extends Mesh<?>> slimMesh,
         final @Nullable PureNode renderTypeGetter,
         final @Nullable EntityPatch<?> owner,
         final @Nullable ArmatureComponent armature,
@@ -104,7 +98,6 @@ public final class MeshComponent implements RenderableComponent<LivingEntityRend
         final TransformInheritPolicy transformInheritPolicy
     ) {
         this.mesh = mesh;
-        this.slimMesh = slimMesh;
         this.renderTypeGetter = renderTypeGetter;
         this.owner = owner;
         this.armature = armature;
@@ -114,12 +107,6 @@ public final class MeshComponent implements RenderableComponent<LivingEntityRend
     }
 
     public @Nullable AssetAccessor<? extends Mesh<?>> getMesh() {
-        if (slimMesh != null && owner instanceof PlayerPatch playerPatch) {
-            PlayerSkin skin = playerPatch.getPlayerSkin();
-
-            if (skin != null && skin.model() == PlayerModelType.SLIM) return slimMesh;
-        }
-
         return mesh;
     }
 
@@ -133,9 +120,7 @@ public final class MeshComponent implements RenderableComponent<LivingEntityRend
 
     /// Whether the mesh resolves to a [SkeletalMesh], which sits in [#armature]'s space.
     public boolean isSkeletal() {
-        AssetAccessor<? extends Mesh<?>> drawn = getMesh();
-
-        return drawn != null && drawn.getOrHandleException(Akythera.LOGGER::error) instanceof SkeletalMesh;
+        return mesh != null && mesh.getOrHandleException(Akythera.LOGGER::error) instanceof SkeletalMesh;
     }
 
     // ***************************************************************
@@ -173,11 +158,9 @@ public final class MeshComponent implements RenderableComponent<LivingEntityRend
         PatchModelRenderer.ModelDraw modelDraw =
             ((LivingEntityRenderStateAccessor) state).akythera$getModelDraw();
 
-        AssetAccessor<? extends Mesh<?>> drawn = getMesh();
+        if (modelDraw == null || mesh == null || owner == null) return;
 
-        if (modelDraw == null || drawn == null || owner == null) return;
-
-        Mesh<?> resolved = drawn.get();
+        Mesh<?> resolved = mesh.get();
 
         if (resolved == null) return;
 

@@ -215,6 +215,7 @@ public final class SkinnedArmorRenderer implements RenderableComponent<LivingEnt
 
         for (PatchComponent sibling : armature.getComponents().values()) {
             if (sibling instanceof MeshComponent body
+                && body.isEnabled()
                 && body.getMesh() != null
                 && body.getMesh().getOrHandleException(Akythera.LOGGER::error) instanceof SkeletalMesh bodyMesh
             ) {
