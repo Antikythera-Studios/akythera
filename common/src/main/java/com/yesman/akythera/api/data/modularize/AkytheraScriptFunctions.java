@@ -4,6 +4,7 @@ import com.yesman.akythera.api.animation.animator.AnimationInterfaceKey;
 import com.yesman.akythera.api.animation.animator.AnimationLayer;
 import com.yesman.akythera.api.animation.animator.Animator;
 import com.yesman.akythera.api.component.ComponentAttachable;
+import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.component.PatchComponent;
 import com.yesman.akythera.api.world.ability.Ability;
 import com.yesman.akythera.api.world.ability.AbilityState;
@@ -98,6 +99,7 @@ public final class AkytheraScriptFunctions {
             ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, Animator.class, "Animation/Animator", ScriptFunction.Usage.SCRIPT);
             ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, AnimationDriver.class, "Animation/Animation Driver", ScriptFunction.Usage.SCRIPT);
             ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, Pose.class, "Animation/Pose", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, ArmatureComponent.class, "Animation/Armature", ScriptFunction.Usage.SCRIPT);
 
             // Entity & Entity patches
             ScriptModularizeHelper.scanScriptModulesAndRegister(MINECRAFT_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, EntityPatch.class, "World/Entity", ScriptFunction.Usage.SCRIPT);

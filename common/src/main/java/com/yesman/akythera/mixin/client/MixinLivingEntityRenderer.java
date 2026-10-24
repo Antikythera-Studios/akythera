@@ -1,6 +1,7 @@
 package com.yesman.akythera.mixin.client;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.world.patch.AkytheraPatches;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.client.core.renderer.PatchModelRenderer;
@@ -64,6 +65,21 @@ public abstract class MixinLivingEntityRenderer<T extends LivingEntity, S extend
             if (ColliderDebugRenderer.isEnabled()) {
                 ColliderDebugRenderer.collect(entityPatch, colliders);
             }
+        });
+    }
+
+    /// Drops the red death and hurt tint from an entity whose rag doll runs.
+    @Inject(
+        at = @At(
+            value = "TAIL"
+        ),
+        method = "extractRenderState(Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/client/renderer/entity/state/LivingEntityRenderState;F)V"
+    )
+    private void akythera$dropRedOverlayInRagdoll(final T entity, final S state, final float partialTick, CallbackInfo callbackInfo) {
+        AkytheraPatches.getEntityPatchOptional(entity).ifPresent(entityPatch -> {
+            ArmatureComponent armatureComponent = entityPatch.getArmatureComponent();
+
+            if (armatureComponent != null && armatureComponent.isRagdollRunning()) state.hasRedOverlay = false;
         });
     }
 

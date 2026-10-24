@@ -1,6 +1,8 @@
 package com.yesman.akythera.client.core.networking;
 
+import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.world.patch.AkytheraPatches;
+import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.networking.PayloadContext;
 import com.yesman.akythera.api.world.ability.AbilityEffect;
 import com.yesman.akythera.api.world.ability.AbilityInstance;
@@ -28,7 +30,11 @@ import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundOpenWi
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayAbilityCue;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayAnimMontage;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayParticleSystem;
+import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundRagdollImpulse;
+import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundRagdollVelocity;
+import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundStartRagdoll;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundStopAnimMontage;
+import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundStopRagdoll;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundTerminateAbilityCue;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.EnumerableDataBlockSync;
@@ -366,5 +372,34 @@ public interface AkytheraClientBoundPayloadHandler {
 
             entityPatch.getArmatureComponent().getAnimator().stopPlayingMontage(payload.montage().orElse(null));
         });
+    }
+
+    static void handleStartRagdoll(final ClientBoundStartRagdoll payload, final PayloadContext context) {
+        ArmatureComponent armatureComponent = armatureOf(payload.entityId());
+
+        if (armatureComponent != null) armatureComponent.startRagdoll(payload.velocityScale(), payload.durationTicks());
+    }
+
+    static void handleStopRagdoll(final ClientBoundStopRagdoll payload, final PayloadContext context) {
+        ArmatureComponent armatureComponent = armatureOf(payload.entityId());
+
+        if (armatureComponent != null) armatureComponent.stopRagdoll();
+    }
+
+    static void handleRagdollImpulse(final ClientBoundRagdollImpulse payload, final PayloadContext context) {
+        ArmatureComponent armatureComponent = armatureOf(payload.entityId());
+
+        if (armatureComponent != null) armatureComponent.applyRagdollImpulse(payload.boneName(), payload.impulse(), payload.worldPoint().orElse(null));
+    }
+
+    static void handleRagdollVelocity(final ClientBoundRagdollVelocity payload, final PayloadContext context) {
+        ArmatureComponent armatureComponent = armatureOf(payload.entityId());
+
+        if (armatureComponent != null) armatureComponent.addRagdollVelocity(payload.velocity());
+    }
+
+    /// The first armature of the client's entity `entityId`, or null.
+    static @Nullable ArmatureComponent armatureOf(final int entityId) {
+        return AkytheraPatches.getEntityPatchOptional(entityOf(entityId)).map(EntityPatch::getArmatureComponent).orElse(null);
     }
 }

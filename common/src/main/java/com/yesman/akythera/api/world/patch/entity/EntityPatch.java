@@ -12,6 +12,8 @@ import com.yesman.akythera.api.world.patch.entity.component.EntityEventListener;
 import com.yesman.akythera.core.blueprint.ComponentBlueprint;
 import com.yesman.akythera.core.blueprint.EntityPatchBlueprint;
 import com.yesman.akythera.core.blueprint.script.EntityPatchScript;
+import com.yesman.akythera.core.networking.NetworkingHelper;
+import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundStartRagdoll;
 import com.yesman.akythera.core.reflection.ScriptFunction;
 import com.yesman.akythera.core.reflection.ScriptType;
 import com.yesman.akythera.core.util.ClientOnly;
@@ -199,6 +201,11 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
     ///
     /// Send data that requires to be synced
 	public void onStartTracking(ServerPlayer trackingPlayer) {
+        ArmatureComponent armatureComponent = getArmatureComponent();
+
+        if (armatureComponent != null && armatureComponent.getRagdollTicksLeft() > 0) {
+            NetworkingHelper.getInstance().sendToClient(trackingPlayer, new ClientBoundStartRagdoll(getId(), 1.0F, armatureComponent.getRagdollTicksLeft()));
+        }
 	}
 
     /// Called when a player in a server level stops tracking this entity
@@ -387,6 +394,9 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
     /// animated layer—and this is the one every consumer asking for "the" armature takes. An armature
     /// is no longer a [UniqueComponent], so this is the only way to reach one.
     @Override
+    @ScriptFunction(pure = true, label = "Get Armature Component", category = "Component", desc = """
+        Returns the first switched-on armature the entity lists, or null when it has none
+    """)
     public @Nullable ArmatureComponent getArmatureComponent() {
         return findComponent(ArmatureComponent.class);
     }

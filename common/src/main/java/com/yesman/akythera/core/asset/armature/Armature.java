@@ -2,6 +2,7 @@ package com.yesman.akythera.core.asset.armature;
 
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.asset.loader.ArmatureLoader;
+import com.yesman.akythera.core.asset.physics.ArmaturePhysicsData;
 import com.yesman.akythera.core.math.Transform;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
@@ -13,7 +14,6 @@ import org.joml.Vector3d;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.function.Consumer;
@@ -43,8 +43,6 @@ public class Armature {
     /// Mirror partner by bone name, entered both ways. A bone with no partner is absent.
     private Map<String, String> mirrorBones = Map.of();
 
-    private List<ArmatureLoader.JointConstraint> jointConstraints = List.of();
-
     public Armature(final Bone rootBone, final int boneCount, final Map<String, Bone> bonesByName) {
         this.boneCount = boneCount;
         this.rootBone = rootBone;
@@ -72,7 +70,6 @@ public class Armature {
     @ApiStatus.Internal
     public void applyMetadata(final ArmatureLoader.Metadata metadata) {
         mirrorBones = metadata.mirrorBoneMap();
-        jointConstraints = metadata.jointConstraints();
     }
 
     /// The bone `name` pairs with across the mirror plane, or `name` itself when it has no partner.
@@ -80,21 +77,23 @@ public class Armature {
         return mirrorBones.getOrDefault(name, name);
     }
 
-    public Pose applyJointConstraints(final Pose pose) {
-        if (jointConstraints.isEmpty()) {
-            return pose;
-        }
+    /// `pose` with each [ArmaturePhysicsData.BoneConstraint#halfBendBone] of `physics` turned by half of
+    /// its constrained bone's bend around X, and stretched across the bend by up to
+    /// [ArmaturePhysicsData.BoneConstraint#maxStretch].
+    public Pose applyBoneConstraints(final Pose pose, final ArmaturePhysicsData physics) {
+        Pose result = null;
 
-        Pose result = new Pose(pose);
+        for (Map.Entry<String, ArmaturePhysicsData.BoneConstraint> entry : physics.constraints().entrySet()) {
+            ArmaturePhysicsData.BoneConstraint constraint = entry.getValue();
+            String halfBendName = constraint.halfBendBone();
 
-        for (ArmatureLoader.JointConstraint constraint : jointConstraints) {
-            Transform bend = pose.get(constraint.bend());
-            Bone bendBone = boneByName.get(constraint.bend());
-            Bone jointBone = boneByName.get(constraint.joint());
+            if (halfBendName == null) continue;
 
-            if (bend == null || bendBone == null || jointBone == null) {
-                continue;
-            }
+            Transform bend = pose.get(entry.getKey());
+            Bone bendBone = boneByName.get(entry.getKey());
+            Bone halfBendBone = boneByName.get(halfBendName);
+
+            if (bend == null || bendBone == null || halfBendBone == null) continue;
 
             Quaterniond rotation = new Quaterniond(bend.rot());
 
@@ -103,28 +102,25 @@ public class Armature {
             }
 
             double angle = 2.0D * Math.atan2(rotation.x, rotation.w);
-            double limit = Math.toRadians(constraint.maxBend());
-            Quaterniond swing = rotation.mul(new Quaterniond().rotationAxis(-angle, 1.0D, 0.0D, 0.0D), new Quaterniond());
-            angle = Math.clamp(angle, -limit, limit);
-            result.putBoneTransform(constraint.bend(), new Transform(bend.loc(), swing.rotateX(angle).normalize(), bend.sca()));
-
             Quaterniond bendRest = bendBone.getLocalTransform().getNormalizedRotation(new Quaterniond());
-            Vector3d axis = jointBone.getLocalTransform().getNormalizedRotation(new Quaterniond())
+            Vector3d axis = halfBendBone.getLocalTransform().getNormalizedRotation(new Quaterniond())
                 .conjugate()
                 .mul(bendRest)
                 .transform(new Vector3d(1.0D, 0.0D, 0.0D));
             double stretch = Math.min(1.0D / Math.cos(angle * 0.5D), constraint.maxStretch());
             int hingeAxis = axis.absolute(new Vector3d()).maxComponent();
-            Transform joint = pose.orElseIdentity(constraint.joint());
+            Transform halfBend = pose.orElseIdentity(halfBendName);
 
-            result.putBoneTransform(constraint.joint(), new Transform(
-                joint.loc(),
+            if (result == null) result = new Pose(pose);
+
+            result.putBoneTransform(halfBendName, new Transform(
+                halfBend.loc(),
                 new Quaterniond().rotationAxis(angle * 0.5D, axis.x, axis.y, axis.z),
                 new Vec3(hingeAxis == 0 ? 1.0D : stretch, hingeAxis == 1 ? 1.0D : stretch, hingeAxis == 2 ? 1.0D : stretch)
             ));
         }
 
-        return result;
+        return result == null ? pose : result;
     }
 
     /// Returns a bone by ID. the ID are specified by vertex group order in Blender.

@@ -13,7 +13,6 @@ import com.yesman.akythera.core.animation.driver.*;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.playable.AnimationMontage;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
-import com.yesman.akythera.core.asset.armature.Armature;
 import com.yesman.akythera.core.blueprint.script.AnimatorScript;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
 import net.minecraft.core.Holder;
@@ -161,11 +160,7 @@ public final class BlendingAnimator implements Animator {
 
     @Override
     public Pose getPose() {
-        Pose pose = animScript.getFinalPose(animLayers);
-        ArmatureComponent armatureComponent = owner.findComponent(ArmatureComponent.class);
-        Armature armature = armatureComponent == null ? null : armatureComponent.getArmature().get();
-
-        return armature == null ? pose : armature.applyJointConstraints(pose);
+        return animScript.getFinalPose(animLayers);
     }
 
     /// Presence of named pose cache must be validated first. Use [#hasPoseCache] to conduct it.
