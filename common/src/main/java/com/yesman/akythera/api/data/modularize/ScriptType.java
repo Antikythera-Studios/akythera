@@ -234,7 +234,7 @@ public record ScriptType(
 
     /// The entry `key` names, answered by [BuiltInEventHooks.Registry#LOOKUP_ENTRY_BY_KEY] subscribers
     /// first, then the live registries.
-    private static <T> Optional<Holder<T>> lookupEntry(final ResourceKey<T> key) {
+    public static <T> Optional<Holder<T>> lookupEntry(final ResourceKey<T> key) {
         RegistryEntryLookupEvent.ByKey<T> event = new RegistryEntryLookupEvent.ByKey<>(key);
         BuiltInEventHooks.Registry.LOOKUP_ENTRY_BY_KEY.post(event);
 

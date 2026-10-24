@@ -3,6 +3,7 @@ package com.yesman.akythera.core.animation.driver;
 import com.mojang.datafixers.util.Pair;
 import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.api.component.impl.RootMotionComponent;
+import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.playable.BlendSpace2D;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
@@ -76,6 +77,12 @@ public final class BlendSpace2DDriver implements AnimationDriver {
     private float cachedWeight1;
     private float cachedWeight2;
     private float cachedWeight3;
+
+    /// The triangle `cachedAnimN` were resolved for, or null before the first resolve.
+    private @Nullable Triangle resolvedTriangle;
+
+    /// Whether this driver logged a node naming a missing animation. It logs only the first.
+    private boolean warnedMissingAnimation;
 
     /// Weighted loop length of the cached corner mix, in seconds. Recomputed every [#update].
     private float cachedCycleTime;
@@ -240,9 +247,13 @@ public final class BlendSpace2DDriver implements AnimationDriver {
             return false;
         }
 
-        cachedAnim1 = p1.animation().value();
-        cachedAnim2 = p2.animation().value();
-        cachedAnim3 = p3.animation().value();
+        if (t != resolvedTriangle) {
+            cachedAnim1 = resolveAnimation(p1);
+            cachedAnim2 = resolveAnimation(p2);
+            cachedAnim3 = resolveAnimation(p3);
+            resolvedTriangle = t;
+        }
+
         cachedWeight1 = w[0];
         cachedWeight2 = w[1];
         cachedWeight3 = w[2];
@@ -253,6 +264,18 @@ public final class BlendSpace2DDriver implements AnimationDriver {
         else winnerDot = 2;
 
         return true;
+    }
+
+    /// The animation `node` plays, or the empty animation when its key names no entry.
+    private PlayableAnimation resolveAnimation(final BlendSpace2D.AnimationNode node) {
+        return node.resolveAnimation().orElseGet(() -> {
+            if (!warnedMissingAnimation) {
+                Akythera.LOGGER.warn("Blend space node at ({}, {}) names a missing animation {}", node.x(), node.y(), node.animation());
+                warnedMissingAnimation = true;
+            }
+
+            return PlayableAnimation.EMPTY_ANIM_HOLDER.value();
+        });
     }
 
     /// Drives only the winner's notify track, and none once terminated.
@@ -306,6 +329,7 @@ public final class BlendSpace2DDriver implements AnimationDriver {
         lastUpdatedPhase = 0.0F;
         lastFramePhase = 0.0F;
         cachedTriangleIndex = NO_TRIANGLE;
+        resolvedTriangle = null;
         snapToInputs = true;
     }
 

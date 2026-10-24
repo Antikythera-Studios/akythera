@@ -13,7 +13,6 @@ import io.netty.buffer.ByteBuf;
 import net.minecraft.core.Holder;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.resources.RegistryFileCodec;
 import net.minecraft.resources.ResourceKey;
 import org.jspecify.annotations.NonNull;
 
@@ -80,42 +79,7 @@ public interface PlayableAnimation {
     /// @param lastFrameTime the time the last [#frameUpdate] ran to
     void interrupt(final ComponentAttachable owner, final float lastTickTime, final float lastFrameTime);
 
-    /// Polymorphic codec for [PlayableAnimation] driven classes. JSON shape:
-    ///
-    /// ```
-    /// { "type": "sequence", "sequence": "akythera:anim2" }
-    /// or,
-    /// { "type": "montage", "montage": "akythera:anim1" }
-    /// ```
-    ///
-    /// Two branches are supported:
-    /// - 'sequence': a data-pack [AnimationSequence] resolved via [AkytheraRegistries.DataPack#ANIM_SEQUENCE_KEY].
-    /// ` 'montage': a data-pack [AnimationMontage] resolved via [AkytheraRegistries.DataPack#ANIM_MONTAGE_KEY].
-    Codec<Holder<? extends @NonNull PlayableAnimation>> CODEC = Codec.STRING.dispatch(
-        "type",
-        PlayableAnimation::tagOf,
-        PlayableAnimation::codecOf
-    );
-
-    private static MapCodec<? extends Holder<? extends @NonNull PlayableAnimation>> codecOf(final String tag) {
-        return (
-            switch (tag) {
-                case "montage" -> RegistryFileCodec.create(AkytheraRegistries.DataPack.ANIM_MONTAGE_KEY, AnimationMontage.CODEC).fieldOf("montage");
-                case "sequence" -> RegistryFileCodec.create(AkytheraRegistries.DataPack.ANIM_SEQUENCE_KEY, AnimationSequence.CODEC).fieldOf("sequence");
-                default -> throw new IllegalArgumentException("Unknown PlayableAnimation type: '" + tag + "' (expected 'montage' or 'sequence')");
-            }
-        ).stable();
-    }
-
-    private static String tagOf(final Holder<? extends @NonNull PlayableAnimation> playableHolder) {
-        if (playableHolder.value() instanceof AnimationMontage) return "montage";
-        if (playableHolder.value() instanceof AnimationSequence) return "sequence";
-
-        throw new IllegalStateException("Unsupported PlayableAnimation implementation: " + playableHolder.value().getClass());
-    }
-
-    /// Polymorphic codec for a **reference** to a [PlayableAnimation] entry. JSON shape mirrors
-    /// [#CODEC]:
+    /// Polymorphic codec for a **reference** to a [PlayableAnimation] entry. JSON shape:
     ///
     /// ```
     /// { "type": "sequence", "sequence": "akythera:anim2" }

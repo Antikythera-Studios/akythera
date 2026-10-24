@@ -4,17 +4,22 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.component.ComponentAttachable;
+import com.yesman.akythera.api.data.modularize.ScriptType;
 import com.yesman.akythera.core.animation.driver.BlendSpace2DDriver;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.math.algorithm.DelaunayTriangulation;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
 import com.yesman.akythera.core.util.helper.MathUtils;
+import com.yesman.akythera.core.util.helper.ParseUtils;
 import net.minecraft.core.Holder;
+import net.minecraft.resources.ResourceKey;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 /// A mixture of multiple animation nodes placed in 1D array shape
@@ -115,7 +120,7 @@ public final class BlendSpace2D implements PlayableAnimation {
     @Override
     public BlendSpace2D mirrored() {
         List<AnimationNode> mirroredNodes = getNodes().stream()
-            .map(node -> new AnimationNode(node.x(), node.y(), Holder.direct(node.animation().value().mirrored())))
+            .map(node -> new AnimationNode(node.x(), node.y(), node.animation(), !node.mirrored()))
             .toList();
 
         return new BlendSpace2D(
@@ -189,30 +194,75 @@ public final class BlendSpace2D implements PlayableAnimation {
     }
 
     public static class AnimationNode implements DelaunayTriangulation.DelaunayPoint {
+        /// A reference to an [AnimationMontage] or [AnimationSequence] entry. JSON shape:
+        ///
+        /// ```
+        /// { "type": "sequence", "sequence": "akythera:anim2" }
+        /// or,
+        /// { "type": "montage", "montage": "akythera:anim1" }
+        /// ```
+        private static final Codec<ResourceKey<? extends @NonNull PlayableAnimation>> ANIMATION_KEY_CODEC = Codec.STRING.dispatch(
+            "type",
+            AnimationNode::tagOf,
+            AnimationNode::keyCodecOf
+        );
+
         public static final Codec<AnimationNode> CODEC = RecordCodecBuilder.create(
             instance ->
                 instance.group(
                     Codec.FLOAT.fieldOf("x").forGetter(AnimationNode::x),
                     Codec.FLOAT.fieldOf("y").forGetter(AnimationNode::y),
-                    PlayableAnimation.CODEC.fieldOf("animation").forGetter(AnimationNode::animation)
+                    ANIMATION_KEY_CODEC.optionalFieldOf("animation").forGetter(ParseUtils.provideOptional(AnimationNode::animation))
                 )
-                .apply(instance, AnimationNode::new)
+                .apply(instance, (x, y, animation) -> new AnimationNode(x, y, animation.orElse(null), false))
         );
+
+        private static MapCodec<? extends ResourceKey<? extends @NonNull PlayableAnimation>> keyCodecOf(final String tag) {
+            return switch (tag) {
+                case "montage" -> ResourceKey.codec(AkytheraRegistries.DataPack.ANIM_MONTAGE_KEY).fieldOf("montage");
+                case "sequence" -> ResourceKey.codec(AkytheraRegistries.DataPack.ANIM_SEQUENCE_KEY).fieldOf("sequence");
+                default -> throw new IllegalArgumentException("Unknown blend space node animation type: '" + tag + "' (expected 'montage' or 'sequence')");
+            };
+        }
+
+        private static String tagOf(final ResourceKey<? extends @NonNull PlayableAnimation> animationKey) {
+            if (animationKey.isFor(AkytheraRegistries.DataPack.ANIM_MONTAGE_KEY)) return "montage";
+            if (animationKey.isFor(AkytheraRegistries.DataPack.ANIM_SEQUENCE_KEY)) return "sequence";
+
+            throw new IllegalStateException("Unsupported blend space node animation registry: " + animationKey.registry());
+        }
 
         private final float x;
         private final float y;
-        private final Holder<? extends @NonNull PlayableAnimation> animation;
+
+        /// The animation this node plays, or null for an empty node.
+        private final @Nullable ResourceKey<? extends @NonNull PlayableAnimation> animation;
+
+        /// Whether this node plays the mirrored twin of [#animation], see [PlayableAnimation#mirrored].
+        private final boolean mirrored;
         private int index;
 
         /// Generate empty node, used by Akythera Labs
         public static AnimationNode createDefaultFromXY(final float x, final float y) {
-            return new AnimationNode(x, y, PlayableAnimation.EMPTY_ANIM_HOLDER);
+            return new AnimationNode(x, y, null, false);
         }
 
-        public AnimationNode(final float x, final float y, final Holder<? extends @NonNull PlayableAnimation> animation) {
+        public AnimationNode(
+            final float x, final float y, final @Nullable ResourceKey<? extends @NonNull PlayableAnimation> animation, final boolean mirrored
+        ) {
             this.x = x;
             this.y = y;
             this.animation = animation;
+            this.mirrored = mirrored;
+        }
+
+        /// The animation [#animation] names, mirrored when [#mirrored]. The empty animation for an empty node, and
+        /// empty when the key names no entry.
+        public Optional<PlayableAnimation> resolveAnimation() {
+            if (animation == null) return Optional.of(PlayableAnimation.EMPTY_ANIM_HOLDER.value());
+
+            return ScriptType.lookupEntry(animation)
+                .map(holder -> mirrored ? holder.value().mirrored() : holder.value());
         }
 
         @Override
@@ -230,8 +280,12 @@ public final class BlendSpace2D implements PlayableAnimation {
             return index;
         }
 
-        public Holder<? extends @NonNull PlayableAnimation> animation() {
+        public @Nullable ResourceKey<? extends @NonNull PlayableAnimation> animation() {
             return animation;
+        }
+
+        public boolean mirrored() {
+            return mirrored;
         }
 
         @Override
@@ -322,9 +376,14 @@ public final class BlendSpace2D implements PlayableAnimation {
             return this;
         }
 
-        public BlendSpace2DBuilder putNode(final float x, final float y, final Holder<? extends @NonNull PlayableAnimation> animation) {
-            nodes.add(new AnimationNode(x, y, animation));
+        public BlendSpace2DBuilder putNode(final float x, final float y, final @Nullable ResourceKey<? extends @NonNull PlayableAnimation> animation) {
+            nodes.add(new AnimationNode(x, y, animation, false));
             return this;
+        }
+
+        /// A node playing the entry `animation` holds. A holder with no key makes an empty node.
+        public BlendSpace2DBuilder putNode(final float x, final float y, final Holder<? extends @NonNull PlayableAnimation> animation) {
+            return putNode(x, y, animation.unwrapKey().orElse(null));
         }
 
         public BlendSpace2D create() {

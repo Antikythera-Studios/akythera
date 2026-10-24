@@ -1,5 +1,6 @@
 package com.yesman.akythera.core.registry;
 
+import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.yesman.akythera.api.input.InputAction;
 import com.yesman.akythera.core.blueprint.AbilityCueBlueprint;
@@ -35,6 +36,7 @@ import net.minecraft.world.item.Item;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
+import java.util.List;
 import java.util.Map;
 
 @NullMarked
@@ -71,22 +73,34 @@ public final class AkytheraRegistries {
             WIDGET_KEY, WidgetBlueprint.VALIDATOR
         );
 
+        /// Every datapack registry, in the order a world load decodes them.
+        public static final List<Registration<?>> REGISTRATIONS = List.of(
+            new Registration<>(ANIM_MONTAGE_KEY, AnimationMontage.CODEC),
+            new Registration<>(ANIM_SEQUENCE_KEY, AnimationSequence.CODEC),
+            new Registration<>(BLEND_SPACE_2D_KEY, BlendSpace2D.CODEC),
+            new Registration<>(ANIMATOR_SCRIPT_KEY, DataDrivenAnimatorScript.AnimatorScriptBlueprint.CODEC),
+            new Registration<>(ENTITY_PATCH_KEY, EntityPatchBlueprint.CODEC),
+            new Registration<>(ITEM_PATCH_KEY, ItemPatchBlueprint.CODEC),
+            new Registration<>(ABILITY_EFFECT_KEY, AbilityEffect.CODEC),
+            new Registration<>(ABILITY_KEY, AbilityBlueprint.CODEC),
+            new Registration<>(INPUT_ACTION_KEY, InputAction.CODEC),
+            new Registration<>(ABILITY_CUE_KEY, AbilityCueBlueprint.CODEC),
+            new Registration<>(WIDGET_KEY, WidgetBlueprint.CODEC),
+            new Registration<>(PARTICLE_PIECE_KEY, ParticleBlueprint.CODEC),
+            new Registration<>(PARTICLE_SYSTEM_KEY, ParticleSystemBlueprint.CODEC),
+            new Registration<>(PARTICLE_INITIALIZER_KEY, ParticleInitializerScriptBlueprint.CODEC),
+            new Registration<>(PARTICLE_UPDATER_KEY, ParticleUpdaterScriptBlueprint.CODEC)
+        );
+
         static {
-            ModPlatformProvider.get().createDataPackRegistry(ANIM_MONTAGE_KEY, AnimationMontage.CODEC);
-            ModPlatformProvider.get().createDataPackRegistry(ANIM_SEQUENCE_KEY, AnimationSequence.CODEC);
-            ModPlatformProvider.get().createDataPackRegistry(BLEND_SPACE_2D_KEY, BlendSpace2D.CODEC);
-            ModPlatformProvider.get().createDataPackRegistry(ANIMATOR_SCRIPT_KEY, DataDrivenAnimatorScript.AnimatorScriptBlueprint.CODEC);
-            ModPlatformProvider.get().createDataPackRegistry(ENTITY_PATCH_KEY, EntityPatchBlueprint.CODEC);
-            ModPlatformProvider.get().createDataPackRegistry(ITEM_PATCH_KEY, ItemPatchBlueprint.CODEC);
-            ModPlatformProvider.get().createDataPackRegistry(ABILITY_EFFECT_KEY, AbilityEffect.CODEC);
-            ModPlatformProvider.get().createDataPackRegistry(ABILITY_KEY, AbilityBlueprint.CODEC);
-            ModPlatformProvider.get().createDataPackRegistry(INPUT_ACTION_KEY, InputAction.CODEC);
-            ModPlatformProvider.get().createDataPackRegistry(ABILITY_CUE_KEY, AbilityCueBlueprint.CODEC);
-            ModPlatformProvider.get().createDataPackRegistry(WIDGET_KEY, WidgetBlueprint.CODEC);
-            ModPlatformProvider.get().createDataPackRegistry(PARTICLE_PIECE_KEY, ParticleBlueprint.CODEC);
-            ModPlatformProvider.get().createDataPackRegistry(PARTICLE_SYSTEM_KEY, ParticleSystemBlueprint.CODEC);
-            ModPlatformProvider.get().createDataPackRegistry(PARTICLE_INITIALIZER_KEY, ParticleInitializerScriptBlueprint.CODEC);
-            ModPlatformProvider.get().createDataPackRegistry(PARTICLE_UPDATER_KEY, ParticleUpdaterScriptBlueprint.CODEC);
+            REGISTRATIONS.forEach(Registration::create);
+        }
+
+        /// A datapack registry and the codec its entries decode with.
+        public record Registration<T>(ResourceKey<Registry<T>> key, Codec<T> codec) {
+            private void create() {
+                ModPlatformProvider.get().createDataPackRegistry(key, codec);
+            }
         }
 
         /// The cross-entry check of `registryKey`, or null when it has none.
