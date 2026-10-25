@@ -11,6 +11,7 @@ import com.yesman.akythera.core.animation.animator.BlendingAnimator;
 import com.yesman.akythera.core.animation.driver.AnimationDriver;
 import com.yesman.akythera.core.animation.AnimationLayerSignature;
 import com.yesman.akythera.core.animation.keyframe.Pose;
+import com.yesman.akythera.core.animation.playable.AnimationMontage;
 import com.yesman.akythera.core.reflection.DataDrivenScript;
 import com.yesman.akythera.core.reflection.ScriptModularizeHelper;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
@@ -19,6 +20,8 @@ import com.yesman.akythera.core.blueprint.Blueprint;
 import net.minecraft.core.Holder;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.resources.ResourceKey;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.Map;
@@ -39,11 +42,20 @@ public final class DataDrivenAnimatorScript
 
     private final BlueprintExecutor executor;
 
+    private final @Nullable ResourceKey<@NonNull AnimationMontage> deathAnimation;
+
     public DataDrivenAnimatorScript(final Holder.Reference<AnimatorScriptBlueprint> blueprint, final Animator owner) {
+        BlueprintBody body = blueprint.value().body();
+
         this.blueprint = blueprint;
         this.owner = owner;
-        this.executor = new BlueprintExecutor(
-            this, ScriptModularizeHelper.scanBlueprintLayout(AnimatorScript.class), blueprint.value().body());
+        this.executor = new BlueprintExecutor(this, ScriptModularizeHelper.scanBlueprintLayout(AnimatorScript.class), body);
+        this.deathAnimation = body.property(AnimatorScript.class, "deathAnimation", null);
+    }
+
+    @Override
+    public @Nullable ResourceKey<@NonNull AnimationMontage> getDeathAnimation() {
+        return deathAnimation;
     }
 
     @Override

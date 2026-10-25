@@ -125,6 +125,11 @@ public interface Animator {
         return false;
     }
 
+    /// The montage [ArmatureComponent] plays when the owner entity dies, or null to play none.
+    default @Nullable ResourceKey<@NonNull AnimationMontage> getDeathAnimation() {
+        return null;
+    }
+
     /// Returns a player for [AnimationMontage]
     ///
     /// Montage players are both in client and server, to synchronize playing

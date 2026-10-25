@@ -115,6 +115,11 @@ public final class BlendingAnimator implements Animator {
     }
 
     @Override
+    public @Nullable ResourceKey<@NonNull AnimationMontage> getDeathAnimation() {
+        return animScript.getDeathAnimation();
+    }
+
+    @Override
     public Collection<AnimationMontagePlayer> getMontagePlayers() {
         return animLayers.values().stream().map(AnimationLayer::montagePlayer).toList();
     }

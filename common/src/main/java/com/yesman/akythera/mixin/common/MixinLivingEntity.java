@@ -5,6 +5,8 @@ import com.yesman.akythera.api.animation.notify.impl.CancelOnMoveNotifyState;
 import com.yesman.akythera.api.animation.notify.impl.ExtendDeathTimeNotifyState;
 import com.yesman.akythera.api.animation.notify.impl.LockMovementNotifyState;
 import com.yesman.akythera.api.component.impl.ArmatureComponent;
+import com.yesman.akythera.api.event.BuiltInEventHooks;
+import com.yesman.akythera.api.event.entity.LivingDeathEvent;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
 import com.yesman.akythera.api.world.patch.entity.component.EntityMovementComponent;
@@ -135,6 +137,23 @@ public abstract class MixinLivingEntity {
     @Inject(at = @At(value = "HEAD"), method = "isPushable()Z", cancellable = true)
     private void akythera$unpushableInRagdoll(final CallbackInfoReturnable<Boolean> callbackInfo) {
         if (akythera$isRagdollRunning()) callbackInfo.setReturnValue(false);
+    }
+
+    /// Posts [BuiltInEventHooks.Entity#DEATH] on the first death tick.
+    ///
+    /// [LivingEntity#die] can't post it: [ServerPlayer#die] overrides it without calling the super method. Every
+    /// living entity, players included, runs [LivingEntity#tickDeath] from the tick it is dead on.
+    @Inject(at = @At(value = "HEAD"), method = "tickDeath()V")
+    @SuppressWarnings("unchecked")
+    private void akythera$postDeath(final CallbackInfo callbackInfo) {
+        LivingEntity self = (LivingEntity)(Object)this;
+
+        if (self.deathTime != 0 || self.level().isClientSide()) return;
+        if (!(((EntityAccessor)self).akythera$getEntityPatch() instanceof EntityPatch<?> patch)) return;
+
+        BuiltInEventHooks.Entity.DEATH.postWithListener(
+            new LivingDeathEvent((EntityPatch<LivingEntity>)patch, self.getLastDamageSource()), patch.getEntityEventListener()
+        );
     }
 
     /// Keeps a dead entity under the death time vanilla poofs and removes it at while a rag doll runs, or while a

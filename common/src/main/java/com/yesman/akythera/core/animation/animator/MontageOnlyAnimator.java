@@ -6,12 +6,14 @@ import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.core.animation.driver.AnimationMontagePlayer;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.playable.AnimationMontage;
+import com.yesman.akythera.core.blueprint.script.AnimatorScript;
 import net.minecraft.resources.ResourceKey;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.function.Function;
 
 /// An animator that only accommodates [AnimationMontage]. Mainly to optimize
 /// logical server entities whose don't need to sync locomotion.
@@ -23,11 +25,21 @@ public final class MontageOnlyAnimator implements Animator {
     private ComponentAttachable owner;
     private @Nullable ArmatureComponent armatureComponent;
 
+    /// [AnimatorScript#getDeathAnimation] of the script this animator is built with.
+    private final @Nullable ResourceKey<@NonNull AnimationMontage> deathAnimation;
+
     public boolean isHardPaused = false;
     public boolean isSoftPaused = false;
 
-    public MontageOnlyAnimator(final ComponentAttachable owner) {
+    /// @param animScriptProvider instantiated only to read the script's properties; its events never run
+    public MontageOnlyAnimator(final ComponentAttachable owner, final Function<Animator, AnimatorScript> animScriptProvider) {
         this.owner = owner;
+        this.deathAnimation = animScriptProvider.apply(this).getDeathAnimation();
+    }
+
+    @Override
+    public @Nullable ResourceKey<@NonNull AnimationMontage> getDeathAnimation() {
+        return deathAnimation;
     }
 
     @Override

@@ -10,6 +10,7 @@ import com.yesman.akythera.core.animation.driver.AnimationDriver;
 import com.yesman.akythera.core.animation.AnimationLayerSignature;
 import com.yesman.akythera.core.animation.driver.AnimationPlayer;
 import com.yesman.akythera.core.animation.keyframe.Pose;
+import com.yesman.akythera.core.animation.playable.AnimationMontage;
 import com.yesman.akythera.core.animation.playable.AnimationSequence;
 import com.yesman.akythera.core.animation.playable.BlendSpace2D;
 import com.yesman.akythera.core.reflection.BlueprintFunction;
@@ -17,6 +18,7 @@ import com.yesman.akythera.core.util.StaticRegistryAccess;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.resources.ResourceKey;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -64,6 +66,12 @@ public interface AnimatorScript {
         animator.addAnimInterface(interfaceKey, blendSpace2DInterface);
 
         return blendSpace2DInterface;
+    }
+
+    /// The montage played when the owner dies, or null to play none.
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.PROPERTY)
+    default @Nullable ResourceKey<@NonNull AnimationMontage> getDeathAnimation() {
+        return null;
     }
 
     /// Called on animator being constructed. Build animation logics for the owner's locomotion

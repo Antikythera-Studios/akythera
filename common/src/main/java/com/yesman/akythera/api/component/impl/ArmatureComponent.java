@@ -11,8 +11,10 @@ import com.yesman.akythera.api.component.TickableDynamicComponent;
 import com.yesman.akythera.api.component.TransformComponent;
 import com.yesman.akythera.api.component.TransformInheritPolicy;
 import com.yesman.akythera.api.component.UniqueComponent;
+import com.yesman.akythera.api.event.BuiltInEventHooks;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.animation.keyframe.Pose;
+import com.yesman.akythera.core.animation.playable.AnimationMontage;
 import com.yesman.akythera.core.asset.armature.Armature;
 import com.yesman.akythera.core.asset.armature.Bone;
 import com.yesman.akythera.core.asset.armature.TransformSocket;
@@ -30,10 +32,12 @@ import com.yesman.akythera.core.reflection.ScriptType;
 import com.yesman.akythera.core.util.LogicalSide;
 import com.yesman.akythera.core.util.helper.Matrix4fUtils;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.LinkedHashMap;
@@ -152,6 +156,18 @@ public class ArmatureComponent
         ComponentBlueprint.instantiateAll(childBlueprints, this, owner.logicalSide().validInClientSide(), components::put);
 
         uniqueComponents = ComponentAttachable.indexUnique(components);
+        listenOwnerDeath();
+    }
+
+    /// Plays [Animator#getDeathAnimation] when the owner entity dies.
+    private void listenOwnerDeath() {
+        if (animator == null || !(owner instanceof EntityPatch<?> patch)) return;
+
+        ResourceKey<@NonNull AnimationMontage> deathAnimation = animator.getDeathAnimation();
+
+        if (deathAnimation == null) return;
+
+        patch.getEntityEventListener().registerEvent(BuiltInEventHooks.Entity.DEATH, _ -> animator.playAnimMontage(deathAnimation));
     }
 
     /// The armature that poses what `host` places: the host itself, the one a socket rides, or a patch's first.
@@ -466,6 +482,7 @@ public class ArmatureComponent
         owner = newOwner;
         animator.setOwner(newOwner);
         clearRagdoll();
+        listenOwnerDeath();
         return this;
     }
 

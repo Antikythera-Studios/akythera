@@ -191,7 +191,7 @@ public abstract class ComponentsFactory {
 
         // default behavior
         return owner.logicalSide() == LogicalSide.SERVER
-            ? new MontageOnlyAnimator(owner)
+            ? new MontageOnlyAnimator(owner, scriptProvider)
             : new BlendingAnimator(owner, scriptProvider);
     }
 
