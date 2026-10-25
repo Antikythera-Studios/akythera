@@ -66,6 +66,10 @@ public class ArmatureComponent
     /// One server tick, in seconds. The client passes real frame time instead.
     private static final float SERVER_FRAME_TIME = 0.05F;
 
+    /// How far above the lowest point of a running rag doll the client places the entity, in blocks, so a body resting
+    /// on a block places the entity on it rather than in it, where the shadow and the light are read.
+    private static final double RAGDOLL_GROUND_LIFT = 0.01D;
+
     private final AssetAccessor<? extends Armature> armature;
 
     /// Null only on a preview armature that has no animator installed yet, which draws the bind pose.
@@ -114,7 +118,8 @@ public class ArmatureComponent
     private @Nullable RagdollSimulation ragdoll;
 
     /// The animation as the last frame drew it, as the last frame before the running tick drew it, and as the last
-    /// frame before the tick ahead of that drew it. Client-side only, and only while no rag doll runs.
+    /// frame before the tick ahead of that drew it. Client-side only, and only while no rag doll runs or one is pulled
+    /// toward the animation.
     private RagdollSimulation.@Nullable Snapshot frameSnapshot;
     private RagdollSimulation.@Nullable Snapshot tickSnapshot;
     private RagdollSimulation.@Nullable Snapshot previousTickSnapshot;
@@ -128,6 +133,10 @@ public class ArmatureComponent
     /// Ticks the rag doll has left to simulate, 0 while none runs. Kept on both sides: the server reads it for the
     /// interactions it switches off and the death it holds back.
     private int ragdollTicksLeft;
+
+    /// Ticks the rag doll is pulled toward the animation in all, and ticks left of that pull. Client-side only.
+    private int ragdollDriveTicks;
+    private int ragdollDriveTicksLeft;
 
     public ArmatureComponent(
         final ComponentAttachable owner,
@@ -206,11 +215,17 @@ public class ArmatureComponent
             tickSnapshot = frameSnapshot;
 
             if (ragdoll != null) {
+                if (ragdollDriveTicksLeft > 0 && tickSnapshot != null) {
+                    ragdoll.drive(tickSnapshot, ragdollDriveTicksLeft / (float) ragdollDriveTicks);
+                    ragdollDriveTicksLeft--;
+                }
+
                 ragdoll.tick();
 
                 Entity entity = ragdollEntity();
 
-                if (entity != null) entity.setPos(ragdoll.anchorPosition().subtract(0.0D, entity.getBbHeight() * 0.5D, 0.0D));
+                // The entity stays put while the rag doll is pulled toward the animation
+                if (entity != null && ragdollDriveTicksLeft == 0) entity.setPos(ragdoll.groundPosition().add(0.0D, RAGDOLL_GROUND_LIFT, 0.0D));
             }
         }
 
@@ -246,20 +261,16 @@ public class ArmatureComponent
             boundTransforms = Matrix4fUtils.allocateMatrixArray(resolved.getBoneCount());
         }
 
-        Pose pose;
+        Pose pose = ragdoll == null || ragdollDriveTicksLeft > 0 ? getAnimator().getPose() : null;
 
-        if (ragdoll != null) {
-            pose = ragdoll.makePose(armatureToWorld(lastPartialTick), lastPartialTick);
-        } else {
-            pose = getAnimator().getPose();
-
-            if (owner.logicalSide() != LogicalSide.SERVER) {
-                frameSnapshot = new RagdollSimulation.Snapshot(pose, armatureToWorld(lastPartialTick), (clientTicks + lastPartialTick) * SERVER_FRAME_TIME);
-            }
+        if (pose != null && owner.logicalSide() != LogicalSide.SERVER) {
+            frameSnapshot = new RagdollSimulation.Snapshot(pose, armatureToWorld(lastPartialTick), (clientTicks + lastPartialTick) * SERVER_FRAME_TIME);
         }
 
+        if (ragdoll != null) pose = ragdoll.makePose(armatureToWorld(lastPartialTick), lastPartialTick);
+
         ArmaturePhysicsData physics = ArmaturePhysicsManager.ofArmature(accessor);
-        cachedPose = physics == null ? pose : resolved.applyBoneConstraints(pose, physics);
+        cachedPose = physics == null ? pose : resolved.applyBoneConstraints(pose, physics, ragdoll != null);
         cachedPose.getForwardBoundTransforms(accessor, boundTransforms);
     }
 
@@ -281,13 +292,16 @@ public class ArmatureComponent
 
         if (owner.logicalSide() == LogicalSide.SERVER) replicateRagdoll(entityId -> new ClientBoundStartRagdoll(entityId, velocityScale, duration));
 
-        return startLocalRagdoll(velocityScale, duration);
+        return startLocalRagdoll(velocityScale, duration, 0);
     }
 
     /// [#startRagdoll] on this side alone: a server only keeps the time, which switches the entity's interactions off
     /// and holds its death back, and a client simulates. For code that runs on both sides by itself, such as an
-    /// animation notify, so nothing is sent.
-    public boolean startLocalRagdoll(final float velocityScale, final int durationTicks) {
+    /// animation notify state, so nothing is sent.
+    ///
+    /// For the first `driveTicks` the client pulls the bodies toward the animation, fully at first and fading to
+    /// nothing, while they collide. Meanwhile the entity is left where it stands.
+    public boolean startLocalRagdoll(final float velocityScale, final int durationTicks, final int driveTicks) {
         int duration = Math.max(1, durationTicks);
 
         if (owner.logicalSide() == LogicalSide.SERVER) {
@@ -314,9 +328,18 @@ public class ArmatureComponent
 
         ragdoll = RagdollSimulation.start(resolved, physics, entity == null ? null : RagdollSimulation.Terrain.of(entity.getLevel()), previous, current, velocityScale);
 
-        if (ragdoll != null) ragdollTicksLeft = duration;
+        if (ragdoll != null) {
+            ragdollTicksLeft = duration;
+            ragdollDriveTicks = Math.max(0, driveTicks);
+            ragdollDriveTicksLeft = ragdollDriveTicks;
+        }
 
         return ragdoll != null;
+    }
+
+    /// Ends the pull of [#startLocalRagdoll] toward the animation, so the rag doll moves on its own from the next tick.
+    public void releaseRagdollDrive() {
+        ragdollDriveTicksLeft = 0;
     }
 
     /// Stops the rag doll and draws the animation again, with the entity back at the position the server last sent.
@@ -406,6 +429,8 @@ public class ArmatureComponent
     private void clearRagdoll() {
         ragdoll = null;
         ragdollTicksLeft = 0;
+        ragdollDriveTicks = 0;
+        ragdollDriveTicksLeft = 0;
         frameSnapshot = null;
         tickSnapshot = null;
         previousTickSnapshot = null;

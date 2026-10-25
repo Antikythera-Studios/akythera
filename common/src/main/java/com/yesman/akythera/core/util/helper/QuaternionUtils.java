@@ -49,5 +49,38 @@ public final class QuaternionUtils {
         return new Quaterniond().rotationXYZ(Math.toRadians(degrees.x), Math.toRadians(degrees.y), Math.toRadians(degrees.z));
     }
 
+    /// The swing-twist angles of `rotation`, in radians: `y` is the twist around Y, and `x` and `z` are the parts of
+    /// the rotation vector of the swing applied after it. The inverse of [#fromSwingTwist].
+    public static Vector3d toSwingTwist(final Quaterniond rotation) {
+        Quaterniond positive = new Quaterniond(rotation);
+
+        if (positive.w < 0.0D) positive.set(-positive.x, -positive.y, -positive.z, -positive.w);
+
+        double twistLength = Math.sqrt(positive.y * positive.y + positive.w * positive.w);
+        Quaterniond twist = twistLength < 1.0E-9D
+            ? new Quaterniond()
+            : new Quaterniond(0.0D, positive.y / twistLength, 0.0D, positive.w / twistLength);
+        Quaterniond swing = positive.mul(twist.conjugate(new Quaterniond()), new Quaterniond());
+
+        if (swing.w < 0.0D) swing.set(-swing.x, -swing.y, -swing.z, -swing.w);
+
+        double swingSine = Math.sqrt(swing.x * swing.x + swing.z * swing.z);
+        double swingAngle = 2.0D * Math.atan2(swingSine, swing.w);
+
+        return new Vector3d(
+            swingSine < 1.0E-9D ? 0.0D : swing.x / swingSine * swingAngle,
+            2.0D * Math.atan2(twist.y, twist.w),
+            swingSine < 1.0E-9D ? 0.0D : swing.z / swingSine * swingAngle
+        );
+    }
+
+    /// The rotation of the swing-twist angles `x`, `y`, `z`, in radians, see [#toSwingTwist].
+    public static Quaterniond fromSwingTwist(final double x, final double y, final double z) {
+        double swing = Math.sqrt(x * x + z * z);
+        Quaterniond rotation = swing < 1.0E-9D ? new Quaterniond() : new Quaterniond().rotationAxis(swing, x / swing, 0.0D, z / swing);
+
+        return rotation.mul(new Quaterniond().rotationY(y));
+    }
+
     private QuaternionUtils() {}
 }

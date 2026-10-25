@@ -35,6 +35,8 @@ import com.yesman.akythera.api.animation.impl.AkytheraAnimationState;
 import com.yesman.akythera.core.blueprint.AkytheraComponentBlueprints;
 import com.yesman.akythera.core.blueprint.script.AnimatorScript;
 import com.yesman.akythera.core.blueprint.script.EntityPatchScript;
+import com.yesman.akythera.core.asset.physics.constraint.AkytheraBoneConstraintType;
+import com.yesman.akythera.core.asset.physics.constraint.BoneConstraintType;
 import com.yesman.akythera.core.math.physics.collider.AkytheraColliderType;
 import com.yesman.akythera.core.math.physics.collider.ColliderType;
 import com.yesman.akythera.core.math.physics.collider.CollisionDetectionLogics;
@@ -161,6 +163,7 @@ public final class Akythera {
         FSMAnimationState.ENUM_MANAGER.loadEnum();
         AnimationLayerSignature.ENUM_MANAGER.loadEnum();
         ColliderType.ENUM_MANAGER.loadEnum();
+        BoneConstraintType.ENUM_MANAGER.loadEnum();
         WeaponStance.ENUM_MANAGER.loadEnum();
 
         // Pair logics reference the collider type constants, so they bind after the enum loads.
@@ -171,6 +174,7 @@ public final class Akythera {
         FSMAnimationState.ENUM_MANAGER.registerEnumCls(MODID, AkytheraAnimationState.class);
         AnimationLayerSignature.ENUM_MANAGER.registerEnumCls(MODID, AkytheraAnimationLayerSignature.class);
         ColliderType.ENUM_MANAGER.registerEnumCls(MODID, AkytheraColliderType.class);
+        BoneConstraintType.ENUM_MANAGER.registerEnumCls(MODID, AkytheraBoneConstraintType.class);
     }
 
     /// Called on mod loader lifecycle when the mod initializes in a dedicated server

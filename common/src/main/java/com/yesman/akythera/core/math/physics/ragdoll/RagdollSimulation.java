@@ -4,14 +4,18 @@ import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.asset.armature.Armature;
 import com.yesman.akythera.core.asset.armature.Bone;
 import com.yesman.akythera.core.asset.physics.ArmaturePhysicsData;
+import com.yesman.akythera.core.asset.physics.constraint.LimitRotationConstraint;
 import com.yesman.akythera.core.math.Transform;
 import com.yesman.akythera.core.math.physics.collider.CapsuleCollider;
 import com.yesman.akythera.core.math.physics.collider.Collider;
 import com.yesman.akythera.core.math.physics.collider.OrientedBoxCollider;
 import com.yesman.akythera.core.math.physics.collider.SphereCollider;
 import com.yesman.akythera.core.util.helper.Matrix4fUtils;
+import net.minecraft.core.BlockPos;
+import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -28,9 +32,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 /// A rag doll: one rigid body per [ArmaturePhysicsData.BoneBody], linked at the bone heads and kept inside the
-/// [ArmaturePhysicsData.BoneConstraint]s, falling over the colliders of a [Terrain].
+/// [LimitRotationConstraint]s, falling over the colliders of a [Terrain] and floating in its fluids. It may be pulled
+/// toward an animation for a while, see [#drive].
 ///
 /// Solved on the CPU by extended position based dynamics (XPBD), [ArmaturePhysicsData.RagdollParameters#substeps]
 /// substeps per game tick. Positions are kept relative to [#origin], where the armature stood at start, so the solver
@@ -67,11 +73,17 @@ public final class RagdollSimulation {
     /// Room added around a body's reach for the tick when the block colliders are gathered, in blocks.
     private static final double TERRAIN_MARGIN = 0.25D;
 
+    /// Fastest a body is pushed out of a block collider it starts a substep inside, in blocks per second.
+    private static final double MAX_DEPENETRATION_SPEED = 2.0D;
+
     private static final int BODY = 0;
     private static final int FOLLOW_PARENT = 1;
     private static final int FOLLOW_ANCHOR = 2;
 
     private final ArmaturePhysicsData.RagdollParameters parameters;
+
+    /// The armature the bones are of, which poses a [#drive] target.
+    private final Armature armature;
 
     /// What the bodies collide with, null for nothing.
     private final @Nullable Terrain terrain;
@@ -120,25 +132,49 @@ public final class RagdollSimulation {
     private int calmTicks;
     private boolean sleeping;
 
-    /// The colliders a rag doll falls over.
+    /// How much of the way to its [#drive] target each body is pulled over the coming tick, 0 for none.
+    private double driveStrength;
+
+    /// The colliders a rag doll falls over, and the fluids it floats in.
     @FunctionalInterface
     public interface Terrain {
         /// Hands every collider box inside the world-space `area` to `sink`, in world space. False when part of `area`
         /// is not loaded.
         boolean collect(AABB area, Consumer<AABB> sink);
 
-        /// The block colliders of `level`.
+        /// Hands every fluid inside the world-space `area` to `sink`, in world space. None by default.
+        default void collectFluids(final AABB area, final Consumer<FluidVolume> sink) {
+        }
+
+        /// The block colliders and the water and lava of `level`.
         static Terrain of(final Level level) {
-            return (area, sink) -> {
-                if (!level.hasChunksAt(Mth.floor(area.minX), Mth.floor(area.minZ), Mth.floor(area.maxX), Mth.floor(area.maxZ))) {
-                    return false;
+            return new Terrain() {
+                @Override
+                public boolean collect(final AABB area, final Consumer<AABB> sink) {
+                    if (!level.hasChunksAt(Mth.floor(area.minX), Mth.floor(area.minZ), Mth.floor(area.maxX), Mth.floor(area.maxZ))) {
+                        return false;
+                    }
+
+                    for (VoxelShape shape : level.getBlockCollisions(null, area)) {
+                        shape.forAllBoxes((x0, y0, z0, x1, y1, z1) -> sink.accept(new AABB(x0, y0, z0, x1, y1, z1)));
+                    }
+
+                    return true;
                 }
 
-                for (VoxelShape shape : level.getBlockCollisions(null, area)) {
-                    shape.forAllBoxes((x0, y0, z0, x1, y1, z1) -> sink.accept(new AABB(x0, y0, z0, x1, y1, z1)));
-                }
+                @Override
+                public void collectFluids(final AABB area, final Consumer<FluidVolume> sink) {
+                    for (BlockPos pos : BlockPos.betweenClosed(area)) {
+                        FluidState fluid = level.getFluidState(pos);
+                        FluidKind kind = fluid.is(FluidTags.WATER) ? FluidKind.WATER : fluid.is(FluidTags.LAVA) ? FluidKind.LAVA : null;
 
-                return true;
+                        if (kind == null) continue;
+
+                        sink.accept(new FluidVolume(
+                            new AABB(pos.getX(), pos.getY(), pos.getZ(), pos.getX() + 1, pos.getY() + fluid.getHeight(level, pos), pos.getZ() + 1), kind
+                        ));
+                    }
+                }
             };
         }
 
@@ -150,7 +186,35 @@ public final class RagdollSimulation {
                 return true;
             };
         }
+
+        /// Endless water whose surface is at `surface`, `depth` blocks deep over an endless floor.
+        static Terrain pool(final double surface, final double depth) {
+            Terrain floor = floor(surface - depth);
+
+            return new Terrain() {
+                @Override
+                public boolean collect(final AABB area, final Consumer<AABB> sink) {
+                    return floor.collect(area, sink);
+                }
+
+                @Override
+                public void collectFluids(final AABB area, final Consumer<FluidVolume> sink) {
+                    if (area.minY < surface && area.maxY > surface - depth) {
+                        sink.accept(new FluidVolume(new AABB(area.minX, surface - depth, area.minZ, area.maxX, surface, area.maxZ), FluidKind.WATER));
+                    }
+                }
+            };
+        }
     }
+
+    /// The fluids a rag doll floats in, each set up by its [ArmaturePhysicsData.FluidParameters].
+    public enum FluidKind {
+        WATER,
+        LAVA
+    }
+
+    /// A box filled with a fluid.
+    public record FluidVolume(AABB box, FluidKind kind) {}
 
     /// The armature as it was drawn at one moment.
     ///
@@ -161,6 +225,7 @@ public final class RagdollSimulation {
 
     private RagdollSimulation(
         final ArmaturePhysicsData.RagdollParameters parameters,
+        final Armature armature,
         final @Nullable Terrain terrain,
         final Vec3 origin,
         final Bone[] bones,
@@ -175,6 +240,7 @@ public final class RagdollSimulation {
         final boolean[][] linked
     ) {
         this.parameters = parameters;
+        this.armature = armature;
         this.terrain = terrain;
         this.origin = origin;
         this.bones = bones;
@@ -263,7 +329,9 @@ public final class RagdollSimulation {
                 joints.add(Joint.build(
                     bodiedAncestor >= 0 ? bodyOfBone[bodiedAncestor] : anchor, bodyOfBone[i], world[i],
                     new Matrix4d(world[parents[i]]).mul(new Matrix4d(bones[i].getLocalTransform())),
-                    physics.constraints().get(bones[i].getName())
+                    physics.constraints().getOrDefault(bones[i].getName(), List.of()).stream()
+                        .flatMap(constraint -> constraint instanceof LimitRotationConstraint limit && limit.limitsRotation() ? Stream.of(limit) : Stream.empty())
+                        .toArray(LimitRotationConstraint[]::new)
                 ));
             } else if (bodiedAncestor >= 0) {
                 placements[i] = FOLLOW_PARENT;
@@ -307,7 +375,7 @@ public final class RagdollSimulation {
         }
 
         return new RagdollSimulation(
-            physics.simulation(), terrain, origin, bones, parents, placements, bodyOfBone,
+            physics.simulation(), armature, terrain, origin, bones, parents, placements, bodyOfBone,
             frozenOffsets, inverseLocals, bodyArray, joints.toArray(new Joint[0]), restingOverlaps, linked
         );
     }
@@ -346,6 +414,11 @@ public final class RagdollSimulation {
             body.tickRotation.set(body.rotation);
         }
 
+        int substeps = parameters.substeps();
+        double pull = driveStrength <= 0.0D ? 0.0D : 1.0D - Math.pow(1.0D - driveStrength, 1.0D / substeps);
+
+        driveStrength = 0.0D;
+
         if (sleeping) return;
 
         if (!gatherTerrain()) {
@@ -353,10 +426,9 @@ public final class RagdollSimulation {
             return;
         }
 
-        int substeps = parameters.substeps();
         double h = TICK_SECONDS / substeps;
 
-        for (int i = 0; i < substeps; i++) substep(h);
+        for (int i = 0; i < substeps; i++) substep(h, pull, (i + 1) / (double) substeps);
 
         double fastest = 0.0D;
 
@@ -364,7 +436,12 @@ public final class RagdollSimulation {
             fastest = Math.max(fastest, Math.max(body.velocity.length(), body.angularVelocity.length() * body.boundingRadius));
         }
 
-        calmTicks = fastest < parameters.sleepSpeed() ? calmTicks + 1 : 0;
+        boolean inFluid = false;
+
+        for (Body body : bodies) inFluid |= !body.fluids.isEmpty();
+
+        // A fluid may push slower than the sleep speed, so a body in one never rests
+        calmTicks = fastest < parameters.sleepSpeed() && pull <= 0.0D && !inFluid ? calmTicks + 1 : 0;
 
         if (calmTicks >= SLEEP_TICKS) rest();
     }
@@ -374,9 +451,43 @@ public final class RagdollSimulation {
         return sleeping;
     }
 
-    /// The world position of the body closest to the root's center of mass, at the end of the current tick.
-    public Vec3 anchorPosition() {
-        return origin.add(anchor.position.x, anchor.position.y, anchor.position.z);
+    /// The world position under the center of mass of the body closest to the root, at the height of the lowest point
+    /// of every body, at the end of the current tick.
+    public Vec3 groundPosition() {
+        double lowest = Double.MAX_VALUE;
+        Vector3d center = new Vector3d();
+
+        for (Body body : bodies) {
+            for (int i = 0; i < body.proxyCenters.length; i++) {
+                lowest = Math.min(lowest, body.rotation.transform(body.proxyCenters[i], center).add(body.position).y - body.proxyRadii[i]);
+            }
+        }
+
+        return origin.add(anchor.position.x, lowest, anchor.position.z);
+    }
+
+    /// Pulls every body toward where `target` draws its bone over the coming [#tick], by `strength` of the way: 1
+    /// follows the animation outright with only the colliders holding it back, 0 leaves the bodies to fall. Holds for
+    /// one tick, so it is called before each tick the pull lasts.
+    public void drive(final Snapshot target, final float strength) {
+        Matrix4d[] world = worldTransforms(armature, bones, target, origin);
+
+        for (Body body : bodies) {
+            if (body.driven) {
+                body.driveFromPosition.set(body.drivePosition);
+                body.driveFromRotation.set(body.driveRotation);
+            } else {
+                body.driveFromPosition.set(body.position);
+                body.driveFromRotation.set(body.rotation);
+            }
+
+            world[body.boneIndex].getNormalizedRotation(body.driveRotation);
+            body.drivePosition.set(body.driveRotation.transform(body.centerOfMass, new Vector3d()).add(world[body.boneIndex].getTranslation(new Vector3d())));
+            body.driven = true;
+        }
+
+        driveStrength = Math.clamp(strength, 0.0F, 1.0F);
+        wake();
     }
 
     /// Pushes the body of `boneName` by `impulse` at `worldPoint`, null for its center of mass. A bone without a body
@@ -434,7 +545,10 @@ public final class RagdollSimulation {
     /// Gathers the block colliders each body may reach this tick. False when a body reaches into a chunk that is not
     /// loaded.
     private boolean gatherTerrain() {
-        for (Body body : bodies) body.terrain.clear();
+        for (Body body : bodies) {
+            body.terrain.clear();
+            body.fluids.clear();
+        }
 
         if (terrain == null) return true;
 
@@ -456,30 +570,106 @@ public final class RagdollSimulation {
         }
 
         List<AABB> boxes = new ArrayList<>();
+        List<FluidVolume> fluids = new ArrayList<>();
         Vec3 back = origin.reverse();
+        AABB area = new AABB(minX, minY, minZ, maxX, maxY, maxZ).move(origin);
 
-        if (!terrain.collect(new AABB(minX, minY, minZ, maxX, maxY, maxZ).move(origin), box -> boxes.add(box.move(back)))) {
+        if (!terrain.collect(area, box -> boxes.add(box.move(back)))) {
             return false;
         }
+
+        terrain.collectFluids(area, fluid -> fluids.add(new FluidVolume(fluid.box().move(back), fluid.kind())));
 
         for (Body body : bodies) {
             for (AABB box : boxes) {
                 if (box.intersects(body.reach)) body.terrain.add(box);
+            }
+
+            for (FluidVolume fluid : fluids) {
+                if (fluid.box().intersects(body.reach)) body.fluids.add(fluid);
             }
         }
 
         return true;
     }
 
-    private void substep(final double h) {
+    /// @param pull     how much of the way to its drive target each body is pulled this substep
+    /// @param progress how far through the tick this substep ends, in (0, 1]
+    private void substep(final double h, final double pull, final double progress) {
         double gravity = GRAVITY * parameters.gravityScale();
         Vector3d spin = new Vector3d();
+        Vector3d center = new Vector3d();
 
         for (Body body : bodies) {
             body.previousPosition.set(body.position);
             body.previousRotation.set(body.rotation);
 
             body.velocity.y -= gravity * h;
+
+            // Each self-collision sphere carries its share of the body's volume; its submerged part lifts it and is
+            // held back by the fluid where it is
+            if (!body.fluids.isEmpty()) {
+                Vector3d torque = new Vector3d();
+                Vector3d resistance = new Vector3d();
+                Vector3d resistanceTorque = new Vector3d();
+                Vector3d arm = new Vector3d();
+                Vector3d pointVelocity = new Vector3d();
+                double lift = 0.0D;
+                double drag = 0.0D;
+
+                for (int i = 0; i < body.selfCenters.length; i++) {
+                    double radius = body.selfRadii[i];
+                    double share = body.volume * radius * radius * radius / body.selfCubeSum;
+
+                    body.rotation.transform(body.selfCenters[i], arm);
+                    center.set(arm).add(body.position);
+                    body.angularVelocity.cross(arm, pointVelocity).add(body.velocity);
+
+                    double bottom = center.y - radius;
+                    double pointSpeed = pointVelocity.length();
+
+                    for (FluidVolume fluid : body.fluids) {
+                        AABB box = fluid.box();
+
+                        if (center.x < box.minX || center.x >= box.maxX || center.z < box.minZ || center.z >= box.maxZ) continue;
+
+                        double low = Math.max(box.minY, bottom);
+                        double high = Math.min(box.maxY, center.y + radius);
+
+                        if (high <= low) continue;
+
+                        double submerged = share * (sphereCapShare(high - bottom, radius) - sphereCapShare(low - bottom, radius));
+                        ArmaturePhysicsData.FluidParameters setup = fluid.kind() == FluidKind.WATER ? parameters.water() : parameters.lava();
+                        double force = setup.density() * gravity * submerged * body.buoyancyScale;
+
+                        lift += force;
+                        drag += setup.drag() * submerged;
+                        torque.add(-arm.z * force, 0.0D, arm.x * force);
+
+                        // 0.5 * density * drag coefficient * submerged cross-section * speed^2, against the motion
+                        double crossSection = Math.PI * radius * radius * submerged / share;
+                        Vector3d push = new Vector3d(pointVelocity).mul(-0.5D * setup.density() * setup.dragCoefficient() * crossSection * pointSpeed);
+
+                        resistance.add(push);
+                        resistanceTorque.add(arm.cross(push, new Vector3d()));
+                    }
+                }
+
+                double slow = Math.max(0.0D, 1.0D - drag / body.volume * h);
+                Vector3d slowing = resistance.mul(body.invMass * h);
+                Vector3d spinSlowing = body.applyInverseInertia(resistanceTorque, new Vector3d()).mul(h);
+
+                // An explicit step of a speed^2 force may overshoot; it stops the motion at most
+                if (slowing.length() > body.velocity.length()) slowing.normalize(body.velocity.length());
+                if (spinSlowing.length() > body.angularVelocity.length()) spinSlowing.normalize(body.angularVelocity.length());
+
+                body.velocity.add(slowing);
+                body.angularVelocity.add(spinSlowing);
+                body.velocity.y += lift * body.invMass * h;
+                body.angularVelocity.add(body.applyInverseInertia(torque, new Vector3d()).mul(h));
+                body.velocity.mul(slow);
+                body.angularVelocity.mul(slow);
+            }
 
             if (body.velocity.length() > MAX_SPEED) body.velocity.normalize(MAX_SPEED);
             if (body.angularVelocity.length() > MAX_ANGULAR_SPEED) body.angularVelocity.normalize(MAX_ANGULAR_SPEED);
@@ -488,11 +678,25 @@ public final class RagdollSimulation {
             addRotation(body.rotation, body.angularVelocity.mul(h, spin), 0.5D);
         }
 
+        if (pull > 0.0D) {
+            Vector3d targetPosition = new Vector3d();
+            Quaterniond targetRotation = new Quaterniond();
+
+            for (Body body : bodies) {
+                body.driveFromPosition.lerp(body.drivePosition, progress, targetPosition);
+                body.driveFromRotation.slerp(body.driveRotation, progress, targetRotation);
+                body.position.lerp(targetPosition, pull);
+                body.rotation.slerp(targetRotation, pull).normalize();
+            }
+        } else {
+            for (Body body : bodies) body.driven = false;
+        }
+
         contacts.clear();
 
         for (Joint joint : joints) solveJoint(joint);
 
-        for (Body body : bodies) solveTerrain(body);
+        for (Body body : bodies) solveTerrain(body, h);
 
         if (parameters.selfCollision()) solveSelfCollision();
 
@@ -515,9 +719,17 @@ public final class RagdollSimulation {
             Body body = contact.body;
             Vector3d pointVelocity = new Vector3d(body.angularVelocity).cross(contact.arm).add(body.velocity);
             double normalSpeed = pointVelocity.dot(contact.normal);
-            double target = contact.approachSpeed < -bounceSpeed ? -parameters.restitution() * contact.approachSpeed : 0.0D;
+            double target;
 
-            if (normalSpeed >= target) continue;
+            if (contact.depenetrating) {
+                if (normalSpeed <= MAX_DEPENETRATION_SPEED) continue;
+
+                target = MAX_DEPENETRATION_SPEED;
+            } else {
+                target = contact.approachSpeed < -bounceSpeed ? -parameters.restitution() * contact.approachSpeed : 0.0D;
+
+                if (normalSpeed >= target) continue;
+            }
 
             double weight = body.generalizedInverseMass(contact.arm, contact.normal);
 
@@ -547,6 +759,11 @@ public final class RagdollSimulation {
         }
     }
 
+    /// The share of a sphere of `radius` below `height` over its bottom, `height` within [0, 2 × `radius`].
+    private static double sphereCapShare(final double height, final double radius) {
+        return height * height * (3.0D * radius - height) / (4.0D * radius * radius * radius);
+    }
+
     private void solveJoint(final Joint joint) {
         Body parent = joint.parent;
         Body child = joint.child;
@@ -559,75 +776,29 @@ public final class RagdollSimulation {
             correctPosition(parent, parentArm, child, childArm, gap.div(distance), distance);
         }
 
-        if (joint.constraint == null || !joint.constraint.limitsRotation()) return;
+        for (LimitRotationConstraint limit : joint.limits) {
+            Quaterniond frame = parent.rotation.mul(joint.frame, new Quaterniond());
+            Quaterniond local = frame.conjugate(new Quaterniond()).mul(child.rotation);
+            Quaterniond limited = new Quaterniond();
 
-        Quaterniond frame = parent.rotation.mul(joint.frame, new Quaterniond());
-        Quaterniond local = frame.conjugate(new Quaterniond()).mul(child.rotation);
-        Quaterniond limited = new Quaterniond();
+            if (!limit.limit(local, limited)) continue;
 
-        if (!limitRotation(local, joint.constraint, limited)) return;
+            Quaterniond delta = limited.mul(local.conjugate(), new Quaterniond());
 
-        Quaterniond delta = limited.mul(local.conjugate(), new Quaterniond());
+            if (delta.w < 0.0D) delta.set(-delta.x, -delta.y, -delta.z, -delta.w);
 
-        if (delta.w < 0.0D) delta.set(-delta.x, -delta.y, -delta.z, -delta.w);
+            double sine = Math.sqrt(delta.x * delta.x + delta.y * delta.y + delta.z * delta.z);
 
-        double sine = Math.sqrt(delta.x * delta.x + delta.y * delta.y + delta.z * delta.z);
+            if (sine < 1.0E-9D) continue;
 
-        if (sine < 1.0E-9D) return;
+            double angle = 2.0D * Math.atan2(sine, delta.w);
+            Vector3d axis = frame.transform(new Vector3d(delta.x / sine, delta.y / sine, delta.z / sine));
 
-        double angle = 2.0D * Math.atan2(sine, delta.w);
-        Vector3d axis = frame.transform(new Vector3d(delta.x / sine, delta.y / sine, delta.z / sine));
-
-        correctRotation(parent, child, axis, angle);
+            correctRotation(parent, child, axis, angle);
+        }
     }
 
-    /// Writes into `dest` the rotation `local` is limited to by `constraint`. False when `local` is inside the limits
-    /// already.
-    ///
-    /// `local` splits into a twist around Y and a swing after it; the swing's rotation vector is limited by its X and Z
-    /// parts, and the twist by its angle.
-    static boolean limitRotation(final Quaterniond local, final ArmaturePhysicsData.BoneConstraint constraint, final Quaterniond dest) {
-        Quaterniond rotation = new Quaterniond(local);
-
-        if (rotation.w < 0.0D) rotation.set(-rotation.x, -rotation.y, -rotation.z, -rotation.w);
-
-        double twistLength = Math.sqrt(rotation.y * rotation.y + rotation.w * rotation.w);
-        Quaterniond twist = twistLength < 1.0E-9D
-            ? new Quaterniond()
-            : new Quaterniond(0.0D, rotation.y / twistLength, 0.0D, rotation.w / twistLength);
-        Quaterniond swing = rotation.mul(twist.conjugate(new Quaterniond()), new Quaterniond());
-
-        if (swing.w < 0.0D) swing.set(-swing.x, -swing.y, -swing.z, -swing.w);
-
-        double twistAngle = 2.0D * Math.atan2(twist.y, twist.w);
-        double swingSine = Math.sqrt(swing.x * swing.x + swing.z * swing.z);
-        double swingAngle = 2.0D * Math.atan2(swingSine, swing.w);
-        double swingX = swingSine < 1.0E-9D ? 0.0D : swing.x / swingSine * swingAngle;
-        double swingZ = swingSine < 1.0E-9D ? 0.0D : swing.z / swingSine * swingAngle;
-
-        double limitedX = clamp(swingX, constraint.x());
-        double limitedY = clamp(twistAngle, constraint.y());
-        double limitedZ = clamp(swingZ, constraint.z());
-
-        if (limitedX == swingX && limitedZ == swingZ && limitedY == twistAngle) return false;
-
-        double limitedSwing = Math.sqrt(limitedX * limitedX + limitedZ * limitedZ);
-        Quaterniond limitedSwingRotation = limitedSwing < 1.0E-9D
-            ? new Quaterniond()
-            : new Quaterniond().rotationAxis(limitedSwing, limitedX / limitedSwing, 0.0D, limitedZ / limitedSwing);
-
-        limitedSwingRotation.mul(new Quaterniond().rotationY(limitedY), dest);
-
-        return true;
-    }
-
-    private static double clamp(final double radians, final ArmaturePhysicsData.AngularLimit limit) {
-        if (limit.isFree()) return radians;
-
-        return Math.clamp(radians, Math.toRadians(limit.min()), Math.toRadians(limit.max()));
-    }
-
-    private void solveTerrain(final Body body) {
+    private void solveTerrain(final Body body, final double h) {
         if (body.terrain.isEmpty()) return;
 
         Vector3d center = new Vector3d();
@@ -708,13 +879,15 @@ public final class RagdollSimulation {
 
                 if (depth <= 0.0D) continue;
 
+                if (startedInside) depth = Math.min(depth, MAX_DEPENETRATION_SPEED * h);
+
                 Vector3d normal = new Vector3d(axis == 0 ? sign : 0.0D, axis == 1 ? sign : 0.0D, axis == 2 ? sign : 0.0D);
                 Vector3d arm = new Vector3d(center).fma(-radius, normal).sub(body.position);
                 double approachSpeed = new Vector3d(body.angularVelocity).cross(arm).add(body.velocity).dot(normal);
                 double pushed = correctPosition(body, arm, null, null, normal, depth);
 
                 applyFriction(body, proxy, normal, radius, pushed);
-                contacts.add(new Contact(body, body.rotation.transform(new Vector3d(proxy)).fma(-radius, normal), normal, approachSpeed));
+                contacts.add(new Contact(body, body.rotation.transform(new Vector3d(proxy)).fma(-radius, normal), normal, approachSpeed, startedInside));
             }
         }
     }
@@ -958,6 +1131,15 @@ public final class RagdollSimulation {
         /// Farthest a sphere of [#selfCenters] reaches from the center of mass, in blocks.
         private final double selfBoundingRadius;
 
+        /// The sum of the cubed [#selfRadii], which shares [#volume] out over the spheres.
+        private final double selfCubeSum;
+
+        /// The volume of the colliders, in cubic blocks.
+        private final double volume;
+
+        /// Multiplier on the fluid the body pushes aside, see [ArmaturePhysicsData.BoneBody#buoyancyScale].
+        private final double buoyancyScale;
+
         private final Vector3d position = new Vector3d();
         private final Quaterniond rotation = new Quaterniond();
         private final Vector3d velocity = new Vector3d();
@@ -973,14 +1155,27 @@ public final class RagdollSimulation {
         private final Vector3d tickPosition = new Vector3d();
         private final Quaterniond tickRotation = new Quaterniond();
 
+        /// Where [RagdollSimulation#drive] pulls the body by the end of the running tick, and from where at its start.
+        private final Vector3d drivePosition = new Vector3d();
+        private final Quaterniond driveRotation = new Quaterniond();
+        private final Vector3d driveFromPosition = new Vector3d();
+        private final Quaterniond driveFromRotation = new Quaterniond();
+
+        /// Whether the body was pulled in the last tick, so the next pull starts from that one's target.
+        private boolean driven;
+
         /// The block colliders the body may reach this tick, relative to the simulation's origin.
         private final List<AABB> terrain = new ArrayList<>();
+
+        /// The fluids the body may reach this tick, relative to the simulation's origin.
+        private final List<FluidVolume> fluids = new ArrayList<>();
+
         private AABB reach = new AABB(0.0D, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D);
 
         private Body(
             final int boneIndex, final double invMass, final Vector3d invInertia, final Vector3d centerOfMass, final Vector3d boneScale,
             final double linearDamping, final double angularDamping, final Vector3d[] proxyCenters, final double[] proxyRadii,
-            final Vector3d[] selfCenters, final double[] selfRadii
+            final Vector3d[] selfCenters, final double[] selfRadii, final double volume, final double buoyancyScale
         ) {
             this.boneIndex = boneIndex;
             this.invMass = invMass;
@@ -1005,6 +1200,14 @@ public final class RagdollSimulation {
             for (int i = 0; i < selfCenters.length; i++) selfBounding = Math.max(selfBounding, selfCenters[i].length() + selfRadii[i]);
 
             this.selfBoundingRadius = selfBounding;
+
+            double cubeSum = 0.0D;
+
+            for (double radius : selfRadii) cubeSum += radius * radius * radius;
+
+            this.selfCubeSum = Math.max(cubeSum, 1.0E-12D);
+            this.volume = volume;
+            this.buoyancyScale = buoyancyScale;
         }
 
         /// The body of `authored` on the bone at `boneToWorld`: mass spread over the colliders by their volume, and
@@ -1126,6 +1329,8 @@ public final class RagdollSimulation {
                 centerOfMass.fma(share, shape.center);
             }
 
+            centerOfMass.add(scaled(authored.centerOfMassOffset(), scale));
+
             double mass = authored.mass();
             double[] inertia = new double[3];
 
@@ -1159,7 +1364,7 @@ public final class RagdollSimulation {
                 boneIndex, 1.0D / mass,
                 new Vector3d(1.0D / Math.max(inertia[0], 1.0E-6D), 1.0D / Math.max(inertia[1], 1.0E-6D), 1.0D / Math.max(inertia[2], 1.0E-6D)),
                 centerOfMass, boneScale, authored.linearDamping(), authored.angularDamping(), proxyCenters, proxyRadii,
-                selfCenterArray, selfRadiusArray
+                selfCenterArray, selfRadiusArray, totalVolume, authored.buoyancyScale()
             );
 
             boneToWorld.getNormalizedRotation(body.rotation);
@@ -1275,21 +1480,21 @@ public final class RagdollSimulation {
     /// @param parentAnchor the bone head in `parent`'s axes, from its center of mass
     /// @param childAnchor  the bone head in `child`'s axes, from its center of mass
     /// @param frame        the rotation `child` has at its rest pose, in `parent`'s axes
-    /// @param constraint   the limits `child` turns within, null for none
+    /// @param limits       the limits `child` turns within
     private record Joint(Body parent, Body child, Vector3d parentAnchor, Vector3d childAnchor, Quaterniond frame,
-                         ArmaturePhysicsData.@Nullable BoneConstraint constraint) {
+                         LimitRotationConstraint[] limits) {
         /// The joint of `child`, whose bone stands at `childToWorld` and would stand at `restToWorld` with no pose of
         /// its own.
         private static Joint build(
             final Body parent, final Body child, final Matrix4d childToWorld, final Matrix4d restToWorld,
-            final ArmaturePhysicsData.@Nullable BoneConstraint constraint
+            final LimitRotationConstraint[] limits
         ) {
             Vector3d head = childToWorld.getTranslation(new Vector3d());
             Vector3d parentAnchor = parent.rotation.transformInverse(new Vector3d(head).sub(parent.position));
             Vector3d childAnchor = child.rotation.transformInverse(new Vector3d(head).sub(child.position));
             Quaterniond frame = parent.rotation.conjugate(new Quaterniond()).mul(restToWorld.getNormalizedRotation(new Quaterniond()));
 
-            return new Joint(parent, child, parentAnchor, childAnchor, frame, constraint);
+            return new Joint(parent, child, parentAnchor, childAnchor, frame, limits);
         }
     }
 
@@ -1298,7 +1503,9 @@ public final class RagdollSimulation {
     /// @param arm           from the body's center of mass to the contact point, in world axes
     /// @param normal        out of the terrain
     /// @param approachSpeed the point's speed along `normal` before the contact was solved
-    private record Contact(Body body, Vector3d arm, Vector3d normal, double approachSpeed) {}
+    /// @param depenetrating whether the point started the substep inside the collider, so it leaves no faster than
+    ///                      [#MAX_DEPENETRATION_SPEED]
+    private record Contact(Body body, Vector3d arm, Vector3d normal, double approachSpeed, boolean depenetrating) {}
 
     /// A contact between two bodies in the running substep, kept for the velocity pass.
     ///

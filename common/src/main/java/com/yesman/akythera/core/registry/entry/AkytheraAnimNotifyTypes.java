@@ -4,7 +4,6 @@ import com.mojang.serialization.MapCodec;
 import com.yesman.akythera.api.animation.notify.AnimationNotify;
 import com.yesman.akythera.api.animation.notify.impl.LogNotify;
 import com.yesman.akythera.api.animation.notify.impl.PlaySoundNotify;
-import com.yesman.akythera.api.animation.notify.impl.StartRagdollNotify;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.platform.ModPlatform;
@@ -19,5 +18,4 @@ public final class AkytheraAnimNotifyTypes {
 
     public static final Holder<MapCodec<? extends AnimationNotify<?>>> LOG = REGISTRAR.register("log", () -> LogNotify.CODEC);
     public static final Holder<MapCodec<? extends AnimationNotify<?>>> PLAY_SOUND = REGISTRAR.register("play_sound", () -> PlaySoundNotify.CODEC);
-    public static final Holder<MapCodec<? extends AnimationNotify<?>>> START_RAGDOLL = REGISTRAR.register("start_ragdoll", () -> StartRagdollNotify.CODEC);
 }
