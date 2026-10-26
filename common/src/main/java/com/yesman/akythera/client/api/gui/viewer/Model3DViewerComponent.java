@@ -57,7 +57,7 @@ public interface Model3DViewerComponent {
     default void onReleased(final Model3DViewer owner, final @Nullable Model3DViewerComponent newFocus) {
     }
 
-    /// Right-press while this component is focused.
+    /// Right click while this component is focused: released without a drag or a camera key in between.
     default void showOptions(final Model3DViewer owner) {
     }
 

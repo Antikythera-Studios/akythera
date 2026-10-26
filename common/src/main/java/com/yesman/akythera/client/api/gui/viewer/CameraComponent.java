@@ -16,6 +16,7 @@ import net.minecraft.util.Mth;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
+import org.lwjgl.glfw.GLFW;
 
 import java.util.HashSet;
 import java.util.List;
@@ -34,6 +35,9 @@ public final class CameraComponent implements Model3DViewerComponent {
 
     /// Distance [#focus] travels per tick while a movement key is held, as a fraction of the zoom distance.
     private static final float MOVE_SPEED = 0.04F;
+
+    /// Degrees the view turns per pixel of a left or right drag.
+    private static final float ROTATE_SPEED = 2.5F;
 
     private ViewMode viewMode = ViewMode.FRUSTUM;
 
@@ -61,13 +65,13 @@ public final class CameraComponent implements Model3DViewerComponent {
     }
 
     /// Moves [#focus] by the [#heldMoveKeys], fly-camera style: forward, strafe and world up / down. Movement
-    /// stops once the pointer leaves the viewer or the viewer loses focus.
+    /// stops once the right button comes up, the pointer leaves the viewer or the viewer loses focus.
     @Override
     public void extractComponent(GuiGraphicsExtractor graphics, Model3DViewer model3DViewer, PoseStack poseStack, ByteBufferBuilder byteBuffer, int mouseX, int mouseY, float a) {
         if (heldMoveKeys.isEmpty()) return;
 
         Minecraft minecraft = Minecraft.getInstance();
-        heldMoveKeys.removeIf(key -> !model3DViewer.isFocused() || !model3DViewer.isHovered()
+        heldMoveKeys.removeIf(key -> !isFlying() || !model3DViewer.isFocused() || !model3DViewer.isHovered()
             || !InputConstants.isKeyDown(minecraft.getWindow(), ((KeyMappingAccessor) key).akythera$getKey().getValue()));
 
         Options options = minecraft.options;
@@ -77,8 +81,7 @@ public final class CameraComponent implements Model3DViewerComponent {
 
         if (forward == 0.0F && strafe == 0.0F && lift == 0.0F) return;
 
-        // Rows of the view rotation: the camera's right and back in world space.
-        Matrix3f rotation = new Matrix3f().rotationX(xRot * Mth.DEG_TO_RAD).rotateY(yRot * Mth.DEG_TO_RAD);
+        Matrix3f rotation = viewRotation();
         float step = MOVE_SPEED * (float) -zoom * a;
 
         focus.add(rotation.getRow(0, new Vector3f()).mul(strafe * step));
@@ -129,22 +132,45 @@ public final class CameraComponent implements Model3DViewerComponent {
         };
     }
 
+    /// Left drag orbits [#focus], right drag turns the view around the camera itself, middle drag pans.
     public void handleMouseDrag(double dx, double dy, int button) {
         if (!controllable) return;
-        if (button == 0) {
-            xRot = Mth.clamp(xRot + (float) (dy * 2.5), -90.0F, 90.0F);
-            yRot += (float) (dx * 2.5F);
-            targetXRot = xRot;
-            targetYRot = yRot;
-        } else if (button == 1 || button == 2) {
-            // Rows of the view rotation: the camera's right and up in world space.
-            Matrix3f rotation = new Matrix3f().rotationX(xRot * Mth.DEG_TO_RAD).rotateY(yRot * Mth.DEG_TO_RAD);
-            float scale = 0.015F * (float) -zoom;
 
-            focus.add(rotation.getRow(0, new Vector3f()).mul((float) -dx * scale));
-            focus.add(rotation.getRow(1, new Vector3f()).mul((float) dy * scale));
-            targetFocus.set(focus);
+        switch (button) {
+            case 0 -> {
+                xRot = Mth.clamp(xRot + (float) (dy * ROTATE_SPEED), -90.0F, 90.0F);
+                yRot += (float) (dx * ROTATE_SPEED);
+                targetXRot = xRot;
+                targetYRot = yRot;
+            }
+            case 1 -> {
+                // Row 2 of the view rotation is the camera's back in world space, and the eye sits -zoom along it.
+                Vector3f eye = new Vector3f(focus).add(viewRotation().getRow(2, new Vector3f()).mul((float) -zoom));
+
+                xRot = Mth.clamp(xRot + (float) (dy * ROTATE_SPEED), -90.0F, 90.0F);
+                yRot += (float) (dx * ROTATE_SPEED);
+                targetXRot = xRot;
+                targetYRot = yRot;
+
+                focus.set(eye).sub(viewRotation().getRow(2, new Vector3f()).mul((float) -zoom));
+                targetFocus.set(focus);
+            }
+            case 2 -> {
+                // Rows of the view rotation: the camera's right and up in world space.
+                Matrix3f rotation = viewRotation();
+                float scale = 0.015F * (float) -zoom;
+
+                focus.add(rotation.getRow(0, new Vector3f()).mul((float) -dx * scale));
+                focus.add(rotation.getRow(1, new Vector3f()).mul((float) dy * scale));
+                targetFocus.set(focus);
+            }
+            default -> {}
         }
+    }
+
+    /// The view rotation of the current [#xRot] and [#yRot]: its rows are the camera's right, up and back in world space.
+    private Matrix3f viewRotation() {
+        return new Matrix3f().rotationX(xRot * Mth.DEG_TO_RAD).rotateY(yRot * Mth.DEG_TO_RAD);
     }
 
     public void handleMouseScroll(double yScroll) {
@@ -186,6 +212,11 @@ public final class CameraComponent implements Model3DViewerComponent {
         return viewMode;
     }
 
+    /// Whether the right mouse button is held, which is what lets the movement keys fly the camera.
+    public static boolean isFlying() {
+        return GLFW.glfwGetMouseButton(Minecraft.getInstance().getWindow().handle(), GLFW.GLFW_MOUSE_BUTTON_RIGHT) == GLFW.GLFW_PRESS;
+    }
+
     @Override
     public boolean onKeyPressed(final Model3DViewer owner, final KeyEvent event) {
         if (!controllable) return false;
@@ -215,7 +246,7 @@ public final class CameraComponent implements Model3DViewerComponent {
             return true;
         }
 
-        if (event.hasControlDown() || event.hasAltDown()) return false;
+        if (event.hasControlDown() || event.hasAltDown() || !isFlying()) return false;
 
         Options options = Minecraft.getInstance().options;
 
