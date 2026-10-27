@@ -21,6 +21,7 @@ import net.minecraft.sounds.SoundEvent;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.lang.reflect.GenericArrayType;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
@@ -265,14 +266,15 @@ public class ParseUtils {
     }
 
     /// The class `type` erases to: itself for a class, its raw class for a parameterized type, its first
-    /// bound for a type variable.
+    /// bound for a type variable, the array of its erased component for a generic array.
     ///
-    /// @throws IllegalArgumentException for a wildcard or a generic array
+    /// @throws IllegalArgumentException for a wildcard
     public static Class<?> erase(final Type type) {
         return switch (type) {
             case Class<?> c -> c;
             case ParameterizedType p -> (Class<?>) p.getRawType();
             case TypeVariable<?> v -> erase(v.getBounds()[0]);
+            case GenericArrayType a -> erase(a.getGenericComponentType()).arrayType();
             default -> throw new IllegalArgumentException("No single class for " + type.getTypeName());
         };
     }

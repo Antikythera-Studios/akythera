@@ -7,6 +7,8 @@ import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.helper.ParseUtils;
 import com.yesman.akythera.platform.ModPlatform;
 import com.yesman.akythera.platform.ModPlatformProvider;
+import com.google.common.base.Suppliers;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.StringUtil;
 import org.jspecify.annotations.Nullable;
 import org.objectweb.asm.ClassReader;
@@ -116,7 +118,8 @@ public final class ScriptModularizeHelper {
     /// Make a custom script function which is expected to be used frequently.
     ///
     /// A [Number] of another type passed to a numeric parameter is converted with explicit-cast semantics
-    /// (e.g. `Double` -> `Integer`), the same as a scanned method.
+    /// (e.g. `Double` -> `Integer`), the same as a scanned method. An entry passed to a `ResourceKey<T>` parameter
+    /// of a registry entry type `T` is converted into its key, see [ScriptType#asKey].
     public static ScriptFunction makeCustomScript(
         final Object sam, final FunctionSignature signature, @Nullable final String label, @Nullable String category,
         @Nullable String desc, final boolean pure, final ScriptFunction.Usage usage
@@ -125,7 +128,9 @@ public final class ScriptModularizeHelper {
         ScriptFunction.Metadata metadata = new ScriptFunction.Metadata(pure, false, label, category, desc, usage);
         List<Class<?>> parameters = signature.parameters();
 
-        if (parameters.stream().noneMatch(parameter -> Number.class.isAssignableFrom(ParseUtils.box(parameter)))) {
+        if (parameters.stream().noneMatch(parameter -> Number.class.isAssignableFrom(ParseUtils.box(parameter)))
+            && !parameters.contains(ResourceKey.class)
+        ) {
             return wrap(arity, sam, signature, metadata);
         }
 
@@ -149,7 +154,7 @@ public final class ScriptModularizeHelper {
             }
         }
 
-        return wrap(arity, synthesize(arity, impl, String.valueOf(label)), signature, metadata);
+        return wrap(arity, synthesize(arity, coerceKeyParams(impl, signature), String.valueOf(label)), signature, metadata);
     }
 
     /// Scan all annotated fields & methods to be used as [ScriptFunction]. Expose them to
@@ -187,13 +192,15 @@ public final class ScriptModularizeHelper {
             if (scriptField.makeGetter()) {
                 // (owner) -> value   [static field: () -> value]
                 List<String> parameterNames = instanceField ? List.of(owner) : List.of();
-                registerFunction(registrar, base + "get_" + fieldName, category, null, "Get " + fieldLabel, parameterNames, lookup.unreflectGetter(field), usage);
+                List<java.lang.reflect.Type> parameters = instanceField ? List.of(cls) : List.of();
+                registerFunction(registrar, base + "get_" + fieldName, category, null, "Get " + fieldLabel, parameterNames, parameters, field.getGenericType(), lookup.unreflectGetter(field), usage);
             }
 
             if (scriptField.makeSetter() && !Modifier.isFinal(field.getModifiers())) {
                 // (owner, value) -> value : assign, then yield the value so it composes in the tree.
                 List<String> parameterNames = instanceField ? List.of(owner, fieldName) : List.of(fieldName);
-                registerFunction(registrar, base + "set_" + fieldName, category, null, "Set " + fieldLabel, parameterNames, returnAssignedValue(lookup.unreflectSetter(field), field.getType()), usage);
+                List<java.lang.reflect.Type> parameters = instanceField ? List.of(cls, field.getGenericType()) : List.of(field.getGenericType());
+                registerFunction(registrar, base + "set_" + fieldName, category, null, "Set " + fieldLabel, parameterNames, parameters, field.getGenericType(), returnAssignedValue(lookup.unreflectSetter(field), field.getType()), usage);
             }
         }
 
@@ -209,9 +216,15 @@ public final class ScriptModularizeHelper {
             SamArity arity = arityOf(type.parameterCount(), type.returnType() == void.class);
             if (arity == null) continue;
 
-            // Real runtime types, receiver-first for instance methods -- never Object.
-            FunctionSignature signature = FunctionSignature.create(type.returnType(), parameterNames(method, type), type.parameterArray());
-            Object sam = synthesize(arity, impl, method.getName());
+            // Types as declared, receiver-first for instance methods.
+            List<java.lang.reflect.Type> parameters = new ArrayList<>(type.parameterCount());
+            if (type.parameterCount() > method.getParameterCount()) parameters.add(type.parameterType(0));
+            parameters.addAll(Arrays.asList(method.getGenericParameterTypes()));
+
+            FunctionSignature signature = FunctionSignature.create(
+                method.getGenericReturnType(), parameterNames(method, type), parameters.toArray(java.lang.reflect.Type[]::new)
+            );
+            Object sam = synthesize(arity, coerceKeyParams(impl, signature), method.getName());
             String name = idPath(cls, method);
             String label = scriptFuncAnnotation.label().isEmpty()
                 ? ParseUtils.camelToSpacedPascal(method.getName())
@@ -417,6 +430,9 @@ public final class ScriptModularizeHelper {
     /// [#coerceNumber] as a handle.
     private static final MethodHandle COERCE_NUMBER;
 
+    /// [#coerceKey] as a handle.
+    private static final MethodHandle COERCE_KEY;
+
     static {
         try {
             MethodHandles.Lookup lookup = MethodHandles.publicLookup();
@@ -428,6 +444,9 @@ public final class ScriptModularizeHelper {
             DOUBLE_VALUE = lookup.findVirtual(Number.class, "doubleValue", MethodType.methodType(double.class));
             COERCE_NUMBER = MethodHandles.lookup().findStatic(
                 ScriptModularizeHelper.class, "coerceNumber", MethodType.methodType(Object.class, Class.class, Object.class)
+            );
+            COERCE_KEY = MethodHandles.lookup().findStatic(
+                ScriptModularizeHelper.class, "coerceKey", MethodType.methodType(Object.class, Supplier.class, Object.class)
             );
         } catch (ReflectiveOperationException e) {
             throw new ExceptionInInitializerError(e);
@@ -464,6 +483,33 @@ public final class ScriptModularizeHelper {
         return value;
     }
 
+    /// `impl` with every `ResourceKey<T>` parameter of `signature` filtered through [#coerceKey].
+    private static MethodHandle coerceKeyParams(MethodHandle impl, final FunctionSignature signature) {
+        for (int i = 0; i < signature.parameters().size(); i++) {
+            if (signature.parameters().get(i) != ResourceKey.class) continue;
+
+            java.lang.reflect.Type declared = signature.genericParameters().get(i);
+            Supplier<ScriptType> keyType = Suppliers.memoize(() -> ScriptType.of(declared));
+            MethodHandle filter = MethodHandles.insertArguments(COERCE_KEY, 0, keyType)
+                .asType(MethodType.methodType(impl.type().parameterType(i), Object.class));
+
+            impl = MethodHandles.filterArguments(impl, i, filter);
+        }
+
+        return impl;
+    }
+
+    /// `value` as a key when it is an entry of the registry `keyType` keys, see [ScriptType#isKeyOf]. Anything
+    /// else, null included, is returned as is.
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static @Nullable Object coerceKey(final Supplier<@Nullable ScriptType> keyType, final @Nullable Object value) {
+        ScriptType type = keyType.get();
+
+        if (value == null || type == null || !type.isKeyOf(value.getClass())) return value;
+
+        return ScriptType.asKey((ResourceKey) type.element().registry(), value);
+    }
+
     /// The `(Number) -> param` conversion for a numeric parameter type, or null when the
     /// type is not numeric. `asType` re-boxes when the declared parameter is a wrapper.
     private static @Nullable MethodHandle numberConverter(Class<?> param) {
@@ -481,14 +527,19 @@ public final class ScriptModularizeHelper {
     }
 
     /// Synthesizes a field-accessor handle into its SAM and registers it as a pure [ScriptFunction].
-    /// Shared by the getter/setter paths -- derives the shape straight from the handle's real types.
-    private static void registerFunction(final ModPlatform.Registrar<ScriptFunction> registrar, String name, String category, @Nullable String desc, String label, List<String> parameterNames, MethodHandle handle, ScriptFunction.Usage usage) {
+    /// Shared by the getter/setter paths. `parameters` and `returnType` are the types as declared, which erase to
+    /// the handle's.
+    private static void registerFunction(
+        final ModPlatform.Registrar<ScriptFunction> registrar, String name, String category, @Nullable String desc, String label,
+        List<String> parameterNames, List<java.lang.reflect.Type> parameters, java.lang.reflect.Type returnType, MethodHandle handle,
+        ScriptFunction.Usage usage
+    ) {
         MethodType type = handle.type();
         SamArity arity = arityOf(type.parameterCount(), type.returnType() == void.class);
         if (arity == null) return;
 
-        FunctionSignature signature = FunctionSignature.create(type.returnType(), parameterNames, type.parameterArray());
-        Object sam = synthesize(arity, handle, registrar.namespace() + ":" + name);
+        FunctionSignature signature = FunctionSignature.create(returnType, parameterNames, parameters.toArray(java.lang.reflect.Type[]::new));
+        Object sam = synthesize(arity, coerceKeyParams(handle, signature), registrar.namespace() + ":" + name);
 
         registerFunction(registrar, name, arity, sam, signature, new ScriptFunction.Metadata(true, false, label, category, desc, usage));
     }

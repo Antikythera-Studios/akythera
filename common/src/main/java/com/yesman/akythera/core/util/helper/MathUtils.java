@@ -238,6 +238,17 @@ public final class MathUtils {
         return comparator.compare(t1, t2) == 0;
     }
 
+	@ScriptFunction(pure = true, label = "Clamp", category = "Math/Util", desc = "Clamps `value` between `min` and `max`")
+	public static <T> T clamp(final Comparator<T> comparator, final T min, final T max, final T value) {
+		if (comparator.compare(value, min) < 0) {
+			return min;
+		} else if (comparator.compare(value, max) > 0) {
+			return max;
+		} else {
+			return value;
+		}
+	}
+
     /// Returns a clamped value in both positive and negative
     public static float absoluteClamp(final float value, final float max) {
         return Math.clamp(value, -max, max);
