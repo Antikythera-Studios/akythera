@@ -1,12 +1,21 @@
 package com.yesman.akythera.client.input;
 
+import com.yesman.akythera.api.data.modularize.node.ScriptCallback;
+import com.yesman.akythera.api.event.BuiltInEventHooks;
 import com.yesman.akythera.api.input.InputAction;
 import com.yesman.akythera.api.input.TriggeringState;
+import com.yesman.akythera.api.world.patch.AkytheraPatches;
+import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.core.Akythera;
+import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.ClientOnly;
+import com.yesman.akythera.core.util.StaticRegistryAccess;
 import com.yesman.akythera.mixinaccessor.client.KeyMappingAccessor;
 import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
 import net.minecraft.core.Holder;
 import org.jetbrains.annotations.ApiStatus;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -37,7 +46,65 @@ public final class InputManager {
     /// Key mappings with at least one binding; the per-tick driver scans only these.
     private final Set<KeyMapping> boundKeyMappings = new HashSet<>();
 
+    /// The listener [#bindAction] registered per action, so a rebind or [#unbindAction] releases the same one.
+    private final Map<Holder<InputAction>, InputListener> actionBindings = new HashMap<>();
+
     private InputManager() {}
+
+    /// Releases every [#bindAction] binding when the client leaves the world it bound them in.
+    @ApiStatus.Internal
+    public static void registerEvents() {
+        BuiltInEventHooks.Registry.REGISTRY_ACCESS_UNLOAD.registerEvent(event -> INSTANCE.unbindActions());
+    }
+
+    /// Runs the callbacks when `action` fires, replacing the ones an earlier call bound to it. A callback runs as
+    /// the patch of [Minecraft#getCameraEntity], or as built when that entity has none. Does nothing for a key
+    /// mapping no mod registered.
+    ///
+    /// @param started   the first [TriggeringState#TRIGGERED] of a hold, or every one for an action that is not held
+    /// @param triggered every [TriggeringState#TRIGGERED]
+    /// @param completed every [TriggeringState#COMPLETED]
+    /// @param canceled  every [TriggeringState#CANCELED]
+    public void bindAction(
+        final InputAction action,
+        final @Nullable ScriptCallback started,
+        final @Nullable ScriptCallback triggered,
+        final @Nullable ScriptCallback completed,
+        final @Nullable ScriptCallback canceled
+    ) {
+        unbindAction(action);
+
+        KeyMapping keyMapping = KeyMapping.get(action.keyMapping());
+
+        if (keyMapping == null) {
+            Akythera.LOGGER.warn("No key mapping is registered as {}", action.keyMapping());
+
+            return;
+        }
+
+        Holder<InputAction> holder = holderOf(action);
+        InputListener listener = new CallbackListener(started, triggered, completed, canceled);
+
+        register(holder, keyMapping, listener);
+        actionBindings.put(holder, listener);
+    }
+
+    /// Releases the callbacks [#bindAction] bound to `action`.
+    public void unbindAction(final InputAction action) {
+        Holder<InputAction> holder = holderOf(action);
+        InputListener listener = actionBindings.remove(holder);
+
+        if (listener != null) unregister(holder, listener);
+    }
+
+    private void unbindActions() {
+        actionBindings.forEach(this::unregister);
+        actionBindings.clear();
+    }
+
+    private static Holder<InputAction> holderOf(final InputAction action) {
+        return StaticRegistryAccess.getRegistryAccess().lookupOrThrow(AkytheraRegistries.DataPack.INPUT_ACTION_KEY).wrapAsHolder(action);
+    }
 
     /// Adds `listener` to `action`, binding it to `keyMapping` on the first listener.
     public void register(
@@ -89,6 +156,55 @@ public final class InputManager {
 
         for (InputListener listener : new ArrayList<>(bound)) {
             listener.onTriggered(action.value(), triggeringState);
+        }
+    }
+
+    /// Runs the callback of each [TriggeringState] one [#bindAction] binding receives.
+    private static final class CallbackListener implements InputListener {
+        private final @Nullable ScriptCallback started;
+        private final @Nullable ScriptCallback triggered;
+        private final @Nullable ScriptCallback completed;
+        private final @Nullable ScriptCallback canceled;
+
+        /// Whether the current hold already ran [#started].
+        private boolean holding;
+
+        private CallbackListener(
+            final @Nullable ScriptCallback started,
+            final @Nullable ScriptCallback triggered,
+            final @Nullable ScriptCallback completed,
+            final @Nullable ScriptCallback canceled
+        ) {
+            this.started = started;
+            this.triggered = triggered;
+            this.completed = completed;
+            this.canceled = canceled;
+        }
+
+        @Override
+        public void onTriggered(final InputAction inputAction, final TriggeringState triggeringState) {
+            EntityPatch<?> self = AkytheraPatches.getEntityPatch(Minecraft.getInstance().getCameraEntity());
+
+            switch (triggeringState) {
+                case TRIGGERED -> {
+                    if (!holding && started != null) started.runAs(self);
+
+                    // A type that never completes has no release to end the hold.
+                    holding = inputAction.triggeringType().dispatchesCompleted();
+
+                    if (triggered != null) triggered.runAs(self);
+                }
+                case COMPLETED -> {
+                    holding = false;
+
+                    if (completed != null) completed.runAs(self);
+                }
+                case CANCELED -> {
+                    holding = false;
+
+                    if (canceled != null) canceled.runAs(self);
+                }
+            }
         }
     }
 }

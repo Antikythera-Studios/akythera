@@ -265,6 +265,11 @@ public record BlueprintLayout(
         public boolean isAbstract() {
             return Modifier.isAbstract(method.getModifiers());
         }
+
+        /// [BlueprintFunction#hidden] of the declaration this signature keeps.
+        public boolean isHidden() {
+            return method.getAnnotation(BlueprintFunction.class).hidden();
+        }
     }
 
     /// A [ScriptFunction.BlueprintGraphType#PROPERTY] getter.

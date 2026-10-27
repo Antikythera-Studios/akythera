@@ -4,8 +4,9 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.core.blueprint.script.ScriptVariables;
 import com.yesman.akythera.core.reflection.DataDrivenScript;
+import org.jspecify.annotations.Nullable;
 
-/// A pure node that wraps a sub-flow in a [Runnable], so a flow output pin can satisfy a
+/// A pure node that wraps a sub-flow in a [ScriptCallback], so a flow output pin can satisfy a
 /// `Runnable`-typed function parameter. This is what lets an [com.yesman.akythera.api.world.ability.AbilityTask]
 /// run a piece of graph when it finishes or is interrupted.
 ///
@@ -34,13 +35,23 @@ public record CallbackAdapterNode(FlowNode child, String canvas) implements Pure
         ScriptVariables callbackLocals = context.callbackLocals();
         ScriptCaller caller = context.caller().at(canvas);
 
-        return (T) (Runnable) () -> {
-            ExecutionContext callback = ScriptRecorder.newContext(caller, callbackLocals);
+        return (T) new ScriptCallback() {
+            @Override
+            public void run() {
+                runAs(null);
+            }
 
-            try {
-                child.execute(script, callback);
-            } catch (Throwable throwable) {
-                ScriptRecorder.recordFailure(callback, throwable);
+            @Override
+            public void runAs(final @Nullable Object self) {
+                ExecutionContext callback = ScriptRecorder.newContext(caller, callbackLocals);
+
+                callback.setSelf(self);
+
+                try {
+                    child.execute(script, callback);
+                } catch (Throwable throwable) {
+                    ScriptRecorder.recordFailure(callback, throwable);
+                }
             }
         };
     }

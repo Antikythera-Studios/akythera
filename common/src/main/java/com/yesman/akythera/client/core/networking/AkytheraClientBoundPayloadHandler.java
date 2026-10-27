@@ -13,7 +13,6 @@ import com.yesman.akythera.client.api.gui.BlueprintWidgets;
 import com.yesman.akythera.client.api.gui.HudManager;
 import com.yesman.akythera.client.api.particle.AkytheraParticleSystem;
 import com.yesman.akythera.client.api.particle.AkytheraParticles;
-import com.yesman.akythera.client.input.AbilityInputBinder;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.blueprint.AbilityBlueprint;
 import com.yesman.akythera.core.blueprint.AbilityCueBlueprint;
@@ -109,8 +108,6 @@ public interface AkytheraClientBoundPayloadHandler {
             if (payload.ability().isEmpty()) {
                 component.removeAbility(payload.slot());
 
-                if (isLocalPlayer(entity)) AbilityInputBinder.unbind(payload.slot());
-
                 return;
             }
 
@@ -130,11 +127,6 @@ public interface AkytheraClientBoundPayloadHandler {
 
                     // A snapshot carries the current flag.
                     if (equipped != null && payload.activated()) equipped.applyActivated(component);
-
-                    // Only the local player has a keyboard, and only a filled slot has a key to read.
-                    if (equipped != null && isLocalPlayer(entity)) {
-                        AbilityInputBinder.bind(component, payload.slot(), equipped);
-                    }
                 });
         });
     }
@@ -167,10 +159,6 @@ public interface AkytheraClientBoundPayloadHandler {
                 case FINISHED -> instance.endAbility(component);
             }
         });
-    }
-
-    static boolean isLocalPlayer(final Entity entity) {
-        return entity == Minecraft.getInstance().player;
     }
 
     /// The client's entity `entityId`, or null.

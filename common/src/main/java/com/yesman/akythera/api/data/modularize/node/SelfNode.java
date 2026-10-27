@@ -5,8 +5,8 @@ import com.mojang.serialization.MapCodec;
 import com.yesman.akythera.core.reflection.DataDrivenScript;
 import org.jspecify.annotations.NonNull;
 
-/// A node that returns [DataDrivenScript#getScriptOwner]. Used for pure nodes
-/// that belongs to script owner.
+/// A node that returns [DataDrivenScript#getScriptOwner], or the run's [ExecutionContext#self] when it has one.
+/// Used for pure nodes that belongs to script owner.
 public class SelfNode implements PureNode {
     public static final SelfNode INSTANCE = new SelfNode();
     public static final Codec<SelfNode> CODEC = MapCodec.unitCodec(INSTANCE);
@@ -16,7 +16,7 @@ public class SelfNode implements PureNode {
     @Override
     public <T> T execute(DataDrivenScript<?, ?> script, ExecutionContext context) {
         context.enter(this);
-        return context.returnVal(script.getScriptOwner());
+        return context.returnVal(context.self() != null ? context.self() : script.getScriptOwner());
     }
 
     @Override

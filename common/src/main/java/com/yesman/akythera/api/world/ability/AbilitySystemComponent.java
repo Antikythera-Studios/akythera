@@ -5,7 +5,6 @@ import com.yesman.akythera.api.component.DynamicPatchComponent;
 import com.yesman.akythera.api.event.BuiltInEventHooks;
 import com.yesman.akythera.api.data.modularize.ScriptType;
 import com.yesman.akythera.api.component.PatchComponent;
-import com.yesman.akythera.api.input.InputAction;
 import com.yesman.akythera.api.component.TickableDynamicComponent;
 import com.yesman.akythera.api.component.UniqueComponent;
 import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
@@ -26,6 +25,8 @@ import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilit
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityTagSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayAbilityCue;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundTerminateAbilityCue;
+import com.yesman.akythera.core.networking.payload.serverbound.ServerBoundAbilityTrigger;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerPlayer;
@@ -189,9 +190,33 @@ public final class AbilitySystemComponent
         return true;
     }
 
-    /// Activates the ability in `slot`, or recasts it when it is already running.
-    @ScriptFunction(label = "Activate Ability", category = "Ability", desc = "Activates the slot, or recasts it when it is already running.")
+    /// Asks the server to [#activateAbility] the slot, sending the slot's state through its server bound codec.
+    /// Calls it directly on the server. Does nothing on a client for any entity but the local player.
+    @ScriptFunction(
+        label = "Request Ability Activation", category = "Ability",
+        desc = "Asks the server to activate the slot, or to recast it when it is already running. Only the local player can ask."
+    )
+    public void requestActivation(final AbilitySlot slot) {
+        if (owner.isLogicalServer()) {
+            activateAbility(slot);
+
+            return;
+        }
+
+        AbilityInstance instance = instances.get(slot);
+
+        if (instance == null || !(owner.getOriginal() instanceof Player player) || !player.isLocalPlayer()) return;
+
+        byte[] state = AbilityState.encode(instance.getState(), PacketFlow.SERVERBOUND, player.level().registryAccess());
+
+        NetworkingHelper.getInstance().sendToServer(new ServerBoundAbilityTrigger(slot, state));
+    }
+
+    /// Activates the ability in `slot`, or recasts it when it is already running. Server only.
+    @ScriptFunction(label = "Activate Ability", category = "Ability", desc = "Activates the slot, or recasts it when it is already running. Server side only.")
     public boolean activateAbility(final AbilitySlot slot) {
+        if (!owner.isLogicalServer()) return false;
+
         AbilityInstance instance = instances.get(slot);
 
         if (instance == null) return false;
@@ -200,24 +225,17 @@ public final class AbilitySystemComponent
         ActivationType activationType = activationTypeOf(instance);
 
         // A Toggle preset's second request cancels; a Hold preset's second request is the release,
-        // which finishes only when the hold reached its threshold. Only the presets with neither
-        // rule recast.
+        // which finishes. Only the presets with neither rule recast.
         if (wasActivated && activationType != null) {
             if (activationType.recastCancels()) return cancelAbility(slot);
-
-            if (activationType.recastFinishes()) {
-                return heldToThreshold(instance) ? endAbility(slot) : cancelAbility(slot);
-            }
+            if (activationType.recastFinishes()) return endAbility(slot);
         }
 
         if (wasActivated) syncLifecycle(slot, instance, ClientBoundAbilityLifecycle.Transition.RECAST);
 
         if (!instance.tryActivate(this)) return false;
 
-        if (!wasActivated) {
-            instance.setHoldingTicks(0);
-            syncLifecycle(slot, instance, ClientBoundAbilityLifecycle.Transition.ACTIVATED);
-        }
+        if (!wasActivated) syncLifecycle(slot, instance, ClientBoundAbilityLifecycle.Transition.ACTIVATED);
 
         // An Instant preset ends on the tick it activated.
         if (!wasActivated && activationType == ActivationType.INSTANT) endAbility(slot);
@@ -532,31 +550,9 @@ public final class AbilitySystemComponent
         });
     }
 
-    /// Whether `instance` was held to at least its input action's threshold. A preset naming no
-    /// input action, or no threshold, finishes.
-    ///
-    /// The count is the server's own; a client never sends one.
-    private static boolean heldToThreshold(final AbilityInstance instance) {
-        if (!(instance.getAbility() instanceof SystematicAbility<?> systematic)) return true;
-
-        Holder<InputAction> inputAction = systematic.getInputAction();
-
-        return inputAction == null || inputAction.value().reachedThreshold(instance.getHoldingTicks());
-    }
-
-    /// Counts each activated Hold ability's held ticks up by one.
-    private void tickHoldCounts() {
-        for (AbilityInstance held : instances.values()) {
-            if (!held.isActivated() || activationTypeOf(held) != ActivationType.HOLD) continue;
-
-            held.setHoldingTicks(held.getHoldingTicks() + 1);
-        }
-    }
-
     /// Drains every activated ability's Infinite costs.
     ///
-    /// A Hold ability that runs dry finishes when it was held to its threshold, and cancels
-    /// otherwise; every other preset cancels.
+    /// A Hold ability that runs dry finishes; every other preset cancels.
     private void tickCosts() {
         for (Map.Entry<AbilitySlot, AbilityInstance> entry : new ArrayList<>(instances.entrySet())) {
             AbilityInstance held = entry.getValue();
@@ -566,7 +562,7 @@ public final class AbilitySystemComponent
 
             if (systematic.chargeCosts(owner, AbilityEffect.ApplicationType.INFINITE)) continue;
 
-            if (systematic.getActivationType() == ActivationType.HOLD && heldToThreshold(held)) {
+            if (systematic.getActivationType() == ActivationType.HOLD) {
                 endAbility(entry.getKey());
             } else {
                 cancelAbility(entry.getKey());
@@ -839,10 +835,14 @@ public final class AbilitySystemComponent
 
     /// Sends `tracker` everything it needs to mirror this owner: the tags it carries, each filled
     /// slot with its current activation and state, the live plays synced to late trackers, then every live
-    /// effect application.
+    /// effect application. The owner's own client receives what its scope sends the owner.
     @ApiStatus.Internal
     public void sendSnapshotTo(final ServerPlayer tracker) {
         if (!owner.isLogicalServer()) return;
+
+        Predicate<InstantiationScope> reaches = owner.getOriginal() == tracker
+            ? InstantiationScope::reachesOwner
+            : InstantiationScope::reachesTrackers;
 
         int entityId = owner.getOriginal().getId();
 
@@ -856,7 +856,7 @@ public final class AbilitySystemComponent
             Ability<?> ability = entry.getValue().getAbility();
 
             if (ability == null || ability.getBlueprintKey() == null) continue;
-            if (!ability.getInstantiationScope().reachesTrackers()) continue;
+            if (!reaches.test(ability.getInstantiationScope())) continue;
 
             NetworkingHelper.getInstance().sendToClient(tracker, new ClientBoundAbilityEquipmentSync(
                 entityId,
@@ -878,7 +878,7 @@ public final class AbilitySystemComponent
         // After the slots: a play names its ability by slot.
         for (AbilityCue cue : cues) {
             if (!cue.isValid() || !cue.getScript().isSyncedToLateTrackers()) continue;
-            if (!cueScopeOf(cue).reachesTrackers()) continue;
+            if (!reaches.test(cueScopeOf(cue))) continue;
 
             ClientBoundPlayAbilityCue payload = playPayloadOf(cue);
 
@@ -890,7 +890,7 @@ public final class AbilitySystemComponent
             AbilityInstance source = instance.getSource();
 
             if (source != null
-                && (source.getAbility() == null || !scopeOf(source.getAbility()).reachesTrackers())) {
+                && (source.getAbility() == null || !reaches.test(scopeOf(source.getAbility())))) {
                 continue;
             }
 
@@ -1251,7 +1251,6 @@ public final class AbilitySystemComponent
         equipPendingLoadout();
         tickEffects();
         tickCosts();
-        tickHoldCounts();
 
         runningTasks.addAll(pendingTasks);
         pendingTasks.clear();

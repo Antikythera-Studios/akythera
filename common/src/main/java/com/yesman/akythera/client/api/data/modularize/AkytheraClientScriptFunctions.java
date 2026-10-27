@@ -9,7 +9,10 @@ import com.yesman.akythera.client.api.gui.AkytheraScreen;
 import com.yesman.akythera.client.api.gui.AkytheraWidget;
 import com.yesman.akythera.client.api.gui.BlueprintWidgets;
 import com.yesman.akythera.client.api.gui.HudManager;
+import com.yesman.akythera.api.data.modularize.node.ScriptCallback;
+import com.yesman.akythera.api.input.InputAction;
 import com.yesman.akythera.client.config.AkytheraClientConfig;
+import com.yesman.akythera.client.input.InputManager;
 import com.yesman.akythera.core.blueprint.widget.WidgetBlueprint;
 import com.yesman.akythera.core.blueprint.widget.WidgetUsage;
 import com.yesman.akythera.core.reflection.FunctionSignature;
@@ -200,6 +203,46 @@ public final class AkytheraClientScriptFunctions {
             "Widget",
             "What a widget blueprint was built for: the local player's patch for a screen or a HUD, the parent for a widget",
             true,
+            ScriptFunction.Usage.SCRIPT
+        );
+    }
+
+    // ***************************************************************
+    // Input
+    // ***************************************************************
+
+    /// Binds the [InputAction] through [InputManager#bindAction]. Does nothing off the render thread, where an
+    /// integrated server runs its scripts.
+    public static ScriptFunction bindAction() {
+        return ScriptModularizeHelper.makeCustomScript(
+            (ScriptFunction.QuintConsumer<InputAction, ScriptCallback, ScriptCallback, ScriptCallback, ScriptCallback>) (action, started, triggered, completed, canceled) -> {
+                if (action != null && Minecraft.getInstance().isSameThread()) {
+                    InputManager.getInstance().bindAction(action, started, triggered, completed, canceled);
+                }
+            },
+            FunctionSignature.create(
+                void.class, List.of("action", "started", "triggered", "completed", "canceled"),
+                InputAction.class, ScriptCallback.class, ScriptCallback.class, ScriptCallback.class, ScriptCallback.class
+            ),
+            "Bind Action",
+            "Input",
+            "Runs the pins as the camera entity when the input action fires: Started once per hold, Triggered every time, Completed and Canceled on release. Replaces an earlier binding of the action. Client side only",
+            false,
+            ScriptFunction.Usage.SCRIPT
+        );
+    }
+
+    /// Releases the [InputAction] through [InputManager#unbindAction]. Does nothing off the render thread.
+    public static ScriptFunction unbindAction() {
+        return ScriptModularizeHelper.makeCustomScript(
+            (Consumer<InputAction>) action -> {
+                if (action != null && Minecraft.getInstance().isSameThread()) InputManager.getInstance().unbindAction(action);
+            },
+            FunctionSignature.create(void.class, List.of("action"), InputAction.class),
+            "Unbind Action",
+            "Input",
+            "Stops running the pins Bind Action wired to the input action. Client side only",
+            false,
             ScriptFunction.Usage.SCRIPT
         );
     }

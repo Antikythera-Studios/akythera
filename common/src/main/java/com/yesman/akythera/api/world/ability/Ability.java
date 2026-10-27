@@ -1,11 +1,9 @@
 package com.yesman.akythera.api.world.ability;
 
 import com.yesman.akythera.api.data.modularize.ScriptFunction;
-import com.yesman.akythera.client.input.AbilityInputInterface;
 import com.yesman.akythera.core.blueprint.AbilityBlueprint;
 import com.yesman.akythera.core.reflection.BlueprintFunction;
 import com.yesman.akythera.core.reflection.ScriptType;
-import com.yesman.akythera.core.util.ClientOnly;
 import net.minecraft.resources.ResourceKey;
 import org.jetbrains.annotations.ApiStatus;
 import org.jspecify.annotations.Nullable;
@@ -30,17 +28,6 @@ public abstract class Ability<S extends AbilityState> {
     @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.PROPERTY)
     public InstantiationScope getInstantiationScope() {
         return InstantiationScope.EVERYWHERE;
-    }
-
-    /// This ability's key binding, as a static nested class implementing [AbilityInputInterface].
-    /// Null leaves the ability activated only by command or trigger.
-    ///
-    /// A dedicated server holds no client classes, and this declaration does not make it load one:
-    /// the generic erases, so the descriptor names only [Class], and the nested class is
-    /// resolved by the `ldc` in an override's body, which runs on a client.
-    @ClientOnly
-    public @Nullable Class<? extends AbilityInputInterface> getAbilityInputInterfaceClass() {
-        return null;
     }
 
     /// Builds the per-owner state handed to every callback, once per [AbilityInstance]. An ability

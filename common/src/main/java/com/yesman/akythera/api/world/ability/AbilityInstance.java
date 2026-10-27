@@ -19,9 +19,6 @@ public final class AbilityInstance {
     /// The last state sent to clients.
     private AbilityState prevState = AbilityState.EMPTY;
 
-    /// Ticks the activation input has been held. Server side only.
-    private int holdingTicks;
-
     /// Set once this instance's state threw while encoding, which latches its state sync off.
     private boolean stateSyncFailed;
 
@@ -54,10 +51,6 @@ public final class AbilityInstance {
         return prevState;
     }
 
-    public int getHoldingTicks() {
-        return holdingTicks;
-    }
-
     public boolean isStateSyncFailed() {
         return stateSyncFailed;
     }
@@ -65,10 +58,6 @@ public final class AbilityInstance {
     @ApiStatus.Internal
     public void setStateSyncFailed(final boolean stateSyncFailed) {
         this.stateSyncFailed = stateSyncFailed;
-    }
-
-    public void setHoldingTicks(final int holdingTicks) {
-        this.holdingTicks = holdingTicks;
     }
 
     public boolean isActivated() {
@@ -82,7 +71,6 @@ public final class AbilityInstance {
         state = ability.createState();
         prevState = ability.createState();
         activated = false;
-        holdingTicks = 0;
         stateSyncFailed = false;
 
         typed().onEquipped(abilitySystemComponent, this, state);

@@ -4,7 +4,6 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.data.modularize.ScriptFunction;
-import com.yesman.akythera.api.input.InputAction;
 import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
 import com.yesman.akythera.core.blueprint.AbilityBlueprint;
 import com.yesman.akythera.core.blueprint.script.BlueprintBody;
@@ -35,9 +34,6 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
     /// finishes the ability.
     private final @Nullable AbilityEffect durationEffect;
 
-    /// The key this ability reads, required by the presets that stay activated by input.
-    private final @Nullable Holder<InputAction> inputAction;
-
     private final Tags tags;
 
     private final List<Trigger> triggers;
@@ -51,7 +47,7 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
         final @Nullable AbilityEffect cooldownEffect,
         final @Nullable AbilityEffect durationEffect
     ) {
-        this(activationType, instantiationScope, costs, cooldownEffect, durationEffect, null, Tags.NONE, List.of());
+        this(activationType, instantiationScope, costs, cooldownEffect, durationEffect, Tags.NONE, List.of());
     }
 
     public SystematicAbility(
@@ -60,18 +56,11 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
         final List<AbilityEffect> costs,
         final @Nullable AbilityEffect cooldownEffect,
         final @Nullable AbilityEffect durationEffect,
-        final @Nullable Holder<InputAction> inputAction,
         final Tags tags,
         final List<Trigger> triggers
     ) {
         if (activationType == ActivationType.DURATION && durationEffect == null) {
             throw new IllegalArgumentException("A Duration ability needs a Duration Effect.");
-        }
-
-        if (activationType.requiresInputAction() && inputAction == null) {
-            throw new IllegalArgumentException(
-                "A " + activationType + " ability stays activated by its key, and names no Input Action."
-            );
         }
 
         // The ability's lifetime is the effect's.
@@ -125,7 +114,6 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
         this.costs = List.copyOf(costs);
         this.cooldownEffect = cooldownEffect;
         this.durationEffect = durationEffect;
-        this.inputAction = inputAction;
         this.tags = tags;
         this.triggers = List.copyOf(triggers);
     }
@@ -142,7 +130,6 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
             body.property(SystematicAbility.class, "costs", List.of()),
             body.property(SystematicAbility.class, "cooldownEffect", null),
             body.property(SystematicAbility.class, "durationEffect", null),
-            body.property(SystematicAbility.class, "inputAction", null),
             body.property(SystematicAbility.class, "tags", Tags.NONE),
             body.property(SystematicAbility.class, "triggers", List.of())
         );
@@ -167,11 +154,6 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
     @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.PROPERTY)
     public @Nullable AbilityEffect getDurationEffect() {
         return durationEffect;
-    }
-
-    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.PROPERTY)
-    public @Nullable Holder<InputAction> getInputAction() {
-        return inputAction;
     }
 
     @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.PROPERTY)

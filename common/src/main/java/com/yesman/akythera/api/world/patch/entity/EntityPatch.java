@@ -180,6 +180,9 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
         entityEventListener.registerEvent(BuiltInEventHooks.Entity.SEND_SYNC_DATA, _ -> sendData());
         entityEventListener.registerEvent(BuiltInEventHooks.Entity.SERIALIZE, event -> writeData(event.getCompoundTag()));
         entityEventListener.registerEvent(BuiltInEventHooks.Entity.DESERIALIZE, event -> readData(event.getCompoundTag()));
+        entityEventListener.registerEvent(BuiltInEventHooks.Entity.POSSESSED, _ -> onPossessed());
+        entityEventListener.registerEvent(BuiltInEventHooks.Entity.UNPOSSESSED, _ -> onUnpossessed());
+        entityEventListener.registerEvent(BuiltInEventHooks.Entity.DEATH, _ -> onDeath());
     }
 
     @Override
@@ -215,6 +218,23 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
 	public void onJoinWorld(Level level, boolean worldGenSpawn) {
         if (script != null) script.onJoinWorld(level);
 	}
+
+    /// Called when the client camera starts following this entity
+    @ClientOnly
+    public void onPossessed() {
+        if (script != null) script.onPossessed();
+    }
+
+    /// Called when the client camera stops following this entity
+    @ClientOnly
+    public void onUnpossessed() {
+        if (script != null) script.onUnpossessed();
+    }
+
+    /// Called on the server on the first tick this entity is dead
+    public void onDeath() {
+        if (script != null) script.onDeath();
+    }
 
     /// Ticks before [Entity#tick]
 	public void preTick() {

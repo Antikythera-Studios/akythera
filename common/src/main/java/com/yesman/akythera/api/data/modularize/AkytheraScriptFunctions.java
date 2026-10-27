@@ -498,6 +498,17 @@ public final class AkytheraScriptFunctions {
     public static final Holder<ScriptFunction> WIDGET_OWNER = registerClientOnly(
         "widget_owner", AkytheraClientScriptFunctions::widgetOwner, List.of("host"), ScriptFunction.Usage.SCRIPT);
 
+    // ***********************************************
+    // Input
+    // ***********************************************
+
+    public static final Holder<ScriptFunction> BIND_ACTION = registerClientOnly(
+        "bind_action", AkytheraClientScriptFunctions::bindAction,
+        List.of("action", "started", "triggered", "completed", "canceled"), ScriptFunction.Usage.SCRIPT);
+
+    public static final Holder<ScriptFunction> UNBIND_ACTION = registerClientOnly(
+        "unbind_action", AkytheraClientScriptFunctions::unbindAction, List.of("action"), ScriptFunction.Usage.SCRIPT);
+
     /// Registers `client` on a physical client. A dedicated server, which lacks the client classes `client` names,
     /// registers a [ScriptModularizeHelper#placeholder] taking `parameterNames` under the same id.
     private static Holder<ScriptFunction> registerClientOnly(

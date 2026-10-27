@@ -16,6 +16,7 @@ public interface PureNode extends ScriptNode {
         node ->
             switch (node) {
                 case SelfNode _                  -> "self_node";
+                case NullNode _                  -> "null_node";
                 case LiteralNode<?> _            -> "literal_node";
                 case PureFunctionNode _          -> "pure_task_node";
                 case ScriptVariableGetterNode _  -> "variable_getter";
@@ -43,6 +44,7 @@ public interface PureNode extends ScriptNode {
         literal ->
             switch (literal) {
                 case "self_node"             -> SelfNode.CODEC.fieldOf("self_node");
+                case "null_node"             -> NullNode.CODEC.fieldOf("null_node");
                 case "literal_node"          -> LiteralNode.CODEC.fieldOf("literal_node");
                 case "pure_task_node"        -> PureFunctionNode.CODEC.fieldOf("pure_task_node");
                 case "variable_getter"       -> ScriptVariableGetterNode.CODEC.fieldOf("variable_getter");
