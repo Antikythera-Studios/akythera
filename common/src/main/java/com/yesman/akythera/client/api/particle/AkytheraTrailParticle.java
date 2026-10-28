@@ -27,9 +27,11 @@ import java.util.function.UnaryOperator;
 ///
 /// Times are in ticks since the tick before the trail spawned: a tick is at `age`, a frame at `age + partialTick`.
 ///
-/// Every tick samples the edge at the tick and up to [TrailParticleBlueprint#interpolation] edges evenly between it and
-/// the last edge, each stamped with its time. The edges between are the fewest that keep two edges at most the trail's
-/// length × [TrailParticleBlueprint#interpolationSpacing] apart, on the side of the edge that moved further. A frame
+/// Every tick samples the edge at the tick and up to [TrailParticleBlueprint#interpolation] edges evenly in time between
+/// it and the last edge, each stamped with its time. The edges between are the fewest that keep two edges at most the
+/// trail's length × [TrailParticleBlueprint#interpolationSpacing] apart, on the side of the edge that moved further.
+/// They are placed along the emitter's transforms the frames drew since the last sample, so a swing turning more than
+/// half a circle in a tick keeps its direction. A frame
 /// draws the edges between `now - trailLifetime` and `now`, where `now` is the frame's time. While sampling, the frame
 /// closes the trail with one more edge at the emitter as the frame draws it, so the trail reaches its socket. An edge
 /// is drawn translucent by its lifetime left, see [TrailParticleBlueprint#fadeOut].
@@ -62,9 +64,8 @@ public class AkytheraTrailParticle extends Particle implements AkytheraParticle 
     /// Sampled edges, oldest first.
     private final List<Edge> edges = new ArrayList<>();
 
-    /// The emitter's transform at the last tick and the one before, in world space.
-    private Transform source;
-    private Transform previousSource;
+    /// The emitter's transforms since the last sample, oldest first, in world space: the last sample, then each frame's.
+    private final List<Waypoint> path = new ArrayList<>();
 
     /// Whether the trail still samples edges: until its lifetime ends, its system stops, or its socket is gone.
     private boolean sampling = true;
@@ -79,18 +80,19 @@ public class AkytheraTrailParticle extends Particle implements AkytheraParticle 
         this.startTick = emitter.getSystem().tickPartialTick();
         this.endTick = this.startTick + (emitter.getBlueprint().spawn().duration() - this.spawnTime) * 20.0F;
         this.length = blueprint.length();
-        this.source = Objects.requireNonNullElse(sourceTransform(this.startTick, this.startTick), emitter.getWorldTransform());
-        this.previousSource = this.source;
         this.hasPhysics = false;
         this.setSize(blueprint.properties().bbWidth(), blueprint.properties().bbHeight());
         this.lifetime = Math.max(1, Mth.ceil(this.endTick));
-        this.edges.add(edgeOf(this.source, this.startTick));
+
+        Transform source = Objects.requireNonNullElse(sourceTransform(this.startTick, this.startTick), emitter.getWorldTransform());
+        this.path.add(new Waypoint(source, this.startTick));
+        this.edges.add(edgeOf(source, this.startTick));
     }
 
     @Override
     public void emitterInit(final AkytheraParticleEmitter emitter) {
         state.runInitializers(this);
-        edges.set(0, edgeOf(source, startTick));
+        edges.set(0, edgeOf(path.getFirst().transform(), startTick));
     }
 
     @Override
@@ -110,22 +112,8 @@ public class AkytheraTrailParticle extends Particle implements AkytheraParticle 
             if (sampled == null) {
                 sampling = false;
             } else {
-                previousSource = source;
-                source = sampled;
-                Edge last = edges.getLast();
-                Edge next = edgeOf(source, age);
-                double travel = Math.max(last.start().distanceTo(next.start()), last.end().distanceTo(next.end()));
-                float spacing = length * blueprint.interpolationSpacing();
-                int steps = spacing > 0.0F
-                    ? Mth.clamp(Mth.ceil(travel / spacing), 1, blueprint.interpolation() + 1)
-                    : blueprint.interpolation() + 1;
-
-                for (int i = 1; i <= steps; i++) {
-                    float delta = (float)i / steps;
-                    edges.add(edgeOf(Transform.slerp(previousSource, source, delta), Mth.lerp(delta, last.time(), age)));
-                }
-
-                setPos(source.loc().x, source.loc().y, source.loc().z);
+                sampleTo(sampled, age);
+                setPos(sampled.loc().x, sampled.loc().y, sampled.loc().z);
                 sampling = !ends;
             }
         }
@@ -150,9 +138,11 @@ public class AkytheraTrailParticle extends Particle implements AkytheraParticle 
         Transform head = sampling && now > edges.getLast().time() ? sourceTransform(now, partialTick) : null;
 
         if (sampling && (now >= endTick || getEmitter().isFinished())) {
-            if (head != null) edges.add(edgeOf(head, now));
+            if (head != null) sampleTo(head, now);
 
             sampling = false;
+        } else if (head != null && now > path.getLast().time()) {
+            path.add(new Waypoint(head, now));
         }
 
         float cutoff = now - blueprint.trailLifetime();
@@ -206,6 +196,57 @@ public class AkytheraTrailParticle extends Particle implements AkytheraParticle 
             ARGB.multiply(getColor().packARGB(), tint),
             getLightCoords(partialTick)
         );
+    }
+
+    /// Every sampled edge camera-relative, with its lifetime left at the frame's time.
+    public List<DebugEdge> debugEdges(final Vec3 cameraPosition, final float partialTick) {
+        float cutoff = age + partialTick - blueprint.trailLifetime();
+
+        return edges.stream()
+            .map(edge -> new DebugEdge(
+                edge.start().subtract(cameraPosition),
+                edge.end().subtract(cameraPosition),
+                Mth.clamp((edge.time() - cutoff) / blueprint.trailLifetime(), 0.0F, 1.0F)
+            ))
+            .toList();
+    }
+
+    /// Samples `sampled`'s edge at `time` and the edges between it and the last one, placed along [#path]. Then
+    /// `sampled` starts the path.
+    private void sampleTo(final Transform sampled, final float time) {
+        Edge last = edges.getLast();
+        path.add(new Waypoint(sampled, time));
+
+        double travel = 0.0D;
+
+        for (int i = 1; i < path.size(); i++) {
+            Edge from = edgeOf(path.get(i - 1).transform(), 0.0F);
+            Edge to = edgeOf(path.get(i).transform(), 0.0F);
+            travel += Math.max(from.start().distanceTo(to.start()), from.end().distanceTo(to.end()));
+        }
+
+        float spacing = length * blueprint.interpolationSpacing();
+        int steps = spacing > 0.0F
+            ? Mth.clamp(Mth.ceil(travel / spacing), 1, blueprint.interpolation() + 1)
+            : blueprint.interpolation() + 1;
+        int segment = 1;
+
+        for (int i = 1; i <= steps; i++) {
+            float edgeTime = Mth.lerp((float)i / steps, last.time(), time);
+
+            while (segment < path.size() - 1 && path.get(segment).time() < edgeTime) {
+                segment++;
+            }
+
+            Waypoint from = path.get(segment - 1);
+            Waypoint to = path.get(segment);
+            float delta = to.time() > from.time() ? Mth.clamp((edgeTime - from.time()) / (to.time() - from.time()), 0.0F, 1.0F) : 1.0F;
+
+            edges.add(edgeOf(Transform.slerp(from.transform(), to.transform(), delta), edgeTime));
+        }
+
+        path.clear();
+        path.add(new Waypoint(sampled, time));
     }
 
     /// Where the emitter is at the trail's `time`, in world space, or null once its socket is gone: the socket's
@@ -274,5 +315,17 @@ public class AkytheraTrailParticle extends Particle implements AkytheraParticle 
     /// @param end   the trail's far side
     /// @param time  in ticks since the particle spawned
     private record Edge(Vec3 start, Vec3 end, float time) {
+    }
+
+    /// The emitter's transform at `time`, in world space.
+    private record Waypoint(Transform transform, float time) {
+    }
+
+    /// One sampled edge as [#debugEdges] answers it.
+    ///
+    /// @param start    the emitter's origin, camera-relative
+    /// @param end      the trail's far side, camera-relative
+    /// @param lifeLeft the share of [TrailParticleBlueprint#trailLifetime] left, 0 to 1
+    public record DebugEdge(Vec3 start, Vec3 end, float lifeLeft) {
     }
 }
