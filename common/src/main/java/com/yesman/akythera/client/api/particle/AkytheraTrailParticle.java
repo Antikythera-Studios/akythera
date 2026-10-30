@@ -198,19 +198,6 @@ public class AkytheraTrailParticle extends Particle implements AkytheraParticle 
         );
     }
 
-    /// Every sampled edge camera-relative, with its lifetime left at the frame's time.
-    public List<DebugEdge> debugEdges(final Vec3 cameraPosition, final float partialTick) {
-        float cutoff = age + partialTick - blueprint.trailLifetime();
-
-        return edges.stream()
-            .map(edge -> new DebugEdge(
-                edge.start().subtract(cameraPosition),
-                edge.end().subtract(cameraPosition),
-                Mth.clamp((edge.time() - cutoff) / blueprint.trailLifetime(), 0.0F, 1.0F)
-            ))
-            .toList();
-    }
-
     /// Samples `sampled`'s edge at `time` and the edges between it and the last one, placed along [#path]. Then
     /// `sampled` starts the path.
     private void sampleTo(final Transform sampled, final float time) {
@@ -319,13 +306,5 @@ public class AkytheraTrailParticle extends Particle implements AkytheraParticle 
 
     /// The emitter's transform at `time`, in world space.
     private record Waypoint(Transform transform, float time) {
-    }
-
-    /// One sampled edge as [#debugEdges] answers it.
-    ///
-    /// @param start    the emitter's origin, camera-relative
-    /// @param end      the trail's far side, camera-relative
-    /// @param lifeLeft the share of [TrailParticleBlueprint#trailLifetime] left, 0 to 1
-    public record DebugEdge(Vec3 start, Vec3 end, float lifeLeft) {
     }
 }
