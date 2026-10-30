@@ -2,6 +2,7 @@ package com.yesman.akythera.api.world.ability;
 
 import com.yesman.akythera.core.reflection.ScriptType;
 import org.jetbrains.annotations.ApiStatus;
+import org.jspecify.annotations.Nullable;
 
 /// A reference to one running [AbilityTask].
 ///
@@ -12,12 +13,25 @@ public final class AbilityTaskHandle {
     private final AbilitySystemComponent abilitySystemComponent;
     private final AbilityTask task;
 
+    /// Run after [AbilityTask#onEnd] when the task finishes its own work.
+    private final @Nullable Runnable onCompleted;
+
+    /// Run after [AbilityTask#onCanceled] when the task is stopped before finishing.
+    private final @Nullable Runnable onInterrupted;
+
     private boolean valid = true;
 
     @ApiStatus.Internal
-    AbilityTaskHandle(final AbilitySystemComponent abilitySystemComponent, final AbilityTask task) {
+    AbilityTaskHandle(
+        final AbilitySystemComponent abilitySystemComponent,
+        final AbilityTask task,
+        final @Nullable Runnable onCompleted,
+        final @Nullable Runnable onInterrupted
+    ) {
         this.abilitySystemComponent = abilitySystemComponent;
         this.task = task;
+        this.onCompleted = onCompleted;
+        this.onInterrupted = onInterrupted;
     }
 
     /// Whether the task is still running.
@@ -45,5 +59,13 @@ public final class AbilityTaskHandle {
     @ApiStatus.Internal
     void invalidate() {
         valid = false;
+    }
+
+    /// Runs [#onInterrupted] when `canceled`, [#onCompleted] otherwise.
+    @ApiStatus.Internal
+    void runCallback(final boolean canceled) {
+        Runnable callback = canceled ? onInterrupted : onCompleted;
+
+        if (callback != null) callback.run();
     }
 }

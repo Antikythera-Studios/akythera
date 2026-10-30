@@ -27,4 +27,19 @@ public abstract class RegistryAccessEvent extends Event {
     /// In physical server, this event called only once the game terminated
     public static final class Unload extends RegistryAccessEvent {
     }
+
+    /// Called when the data pack registries of a loaded [RegistryAccess] are refilled in place, without a world
+    /// reload. Anything built from their entries is stale.
+    public static final class Reload extends RegistryAccessEvent {
+        private final RegistryAccess registryAccess;
+
+        public Reload(RegistryAccess registryAccess) {
+            this.registryAccess = registryAccess;
+        }
+
+        /// Returns the refilled registry access
+        public final RegistryAccess getRegistryAccess() {
+            return registryAccess;
+        }
+    }
 }

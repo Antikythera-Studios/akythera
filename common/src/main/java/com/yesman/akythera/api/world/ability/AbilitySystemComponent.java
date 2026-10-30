@@ -9,6 +9,7 @@ import com.yesman.akythera.api.component.TickableDynamicComponent;
 import com.yesman.akythera.api.component.UniqueComponent;
 import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
 import com.yesman.akythera.core.Akythera;
+import com.yesman.akythera.api.lifecycle.ComponentsFactory;
 import com.yesman.akythera.core.blueprint.AbilityBlueprint;
 import com.yesman.akythera.core.blueprint.AbilityCueBlueprint;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
@@ -151,7 +152,7 @@ public final class AbilitySystemComponent
 
         if (!(registry.wrapAsHolder(ability) instanceof Holder.Reference<AbilityBlueprint> blueprint)) return null;
 
-        Ability<?> built = AbilityBlueprint.createAbility(blueprint);
+        Ability<?> built = ComponentsFactory.getImpl().getAbility(blueprint);
 
         return built == null ? null : giveAbility(slot, built);
     }
@@ -240,7 +241,23 @@ public final class AbilitySystemComponent
         // An Instant preset ends on the tick it activated.
         if (!wasActivated && activationType == ActivationType.INSTANT) endAbility(slot);
 
+        endGeneralIfIdle(instance);
+
         return true;
+    }
+
+    /// Ends `instance` as completed when it is an activated General preset with no task running that
+    /// [AbilityTask#endsWithAbility].
+    private void endGeneralIfIdle(final @Nullable AbilityInstance instance) {
+        if (instance == null || !instance.isActivated() || activationTypeOf(instance) != ActivationType.GENERAL) return;
+
+        for (List<AbilityTaskHandle> tasks : List.of(runningTasks, pendingTasks)) {
+            for (AbilityTaskHandle handle : tasks) {
+                if (handle.isValid() && handle.getTask().getOwner() == instance && handle.getTask().endsWithAbility()) return;
+            }
+        }
+
+        if (instance.getSlot() != null) endAbility(instance.getSlot());
     }
 
     /// The preset driving `instance`, or null for a bare [Ability].
@@ -310,14 +327,24 @@ public final class AbilitySystemComponent
     /// Starts `task` on behalf of `abilityInstance`. [AbilityTask#onStart] runs now and
     /// [AbilityTask#tick] from the next tick on.
     ///
+    /// An activated General preset stays activated until every task it started that
+    /// [AbilityTask#endsWithAbility] has ended.
+    ///
+    /// @param completed   run when the task finishes its own work
+    /// @param interrupted run when the task is stopped before finishing
     /// @return the handle, or null on the client or for an instance holding no ability
     @ScriptFunction(label = "Activate Ability Task", category = "Ability/Task")
-    public @Nullable AbilityTaskHandle activateTask(final AbilityInstance abilityInstance, final AbilityTask task) {
+    public @Nullable AbilityTaskHandle activateTask(
+        final AbilityInstance abilityInstance,
+        final AbilityTask task,
+        final @Nullable Runnable completed,
+        final @Nullable Runnable interrupted
+    ) {
         if (!owner.isLogicalServer() || abilityInstance.getAbility() == null) return null;
 
         task.bind(abilityInstance);
 
-        AbilityTaskHandle handle = new AbilityTaskHandle(this, task);
+        AbilityTaskHandle handle = new AbilityTaskHandle(this, task, completed, interrupted);
         pendingTasks.add(handle);
         task.onStart(this);
 
@@ -328,11 +355,13 @@ public final class AbilitySystemComponent
     @ApiStatus.Internal
     void cancelTask(final AbilityTaskHandle handle) {
         terminate(handle, true);
+        endGeneralIfIdle(handle.getTask().getOwner());
     }
 
-    /// Ends one task, firing exactly one of [AbilityTask#onCanceled] or [AbilityTask#onEnd].
+    /// Ends one task, firing exactly one of [AbilityTask#onCanceled] or [AbilityTask#onEnd], then the
+    /// handle's matching callback.
     ///
-    /// The handle is invalidated and delisted before the callback runs.
+    /// The handle is invalidated and delisted before the callbacks run.
     private void terminate(final AbilityTaskHandle handle, final boolean canceled) {
         if (!handle.isValid()) return;
 
@@ -345,6 +374,8 @@ public final class AbilitySystemComponent
         } else {
             handle.getTask().onEnd(this);
         }
+
+        handle.runCallback(canceled);
     }
 
     /// Ends `abilityInstance`'s tasks as canceled.
@@ -544,7 +575,7 @@ public final class AbilitySystemComponent
                 return;
             }
 
-            Ability<?> ability = AbilityBlueprint.createAbility(blueprint);
+            Ability<?> ability = ComponentsFactory.getImpl().getAbility(blueprint);
 
             if (ability != null) giveAbility(slot, ability);
         });
@@ -1266,12 +1297,14 @@ public final class AbilitySystemComponent
 
             if (!task.canContinue(this)) {
                 terminate(handle, true);
+                endGeneralIfIdle(task.getOwner());
 
                 continue;
             }
 
             if (task.isEnd(this)) {
                 terminate(handle, false);
+                endGeneralIfIdle(task.getOwner());
             }
         }
 

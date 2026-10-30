@@ -9,6 +9,9 @@ public enum ActivationType {
     /// Activates, then ends on the same tick.
     INSTANT,
 
+    /// Activates, then finishes once the tasks it started have all ended: on the same tick when it started none.
+    GENERAL,
+
     /// Activates, then finishes when the Duration Effect expires.
     DURATION,
 

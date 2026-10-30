@@ -55,6 +55,7 @@ public final class BuiltInEventHooks {
     public static final class Registry {
         public static final EventHook<RegistryAccessEvent.Load> REGISTRY_ACCESS_LOAD = EventHook.createEventHook();
         public static final EventHook<RegistryAccessEvent.Unload> REGISTRY_ACCESS_UNLOAD = EventHook.createEventHook();
+        public static final EventHook<RegistryAccessEvent.Reload> REGISTRY_ACCESS_RELOAD = EventHook.createEventHook();
         public static final EventHook<GatherScriptModuleEvent> GATHER_SCRIPT_MODULE = EventHook.createEventHook();
         public static final CancelableEventHook<RegistryEntryLookupEvent.ByKey<?>> LOOKUP_ENTRY_BY_KEY = CancelableEventHook.createCancelableEventHook();
         public static final CancelableEventHook<RegistryEntryLookupEvent.ByValue<?>> LOOKUP_ENTRY_BY_VALUE = CancelableEventHook.createCancelableEventHook();
