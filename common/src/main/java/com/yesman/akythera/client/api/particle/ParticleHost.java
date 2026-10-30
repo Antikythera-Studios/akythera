@@ -3,6 +3,7 @@ package com.yesman.akythera.client.api.particle;
 import com.yesman.akythera.core.blueprint.particle.ParticleBlueprint;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
+import com.yesman.akythera.mixinaccessor.client.ParticleEngineAccessor;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.particle.Particle;
 import net.minecraft.resources.ResourceKey;
@@ -17,7 +18,7 @@ public interface ParticleHost {
     ParticleHost LEVEL = new ParticleHost() {
         @Override
         public void add(final AkytheraParticle particle) {
-            Minecraft.getInstance().particleEngine.add((Particle)particle);
+            ((ParticleEngineAccessor)Minecraft.getInstance().particleEngine).akythera$addNow((Particle)particle);
         }
 
         @Override

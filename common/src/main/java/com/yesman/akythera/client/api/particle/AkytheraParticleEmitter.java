@@ -162,7 +162,10 @@ public class AkytheraParticleEmitter {
         lastLocal = -1.0F;
         finished = false;
 
-        if (local > 0.0F && blueprint.spawn().duration() <= 0.0F || local >= 0.0F && spawner.isOver(local)) finish();
+        // A fresh trail spawner is never over before it spawned
+        boolean over = blueprint.spawn() instanceof TrailSpawnRule ? local >= blueprint.spawn().duration() : spawner.isOver(local);
+
+        if (local > 0.0F && blueprint.spawn().duration() <= 0.0F || local >= 0.0F && over) finish();
     }
 
     /// Stops spawning, and removes the live particles this emitter spawned when it hides them on finish.
