@@ -28,6 +28,8 @@ import org.jspecify.annotations.NonNull;
 /// loaded from resource packs and are not server-synced, so server-side notifies would
 /// never trigger correctly. Use [AnimationMontage] if you need server-side notifies and
 /// proper network handling.
+///
+/// @param moveVertical whether [#rootMotion] moves the entity along the y axis
 public record AnimationSequence(
     AnimationNotifyTrack notifyTrack,
     AssetAccessor<AnimationClip> animClip,
@@ -35,7 +37,8 @@ public record AnimationSequence(
     float fadeOutTime,
     boolean loops,
     boolean rootMotion,
-    float rateScale,
+    boolean moveVertical,
+    float playRate,
     float phaseOffset
 ) implements PlayableAnimation {
     public static final MapCodec<AnimationSequence> MAP_CODEC = RecordCodecBuilder.mapCodec(
@@ -47,7 +50,8 @@ public record AnimationSequence(
                 Codec.FLOAT.fieldOf("fade_out_time").forGetter(AnimationSequence::fadeOutTime),
                 Codec.BOOL.fieldOf("loops").forGetter(AnimationSequence::loops),
                 Codec.BOOL.fieldOf("root_motion").forGetter(AnimationSequence::rootMotion),
-                ExtraCodecs.POSITIVE_FLOAT.optionalFieldOf("rate_scale", 1.0F).forGetter(AnimationSequence::rateScale),
+                Codec.BOOL.optionalFieldOf("move_vertical", true).forGetter(AnimationSequence::moveVertical),
+                ExtraCodecs.POSITIVE_FLOAT.optionalFieldOf("play_rate", 1.0F).forGetter(AnimationSequence::playRate),
                 Codec.floatRange(0.0F, 1.0F).optionalFieldOf("phase_offset", 0.0F).forGetter(AnimationSequence::phaseOffset)
             )
             .apply(instance, AnimationSequence::new)
@@ -57,14 +61,14 @@ public record AnimationSequence(
 
     /// Convenience: no notifies, default fade times
     public AnimationSequence(final AssetAccessor<AnimationClip> animClip, final boolean loops, final boolean rootMotion) {
-        this(AnimationNotifyTrack.EMPTY, animClip, DEFAULT_FADE_TIME, DEFAULT_FADE_TIME, loops, rootMotion, 1.0F, 0.0F);
+        this(AnimationNotifyTrack.EMPTY, animClip, DEFAULT_FADE_TIME, DEFAULT_FADE_TIME, loops, rootMotion, true, 1.0F, 0.0F);
     }
 
     public AnimationSequence(
         final AnimationNotifyTrack notifyTrack, final AssetAccessor<AnimationClip> animClip, final float fadeInTime,
         final float fadeOutTime, final boolean loops, final boolean rootMotion
     ) {
-        this(notifyTrack, animClip, fadeInTime, fadeOutTime, loops, rootMotion, 1.0F, 0.0F);
+        this(notifyTrack, animClip, fadeInTime, fadeOutTime, loops, rootMotion, true, 1.0F, 0.0F);
     }
 
     /// This sequence over the mirrored twin of its clip, see [AnimationManager#getMirrorAnimation].
@@ -72,7 +76,7 @@ public record AnimationSequence(
     @Override
     public AnimationSequence mirrored() {
         return new AnimationSequence(
-            notifyTrack, AnimationManager.getMirrorAnimation(animClip), fadeInTime, fadeOutTime, loops, rootMotion, rateScale, phaseOffset);
+            notifyTrack, AnimationManager.getMirrorAnimation(animClip), fadeInTime, fadeOutTime, loops, rootMotion, moveVertical, playRate, phaseOffset);
     }
 
     @Override

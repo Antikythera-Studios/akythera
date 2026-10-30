@@ -27,6 +27,7 @@ import com.yesman.akythera.core.reflection.ScriptType;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.util.ExtraCodecs;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.NonNull;
 
@@ -56,7 +57,9 @@ public final class AnimationMontage implements PlayableAnimation {
                 Codec.FLOAT.fieldOf("fade_in_time").forGetter(AnimationMontage::fadeInTime),
                 Codec.FLOAT.fieldOf("fade_out_time").forGetter(AnimationMontage::fadeOutTime),
                 Codec.BOOL.fieldOf("loops").forGetter(AnimationMontage::loops),
-                Codec.BOOL.fieldOf("root_motion").forGetter(AnimationMontage::rootMotion)
+                Codec.BOOL.fieldOf("root_motion").forGetter(AnimationMontage::rootMotion),
+                Codec.BOOL.optionalFieldOf("move_vertical", true).forGetter(AnimationMontage::moveVertical),
+                ExtraCodecs.POSITIVE_FLOAT.optionalFieldOf("play_rate", 1.0F).forGetter(AnimationMontage::playRate)
             )
             .apply(instance, AnimationMontage::new)
     );
@@ -108,11 +111,17 @@ public final class AnimationMontage implements PlayableAnimation {
     /// @see Armature#getRootBone
     private final boolean rootMotion;
 
+    /// Whether [#rootMotion] moves the entity along the y axis
+    private final boolean moveVertical;
+
     /// Pose blending time when montage starts to play
     private final float fadeInTime;
 
     /// Pose blending time when montage terminates
     private final float fadeOutTime;
+
+    /// Playback speed multiplier. Fade times are not scaled.
+    private final float playRate;
 
     private AnimationMontage(
         final AnimationNotifyTrack notifyTrack,
@@ -122,7 +131,9 @@ public final class AnimationMontage implements PlayableAnimation {
         final float fadeInTime,
         final float fadeOutTime,
         final boolean loops,
-        final boolean rootMotion
+        final boolean rootMotion,
+        final boolean moveVertical,
+        final float playRate
     ) {
         this.notifyTrack = notifyTrack;
         this.sectionInfo = sectionInfo;
@@ -132,6 +143,8 @@ public final class AnimationMontage implements PlayableAnimation {
         this.layerSignature = layerSignature;
         this.loops = loops;
         this.rootMotion = rootMotion;
+        this.moveVertical = moveVertical;
+        this.playRate = playRate;
         this.mergedClip = Suppliers.memoize(this::buildMergedClip);
     }
 
@@ -237,6 +250,10 @@ public final class AnimationMontage implements PlayableAnimation {
         return rootMotion;
     }
 
+    public boolean moveVertical() {
+        return moveVertical;
+    }
+
     @Override
     public float fadeInTime() {
         return fadeInTime;
@@ -245,6 +262,11 @@ public final class AnimationMontage implements PlayableAnimation {
     @Override
     public float fadeOutTime() {
         return fadeOutTime;
+    }
+
+    @Override
+    public float playRate() {
+        return playRate;
     }
 
     @Override
@@ -319,6 +341,8 @@ public final class AnimationMontage implements PlayableAnimation {
         float fadeOutTime = 0.2F;
         boolean loops;
         boolean enableRootMotion;
+        boolean moveVertical = true;
+        float playRate = 1.0F;
 
         private Builder() {}
 
@@ -409,6 +433,18 @@ public final class AnimationMontage implements PlayableAnimation {
             return this;
         }
 
+        /// Determines whether the root motion moves the entity along the y axis
+        public Builder moveVertical(final boolean moveVertical) {
+            this.moveVertical = moveVertical;
+            return this;
+        }
+
+        /// Playback speed multiplier. Fade times are not scaled.
+        public Builder playRate(final float playRate) {
+            this.playRate = playRate;
+            return this;
+        }
+
         public AnimationMontage create() throws IllegalStateException {
             return new AnimationMontage(
                 new AnimationNotifyTrack(
@@ -424,7 +460,9 @@ public final class AnimationMontage implements PlayableAnimation {
                 fadeInTime,
                 fadeOutTime,
                 loops,
-                enableRootMotion
+                enableRootMotion,
+                moveVertical,
+                playRate
             );
         }
     }

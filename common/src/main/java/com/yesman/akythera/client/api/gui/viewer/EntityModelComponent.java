@@ -475,6 +475,9 @@ public final class EntityModelComponent implements Model3DViewerComponent, Anima
         /// Whether pose update by render tick, or manual control.
         private boolean updatePose = true;
 
+        /// Playback speed multiplier, read each update.
+        private Supplier<Float> playRate = () -> 1.0F;
+
         /// Called
         @Nullable
         private Runnable onPlaybackEnds;
@@ -498,6 +501,10 @@ public final class EntityModelComponent implements Model3DViewerComponent, Anima
 
         public boolean isUpdatePose() {
             return updatePose;
+        }
+
+        public void setPlayRate(final Supplier<Float> playRate) {
+            this.playRate = playRate;
         }
 
         public float getElapsedTime() {
@@ -536,7 +543,7 @@ public final class EntityModelComponent implements Model3DViewerComponent, Anima
             float total = clip.getTotalTime();
 
             if (total > 0.0F) {
-                elapsedTime += timeFrame;
+                elapsedTime += timeFrame * playRate.get();
 
                 if (elapsedTime > total) {
                     if (onPlaybackEnds != null) onPlaybackEnds.run();

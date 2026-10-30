@@ -278,11 +278,12 @@ public final class AnimationMontagePlayer implements AnimationDriver {
                 String currentSectionName = sectionInfo.getSectionAt(elapsedTime);
                 TimeWindow currentSectionWindow = sectionInfo.getSectionTimeWindow(currentSectionName);
 
+                float playTime = frameTime * currentPlaying.value().playRate();
                 float totalTime = currentPlaying.value().getTotalFrameTime();
-                boolean reachesEnd = elapsedTime + frameTime > totalTime;
+                boolean reachesEnd = elapsedTime + playTime > totalTime;
 
                 // Exceeds the section & animation total time bound by increment
-                if (currentSectionWindow != null && !currentSectionWindow.isIn(elapsedTime + frameTime) || reachesEnd) {
+                if (currentSectionWindow != null && !currentSectionWindow.isIn(elapsedTime + playTime) || reachesEnd) {
                     String nextSectionName = sectionInfo.getNextSection(currentSectionName);
                     float sectionEnd = currentSectionWindow == null ? totalTime : Math.min(currentSectionWindow.to(), totalTime);
                     float restartTime;
@@ -303,7 +304,7 @@ public final class AnimationMontagePlayer implements AnimationDriver {
                         return;
                     }
 
-                    float deltaPlus = elapsedTime + frameTime - sectionEnd;
+                    float deltaPlus = elapsedTime + playTime - sectionEnd;
                     elapsedTime = restartTime + deltaPlus;
 
                     // The next tick runs the notifies to the section's end, then from the restart
@@ -314,7 +315,7 @@ public final class AnimationMontagePlayer implements AnimationDriver {
                     if (owner != null) currentPlaying.value().frameUpdate(owner, lastFrameTime, sectionEnd);
                     lastFrameTime = restartTime;
                 } else {
-                    elapsedTime += frameTime;
+                    elapsedTime += playTime;
                 }
             }
         }

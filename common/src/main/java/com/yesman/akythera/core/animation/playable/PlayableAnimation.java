@@ -42,7 +42,8 @@ public interface PlayableAnimation {
     /// Returns whether the animation should loop when it ends
     boolean loops();
 
-    default float rateScale() {
+    /// Playback speed multiplier. 1.0 plays at the authored speed.
+    default float playRate() {
         return 1.0F;
     }
 

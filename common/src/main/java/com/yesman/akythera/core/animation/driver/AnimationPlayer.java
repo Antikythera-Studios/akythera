@@ -98,7 +98,7 @@ public final class AnimationPlayer implements AnimationDriver {
             fadeTime = Math.clamp(fadeTime - frameTime, 0.0F, playableAnimation.value().fadeOutTime());
         }
 
-        elapsedTime += frameTime * playableAnimation.value().rateScale();
+        elapsedTime += frameTime * playableAnimation.value().playRate();
         float totalFrameTime = playableAnimation.value().getTotalFrameTime();
 
         if (elapsedTime > totalFrameTime) {
