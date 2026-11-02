@@ -83,6 +83,18 @@ public class DataDrivenAbility extends SystematicAbility<DataDrivenAbilityState>
     }
 
     @Override
+    public void onAbilityTick(
+        final AbilitySystemComponent abilitySystemComponent,
+        final AbilityInstance abilityInstance,
+        final DataDrivenAbilityState abilityState
+    ) {
+        super.onAbilityTick(abilitySystemComponent, abilityInstance, abilityState);
+
+        abilityState.getBlueprintExecutor().invokeMethod(
+            "onAbilityTick", null, abilitySystemComponent, abilityInstance, abilityState);
+    }
+
+    @Override
     public void onActivated(
         final AbilitySystemComponent abilitySystemComponent,
         final AbilityInstance abilityInstance,

@@ -195,8 +195,7 @@ public final class AbilitySystemComponent
     /// Calls it directly on the server. Does nothing on a client for any entity but the local player.
     ///
     /// @return on the server, what [#activateAbility] returned. On a client, whether the request was sent: the
-    ///         client's [AbilityInstance#canRecast] while the slot runs, its [AbilityInstance#canActivate] otherwise.
-    ///         A running Toggle or Hold preset always sends, since its second request ends it
+    ///         client's [AbilityInstance#canRecast] while the slot runs, its [AbilityInstance#canActivate] otherwise
     @ScriptFunction(
         label = "Request Ability Activation", category = "Ability",
         desc = "Asks the server to activate the slot, or to recast it when it is already running. Only the local player can ask. Returns whether the slot may activate or recast, as far as the client knows."
@@ -207,17 +206,63 @@ public final class AbilitySystemComponent
         AbilityInstance instance = instances.get(slot);
 
         if (instance == null || !(owner.getOriginal() instanceof Player player) || !player.isLocalPlayer()) return false;
+        if (!(instance.isActivated() ? instance.canRecast(this) : instance.canActivate(this))) return false;
 
-        ActivationType activationType = activationTypeOf(instance);
-        boolean ends = instance.isActivated() && activationType != null && (activationType.recastCancels() || activationType.recastFinishes());
-
-        if (!ends && !(instance.isActivated() ? instance.canRecast(this) : instance.canActivate(this))) return false;
-
-        byte[] state = AbilityState.encode(instance.getState(), PacketFlow.SERVERBOUND, player.level().registryAccess());
-
-        NetworkingHelper.getInstance().sendToServer(new ServerBoundAbilityTrigger(slot, state));
+        sendRequest(player, slot, instance, ServerBoundAbilityTrigger.Request.ACTIVATE);
 
         return true;
+    }
+
+    /// Asks the server to [#cancelAbility] the slot, or calls it directly on the server.
+    ///
+    /// @return on the server, what [#cancelAbility] returned. On a client, whether the request was sent
+    @ScriptFunction(
+        label = "Request Ability Cancel", category = "Ability",
+        desc = "Asks the server to stop the running slot as interrupted. Only the local player can ask."
+    )
+    public boolean requestCancel(final AbilitySlot slot) {
+        if (owner.isLogicalServer()) return cancelAbility(slot);
+
+        AbilityInstance instance = instances.get(slot);
+
+        if (instance == null || !instance.isActivated()) return false;
+        if (!(owner.getOriginal() instanceof Player player) || !player.isLocalPlayer()) return false;
+
+        sendRequest(player, slot, instance, ServerBoundAbilityTrigger.Request.CANCEL);
+
+        return true;
+    }
+
+    /// Asks the server to [#endAbility] the slot, or calls it directly on the server.
+    ///
+    /// @return on the server, what [#endAbility] returned. On a client, whether the request was sent
+    @ScriptFunction(
+        label = "Request Ability End", category = "Ability",
+        desc = "Asks the server to stop the running slot as completed. Only the local player can ask."
+    )
+    public boolean requestEnd(final AbilitySlot slot) {
+        if (owner.isLogicalServer()) return endAbility(slot);
+
+        AbilityInstance instance = instances.get(slot);
+
+        if (instance == null || !instance.isActivated()) return false;
+        if (!(owner.getOriginal() instanceof Player player) || !player.isLocalPlayer()) return false;
+
+        sendRequest(player, slot, instance, ServerBoundAbilityTrigger.Request.END);
+
+        return true;
+    }
+
+    /// Sends `request` for `slot`, carrying the slot's state through its server bound codec.
+    private static void sendRequest(
+        final Player player,
+        final AbilitySlot slot,
+        final AbilityInstance instance,
+        final ServerBoundAbilityTrigger.Request request
+    ) {
+        byte[] state = AbilityState.encode(instance.getState(), PacketFlow.SERVERBOUND, player.level().registryAccess());
+
+        NetworkingHelper.getInstance().sendToServer(new ServerBoundAbilityTrigger(slot, request, state));
     }
 
     /// Activates the ability in `slot`, or recasts it when it is already running. Server only.
@@ -229,17 +274,7 @@ public final class AbilitySystemComponent
 
         if (instance == null) return false;
 
-        boolean wasActivated = instance.isActivated();
-        ActivationType activationType = activationTypeOf(instance);
-
-        // A Toggle preset's second request cancels; a Hold preset's second request is the release,
-        // which finishes. Only the presets with neither rule recast.
-        if (wasActivated && activationType != null) {
-            if (activationType.recastCancels()) return cancelAbility(slot);
-            if (activationType.recastFinishes()) return endAbility(slot);
-        }
-
-        if (wasActivated) {
+        if (instance.isActivated()) {
             // Checked before the transition is sent, so a refused recast tells the clients nothing.
             if (!instance.canRecast(this)) return false;
 
@@ -249,35 +284,9 @@ public final class AbilitySystemComponent
             if (!instance.tryActivate(this)) return false;
 
             syncLifecycle(slot, instance, ClientBoundAbilityLifecycle.Transition.ACTIVATED);
-
-            // An Instant preset ends on the tick it activated.
-            if (activationType == ActivationType.INSTANT) endAbility(slot);
         }
-
-        endGeneralIfIdle(instance);
 
         return true;
-    }
-
-    /// Ends `instance` as completed when it is an activated General preset with no task running that
-    /// [AbilityTask#endsWithAbility].
-    private void endGeneralIfIdle(final @Nullable AbilityInstance instance) {
-        if (instance == null || !instance.isActivated() || activationTypeOf(instance) != ActivationType.GENERAL) return;
-
-        for (List<AbilityTaskHandle> tasks : List.of(runningTasks, pendingTasks)) {
-            for (AbilityTaskHandle handle : tasks) {
-                if (handle.isValid() && handle.getTask().getOwner() == instance && handle.getTask().endsWithAbility()) return;
-            }
-        }
-
-        if (instance.getSlot() != null) endAbility(instance.getSlot());
-    }
-
-    /// The preset driving `instance`, or null for a bare [Ability].
-    private static @Nullable ActivationType activationTypeOf(final AbilityInstance instance) {
-        return instance.getAbility() instanceof SystematicAbility<?> systematic
-            ? systematic.getActivationType()
-            : null;
     }
 
     /// Stops the ability in `slot` as interrupted.
@@ -340,9 +349,6 @@ public final class AbilitySystemComponent
     /// Starts `task` on behalf of `abilityInstance`. [AbilityTask#onStart] runs now and
     /// [AbilityTask#tick] from the next tick on.
     ///
-    /// An activated General preset stays activated until every task it started that
-    /// [AbilityTask#endsWithAbility] has ended.
-    ///
     /// @param completed   run when the task finishes its own work
     /// @param interrupted run when the task is stopped before finishing
     /// @return the handle, or null on the client or for an instance holding no ability
@@ -368,19 +374,24 @@ public final class AbilitySystemComponent
     @ApiStatus.Internal
     void cancelTask(final AbilityTaskHandle handle) {
         terminate(handle, true);
-        endGeneralIfIdle(handle.getTask().getOwner());
+    }
+
+    /// Whether `handle`'s task has not terminated yet. An invalidated handle's task may still run.
+    private boolean isRunning(final AbilityTaskHandle handle) {
+        return runningTasks.contains(handle) || pendingTasks.contains(handle);
     }
 
     /// Ends one task, firing exactly one of [AbilityTask#onCanceled] or [AbilityTask#onEnd], then the
-    /// handle's matching callback.
+    /// handle's matching callback unless the handle was invalidated before.
     ///
     /// The handle is invalidated and delisted before the callbacks run.
     private void terminate(final AbilityTaskHandle handle, final boolean canceled) {
-        if (!handle.isValid()) return;
+        boolean listed = runningTasks.remove(handle) | pendingTasks.remove(handle);
 
+        if (!listed) return;
+
+        boolean runsCallback = handle.isValid();
         handle.invalidate();
-        runningTasks.remove(handle);
-        pendingTasks.remove(handle);
 
         if (canceled) {
             handle.getTask().onCanceled(this);
@@ -388,7 +399,7 @@ public final class AbilitySystemComponent
             handle.getTask().onEnd(this);
         }
 
-        handle.runCallback(canceled);
+        if (runsCallback) handle.runCallback(canceled);
     }
 
     /// Ends `abilityInstance`'s tasks as canceled.
@@ -594,9 +605,15 @@ public final class AbilitySystemComponent
         });
     }
 
-    /// Drains every activated ability's Infinite costs.
-    ///
-    /// A Hold ability that runs dry finishes; every other preset cancels.
+    /// Runs [Ability#onAbilityTick] on every activated ability.
+    private void tickAbilities() {
+        // Copied, since an ability's tick may equip or remove abilities.
+        for (AbilityInstance held : new ArrayList<>(instances.values())) {
+            held.tick(this);
+        }
+    }
+
+    /// Drains every activated ability's Infinite costs, canceling an ability that runs dry.
     private void tickCosts() {
         for (Map.Entry<AbilitySlot, AbilityInstance> entry : new ArrayList<>(instances.entrySet())) {
             AbilityInstance held = entry.getValue();
@@ -604,13 +621,7 @@ public final class AbilitySystemComponent
             if (!held.isActivated()) continue;
             if (!(held.getAbility() instanceof SystematicAbility<?> systematic)) continue;
 
-            if (systematic.chargeCosts(owner, AbilityEffect.ApplicationType.INFINITE)) continue;
-
-            if (systematic.getActivationType() == ActivationType.HOLD) {
-                endAbility(entry.getKey());
-            } else {
-                cancelAbility(entry.getKey());
-            }
+            if (!systematic.chargeCosts(owner, AbilityEffect.ApplicationType.INFINITE)) cancelAbility(entry.getKey());
         }
     }
 
@@ -1287,6 +1298,7 @@ public final class AbilitySystemComponent
 
         if (!owner.isLogicalServer()) {
             tickMirroredEffects();
+            tickAbilities();
 
             return;
         }
@@ -1301,25 +1313,23 @@ public final class AbilitySystemComponent
 
         for (AbilityTaskHandle handle : new ArrayList<>(runningTasks)) {
             // A task earlier in this pass may have ended this one.
-            if (!handle.isValid()) continue;
+            if (!isRunning(handle)) continue;
 
             AbilityTask task = handle.getTask();
             task.tick(this);
 
-            if (!handle.isValid()) continue;
+            if (!isRunning(handle)) continue;
 
             if (!task.canContinue(this)) {
                 terminate(handle, true);
-                endGeneralIfIdle(task.getOwner());
 
                 continue;
             }
 
-            if (task.isEnd(this)) {
-                terminate(handle, false);
-                endGeneralIfIdle(task.getOwner());
-            }
+            if (task.isEnd(this)) terminate(handle, false);
         }
+
+        tickAbilities();
 
         // Last, so every write this tick made leaves on this tick.
         instances.forEach(this::flushState);

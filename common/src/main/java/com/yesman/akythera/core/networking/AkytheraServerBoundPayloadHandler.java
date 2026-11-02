@@ -15,8 +15,8 @@ public interface AkytheraServerBoundPayloadHandler {
         return (ServerPlayer)context.receiver();
     }
 
-    /// Reads the client's input into the slot's state, then turns the trigger into whatever the
-    /// slot's ability makes of it. An empty slot is a miss.
+    /// Reads the client's input into the slot's state, then runs the requested lifecycle change on
+    /// the slot. An empty slot is a miss.
     ///
     /// The target is always the sender's own player, and the read reaches only the fields the
     /// server bound codec carries.
@@ -29,7 +29,11 @@ public interface AkytheraServerBoundPayloadHandler {
             if (component == null) return;
             if (payload.state().length > 0 && !readClientInput(component, payload, player)) return;
 
-            component.activateAbility(payload.slot());
+            switch (payload.request()) {
+                case ACTIVATE -> component.activateAbility(payload.slot());
+                case CANCEL -> component.cancelAbility(payload.slot());
+                case END -> component.endAbility(payload.slot());
+            }
         });
     }
 

@@ -77,6 +77,16 @@ public abstract class Ability<S extends AbilityState> {
 
     }
 
+    /// Called every tick while this ability is activated, on each side that instantiates it.
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.EVENT_GRAPH)
+    public void onAbilityTick(
+        final AbilitySystemComponent abilitySystemComponent,
+        final AbilityInstance abilityInstance,
+        final S abilityState
+    ) {
+
+    }
+
     @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.EVENT_GRAPH)
     public abstract void onActivated(
         final AbilitySystemComponent abilitySystemComponent,

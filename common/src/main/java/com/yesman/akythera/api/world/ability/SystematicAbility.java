@@ -16,22 +16,19 @@ import org.jspecify.annotations.Nullable;
 import java.text.MessageFormat;
 import java.util.*;
 
-/// An [Ability] whose common behaviors are settings rather than code: the activation preset, the
-/// cost, the cooldown and the duration effect. A developer extends this so other developers can
-/// parent entries on that subclass and fill the settings in the editor.
+/// An [Ability] whose common behaviors are settings rather than code: the cost, the cooldown and
+/// the duration effect. A developer extends this so other developers can parent entries on that
+/// subclass and fill the settings in the editor.
 ///
 /// Every setting is read through its getter, so a subclass may answer one by overriding it.
 public class SystematicAbility<S extends AbilityState> extends Ability<S> {
-    private final ActivationType activationType;
-
     /// Spent on activation, and checked before it.
     private final List<AbilityEffect> costs;
 
     /// The recharge timer banking this ability's charges.
     private final @Nullable AbilityEffect cooldownEffect;
 
-    /// Present only when [#activationType] is [ActivationType#DURATION], whose expiry is what
-    /// finishes the ability.
+    /// Applied on activation. Its expiry finishes the ability.
     private final @Nullable AbilityEffect durationEffect;
 
     private final Tags tags;
@@ -41,17 +38,15 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
     private final InstantiationScope instantiationScope;
 
     public SystematicAbility(
-        final ActivationType activationType,
         final InstantiationScope instantiationScope,
         final List<AbilityEffect> costs,
         final @Nullable AbilityEffect cooldownEffect,
         final @Nullable AbilityEffect durationEffect
     ) {
-        this(activationType, instantiationScope, costs, cooldownEffect, durationEffect, Tags.NONE, List.of());
+        this(instantiationScope, costs, cooldownEffect, durationEffect, Tags.NONE, List.of());
     }
 
     public SystematicAbility(
-        final ActivationType activationType,
         final InstantiationScope instantiationScope,
         final List<AbilityEffect> costs,
         final @Nullable AbilityEffect cooldownEffect,
@@ -59,10 +54,6 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
         final Tags tags,
         final List<Trigger> triggers
     ) {
-        if (activationType == ActivationType.DURATION && durationEffect == null) {
-            throw new IllegalArgumentException("A Duration ability needs a Duration Effect.");
-        }
-
         // The ability's lifetime is the effect's.
         if (durationEffect != null
             && durationEffect.getApplicationType() != AbilityEffect.ApplicationType.DURATION) {
@@ -81,19 +72,11 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
             );
         }
 
-        if (activationType != ActivationType.DURATION && durationEffect != null) {
-            throw new IllegalArgumentException(
-                "A Duration Effect belongs to a Duration ability, not " + activationType + "."
-            );
-        }
-
         for (AbilityEffect cost : costs) {
-            if (!activationType.allowsCostType(cost.getApplicationType())) {
+            // An Instant cost is paid on activation and an Infinite cost on every tick the ability runs.
+            if (cost.getApplicationType() == AbilityEffect.ApplicationType.DURATION) {
                 throw new IllegalArgumentException(
-                    MessageFormat.format(
-                        "A {0} ability cannot carry a {1} cost: {2}",
-                        activationType, cost.getApplicationType(), cost.getId()
-                    )
+                    MessageFormat.format("There is no Duration cost: {0}", cost.getId())
                 );
             }
 
@@ -109,7 +92,6 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
             }
         }
 
-        this.activationType = activationType;
         this.instantiationScope = instantiationScope;
         this.costs = List.copyOf(costs);
         this.cooldownEffect = cooldownEffect;
@@ -125,7 +107,6 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
 
     private SystematicAbility(final BlueprintBody body) {
         this(
-            body.property(SystematicAbility.class, "activationType", ActivationType.INSTANT),
             body.property(SystematicAbility.class, "instantiationScope", InstantiationScope.EVERYWHERE),
             body.property(SystematicAbility.class, "costs", List.of()),
             body.property(SystematicAbility.class, "cooldownEffect", null),
@@ -133,11 +114,6 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
             body.property(SystematicAbility.class, "tags", Tags.NONE),
             body.property(SystematicAbility.class, "triggers", List.of())
         );
-    }
-
-    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.PROPERTY)
-    public ActivationType getActivationType() {
-        return activationType;
     }
 
     @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.PROPERTY)

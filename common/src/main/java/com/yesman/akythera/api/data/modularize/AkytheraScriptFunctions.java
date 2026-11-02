@@ -9,6 +9,7 @@ import com.yesman.akythera.api.component.PatchComponent;
 import com.yesman.akythera.api.world.ability.Ability;
 import com.yesman.akythera.api.world.ability.AbilityState;
 import com.yesman.akythera.api.world.ability.AbilityTask;
+import com.yesman.akythera.api.world.ability.impl.AwaitTask;
 import com.yesman.akythera.api.world.ability.impl.PlayMontageTask;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
@@ -202,7 +203,7 @@ public final class AkytheraScriptFunctions {
             FunctionSignature.create(SystematicAbility.class, List.of("blueprint"), Holder.Reference.class),
             "Systematic Ability",
             "Ability",
-            "Activation type, cost, cooldown, tags and triggers, and the graphs, filled in by the editor",
+            "Cost, cooldown, tags and triggers, and the graphs, filled in by the editor",
             true,
             ScriptFunction.Usage.ABILITY_CTOR
         )
@@ -222,6 +223,18 @@ public final class AkytheraScriptFunctions {
             "Play Montage Task",
             "Ability",
             "A task that accompanies the lifecycle with a played montage",
+            true,
+            ScriptFunction.Usage.ABILITY_TASK
+        )
+    );
+
+    public static final Holder<ScriptFunction> AWAIT_TASK_CONSTRUCTOR = AKYTHERA_REGISTRAR.register("await_task_ctor", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (Function<Integer, AwaitTask>) AwaitTask::new,
+            FunctionSignature.create(AwaitTask.class, List.of("ticks"), Integer.class),
+            "Await Task",
+            "Ability",
+            "A task that completes once the given ticks have passed",
             true,
             ScriptFunction.Usage.ABILITY_TASK
         )

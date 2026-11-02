@@ -35,6 +35,7 @@ public interface PureNode extends ScriptNode {
                 case RegistryKeyNode _           -> "registry_key";
                 case ParentCallNode _            -> "parent_call";
                 case FunctionCallNode _          -> "function_call";
+                case FlowFunctionNode _          -> "flow_function_node";
                 case BlueprintFieldGetterNode _  -> "blueprint_field_getter";
                 case ParticleSystemParameterNode _ -> "particle_system_parameter";
                 default -> throw new IllegalArgumentException(
@@ -63,6 +64,7 @@ public interface PureNode extends ScriptNode {
                 case "registry_key"          -> RegistryKeyNode.CODEC.fieldOf("registry_key");
                 case "parent_call"           -> ParentCallNode.CODEC.fieldOf("parent_call");
                 case "function_call"         -> FunctionCallNode.CODEC.fieldOf("function_call");
+                case "flow_function_node"    -> FlowFunctionNode.CODEC.fieldOf("flow_function_node");
                 case "blueprint_field_getter" -> BlueprintFieldGetterNode.CODEC.fieldOf("blueprint_field_getter");
                 case "particle_system_parameter" -> ParticleSystemParameterNode.CODEC.fieldOf("particle_system_parameter");
                 default -> throw new IllegalArgumentException(

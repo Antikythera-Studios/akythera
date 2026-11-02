@@ -1,13 +1,14 @@
 package com.yesman.akythera.api.world.ability;
 
+import com.yesman.akythera.core.reflection.ScriptFunction;
 import com.yesman.akythera.core.reflection.ScriptType;
 import org.jetbrains.annotations.ApiStatus;
 import org.jspecify.annotations.Nullable;
 
 /// A reference to one running [AbilityTask].
 ///
-/// Goes invalid when the task terminates and when the ability that started it is unequipped. Server
-/// side only, never synced.
+/// Goes invalid when the task terminates, when the ability that started it is unequipped, and when
+/// [#invalidate] is called. Server side only, never synced.
 @ScriptType
 public final class AbilityTaskHandle {
     private final AbilitySystemComponent abilitySystemComponent;
@@ -34,7 +35,7 @@ public final class AbilityTaskHandle {
         this.onInterrupted = onInterrupted;
     }
 
-    /// Whether the task is still running.
+    /// Whether the task is still running and this handle still controls it.
     public boolean isValid() {
         return valid;
     }
@@ -45,7 +46,7 @@ public final class AbilityTaskHandle {
     }
 
     /// Stops the task as interrupted, firing [AbilityTask#onCanceled] before this call returns.
-    /// Does nothing once the task has already terminated.
+    /// Does nothing once this handle is invalid.
     ///
     /// @return whether this call stopped it
     public boolean cancel() {
@@ -56,8 +57,13 @@ public final class AbilityTaskHandle {
         return true;
     }
 
-    @ApiStatus.Internal
-    void invalidate() {
+    /// Lets go of the task. The task runs on and still ends with its ability, but [#onCompleted] and
+    /// [#onInterrupted] never run.
+    @ScriptFunction(
+        label = "Invalidate Ability Task Handle", category = "Ability/Task",
+        desc = "Lets go of the task without stopping it. The task keeps running until it finishes or its ability ends, and its completed and interrupted callbacks never run. The handle can no longer cancel the task."
+    )
+    public void invalidate() {
         valid = false;
     }
 

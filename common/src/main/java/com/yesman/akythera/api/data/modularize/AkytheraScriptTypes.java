@@ -11,7 +11,6 @@ import com.yesman.akythera.api.world.ability.AbilitySlot;
 import com.yesman.akythera.api.world.ability.AbilitySystemComponent;
 import com.yesman.akythera.api.world.ability.AbilityTag;
 import com.yesman.akythera.api.world.ability.AbilityTagSet;
-import com.yesman.akythera.api.world.ability.ActivationType;
 import com.yesman.akythera.api.world.ability.InstantiationScope;
 import com.yesman.akythera.api.world.ability.SystematicAbility;
 import com.yesman.akythera.api.input.InputAction;
@@ -190,9 +189,6 @@ public final class AkytheraScriptTypes {
 
     public static final Holder<ScriptType> ABILITY_EFFECT = AKYTHERA_REGISTRAR.register("ability_effect",
         () -> ScriptType.registryEntry(AbilityEffect.class, AkytheraRegistries.DataPack.ABILITY_EFFECT_KEY));
-
-    public static final Holder<ScriptType> ACTIVATION_TYPE = AKYTHERA_REGISTRAR.register("activation_type",
-        () -> new ScriptType(ActivationType.class, ParseUtils.enumCodec(ActivationType.class)));
 
     public static final Holder<ScriptType> INSTANTIATION_SCOPE = AKYTHERA_REGISTRAR.register("instantiation_scope",
         () -> new ScriptType(InstantiationScope.class, ParseUtils.enumCodec(InstantiationScope.class)));

@@ -232,8 +232,6 @@ public abstract class MixinKeyMapping implements KeyMappingAccessor {
                 .map(Holder::value)
                 .anyMatch(action -> action.priority() >= akythera$suppressingPriority && action.startedHold(akythera$holdTicks));
 
-            System.out.println(down +" "+ akythera$prevDown +" "+ releaseEdge);
-
             if (!holdStarted) {
                 akythera$fire(manager, TriggeringType.RELEASE, TriggeringState.TRIGGERED, akythera$highestSuppressingPriority(true));
             }
