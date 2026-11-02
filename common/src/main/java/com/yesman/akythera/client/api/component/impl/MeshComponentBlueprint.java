@@ -25,6 +25,7 @@ import org.jspecify.annotations.Nullable;
 public record MeshComponentBlueprint(
     @Nullable AssetAccessor<? extends Mesh<?>> mesh,
     @Nullable PureNode renderTypeGetter,
+    @Nullable PureNode colorGetter,
     Transform transform,
     TransformInheritPolicy transformInheritPolicy,
     boolean enabled
@@ -38,19 +39,34 @@ public record MeshComponentBlueprint(
                     .forGetter(ParseUtils.provideOptional(MeshComponentBlueprint::mesh)),
                 PureNode.CODEC.optionalFieldOf("render_type_getter")
                     .forGetter(ParseUtils.provideOptional(MeshComponentBlueprint::renderTypeGetter)),
+                PureNode.CODEC.optionalFieldOf("color_getter")
+                    .forGetter(ParseUtils.provideOptional(MeshComponentBlueprint::colorGetter)),
                 TRANSFORM_CODEC.forGetter(MeshComponentBlueprint::transform),
                 TRANSFORM_INHERIT_POLICY_CODEC.forGetter(MeshComponentBlueprint::transformInheritPolicy),
                 ENABLED_CODEC.forGetter(MeshComponentBlueprint::enabled)
             )
-            .apply(instance, (mesh, renderTypeGetter, transform, transformInheritPolicy, enabled) ->
-                new MeshComponentBlueprint(mesh.orElse(null), renderTypeGetter.orElse(null), transform, transformInheritPolicy, enabled))
+            .apply(instance, (mesh, renderTypeGetter, colorGetter, transform, transformInheritPolicy, enabled) ->
+                new MeshComponentBlueprint(
+                    mesh.orElse(null), renderTypeGetter.orElse(null), colorGetter.orElse(null), transform, transformInheritPolicy, enabled
+                ))
     );
+
+    public MeshComponentBlueprint(
+        final @Nullable AssetAccessor<? extends Mesh<?>> mesh,
+        final @Nullable PureNode renderTypeGetter,
+        final Transform transform,
+        final TransformInheritPolicy transformInheritPolicy,
+        final boolean enabled
+    ) {
+        this(mesh, renderTypeGetter, null, transform, transformInheritPolicy, enabled);
+    }
 
     @Override
     public MeshComponent instantiate(final ComponentAttachable host) {
         MeshComponent component = new MeshComponent(
             mesh,
             renderTypeGetter,
+            colorGetter,
             ownerOf(host),
             ArmatureComponent.armatureOf(host),
             host,

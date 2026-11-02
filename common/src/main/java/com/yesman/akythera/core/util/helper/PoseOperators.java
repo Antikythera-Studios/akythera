@@ -7,6 +7,7 @@ import com.yesman.akythera.core.asset.armature.Bone;
 import com.yesman.akythera.core.asset.loader.AnimationLoader;
 import com.yesman.akythera.core.math.Transform;
 import org.joml.Quaterniond;
+import org.joml.Quaterniondc;
 import org.jspecify.annotations.Nullable;
 
 import java.util.HashSet;
@@ -153,6 +154,19 @@ public final class PoseOperators {
             layeredBlendRecursively(
                 childBone, base, layered, dest, boneWeights, weight, meshSpaceRotation, baseModel, layeredModel, destModel);
         }
+    }
+
+    /// Turns `boneName` in `pose` by `rotation`, given in model space, around the bone's head.
+    public static void rotateInModelSpace(final Armature armature, final Pose pose, final String boneName, final Quaterniondc rotation) {
+        Quaterniond frame = boneFrameRotation(armature, pose, boneName);
+
+        if (frame == null) {
+            return;
+        }
+
+        Transform transform = pose.orElseIdentity(boneName);
+        Quaterniond rotated = new Quaterniond(frame).conjugate().mul(rotation).mul(frame).mul(transform.rot()).normalize();
+        pose.putBoneTransform(boneName, new Transform(transform.loc(), rotated, transform.sca()));
     }
 
     public static @Nullable Quaterniond boneFrameRotation(final Armature armature, final Pose pose, final String boneName) {

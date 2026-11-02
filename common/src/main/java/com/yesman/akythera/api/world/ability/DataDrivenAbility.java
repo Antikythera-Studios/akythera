@@ -22,7 +22,7 @@ public class DataDrivenAbility extends SystematicAbility<DataDrivenAbilityState>
 
     @Override
     public DataDrivenAbilityState createState() {
-        return blueprint.value().instantiate(this);
+        return new DataDrivenAbilityState(blueprint, this);
     }
 
     /// Refuses once the activation graph has thrown, so the ability stops charging costs and

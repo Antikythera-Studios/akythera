@@ -34,6 +34,7 @@ import com.yesman.akythera.core.animation.driver.LayeredBlendPerBoneDriver;
 import com.yesman.akythera.core.animation.driver.ModifyBoneDriver;
 import com.yesman.akythera.core.animation.driver.PlayRateDriver;
 import com.yesman.akythera.core.animation.driver.PoseBlendDriver;
+import com.yesman.akythera.core.animation.driver.TurnInPlaceDriver;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.playable.AnimationMontage;
 import com.yesman.akythera.core.blueprint.script.AnimatorScript;
@@ -52,6 +53,7 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.animal.sheep.Sheep;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.player.PlayerModelType;
 import net.minecraft.world.entity.player.PlayerSkin;
@@ -326,6 +328,51 @@ public final class AkytheraScriptFunctions {
             true,
             ScriptFunction.Usage.SCRIPT
         )
+    );
+
+    // ***********************************************
+    // Sheep
+    // ***********************************************
+
+    public static final Holder<ScriptFunction> SHEEP_IS_SHEARED = MINECRAFT_REGISTRAR.register("sheep_is_sheared", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (Function<EntityPatch<?>, Boolean>) entityPatch -> entityPatch != null && entityPatch.getOriginal() instanceof Sheep sheep && sheep.isSheared(),
+            FunctionSignature.create(Boolean.class, List.of("entityPatch"), EntityPatch.class),
+            "Is Sheared",
+            "Sheep",
+            "Whether the sheep is sheared. False for anything else",
+            true,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> SHEEP_HEAD_EAT_POSITION_SCALE = MINECRAFT_REGISTRAR.register("sheep_head_eat_position_scale", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (BiFunction<EntityPatch<?>, Float, Float>) (entityPatch, partialTick) ->
+                entityPatch != null && entityPatch.getOriginal() instanceof Sheep sheep ? sheep.getHeadEatPositionScale(partialTick == null ? 0.0F : partialTick) : 0.0F,
+            FunctionSignature.create(Float.class, List.of("entityPatch", "partialTick"), EntityPatch.class, Float.class),
+            "Head Eat Position Scale",
+            "Sheep",
+            "How far the sheep's head is lowered to eat grass, from 0 to 1",
+            true,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    /// The client registers [AkytheraClientScriptFunctions#sheepWoolColor]. A dedicated server, which has no
+    /// wool colors, registers a placeholder under the same id and parameters that answers white.
+    public static final Holder<ScriptFunction> SHEEP_WOOL_COLOR = MINECRAFT_REGISTRAR.register("sheep_wool_color", () ->
+        ModPlatformProvider.get().getPhysicalSide().isClient()
+            ? AkytheraClientScriptFunctions.sheepWoolColor()
+            : ScriptModularizeHelper.makeCustomScript(
+                (Function<EntityPatch<?>, Integer>) entityPatch -> -1,
+                FunctionSignature.create(Integer.class, List.of("entityPatch"), EntityPatch.class),
+                "Wool Color",
+                "Sheep",
+                "The ARGB color the sheep's wool is tinted by",
+                true,
+                ScriptFunction.Usage.SCRIPT
+            )
     );
 
     // ***********************************************
@@ -743,6 +790,19 @@ public final class AkytheraScriptFunctions {
             "Orientation Warp",
             "Animation/Pose",
             "Turns the hips by an angle in degrees and keeps the spine facing forward",
+            true,
+            ScriptFunction.Usage.ANIM_GRAPH
+        )
+    );
+
+    public static final Holder<ScriptFunction> TURN_IN_PLACE = AKYTHERA_REGISTRAR.register("turn_in_place", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (ScriptFunction.QuintFunction<BlendingAnimator, AnimationDriver, Supplier, Supplier, Float, AnimationDriver>) (animator, base, yaw, weight, stepTime) ->
+                new TurnInPlaceDriver(animator, base, (Supplier<Float>)yaw, (Supplier<Float>)weight, stepTime),
+            FunctionSignature.create(AnimationDriver.class, List.of("animator", "base", "yaw", "weight", "stepTime"), BlendingAnimator.class, AnimationDriver.class, Supplier.class, Supplier.class, Float.class),
+            "Turn In Place",
+            "Animation/Pose",
+            "Turns the body toward the yaw in steps, keeping the armature's legs planted until they step over",
             true,
             ScriptFunction.Usage.ANIM_GRAPH
         )

@@ -33,6 +33,7 @@ import net.minecraft.client.renderer.entity.layers.RenderLayer;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.util.ARGB;
 import org.joml.Matrix4f;
 import org.jspecify.annotations.Nullable;
 
@@ -56,12 +57,19 @@ public final class MeshComponent implements RenderableComponent<LivingEntityRend
     /// The [ScriptCaller] slot of [#renderTypeGetter], behind the component's path.
     public static final String RENDER_TYPE_SLOT = "renderTypeGetter";
 
+    /// The [ScriptCaller] slot of [#colorGetter], behind the component's path.
+    public static final String COLOR_SLOT = "colorGetter";
+
     /// The mesh drawn, or null for a component that names none and draws nothing.
     private final @Nullable AssetAccessor<? extends Mesh<?>> mesh;
 
     /// A tree over [#owner] answering the [RenderType] to draw with; anything else, or no tree, draws
     /// with the entity's own model render type.
     private final @Nullable PureNode renderTypeGetter;
+
+    /// A tree over [#owner] answering the ARGB color the mesh is tinted by; anything else, or no tree,
+    /// leaves it untinted.
+    private final @Nullable PureNode colorGetter;
 
     /// The patch this component was instantiated for.
     private final @Nullable EntityPatch<?> owner;
@@ -88,9 +96,16 @@ public final class MeshComponent implements RenderableComponent<LivingEntityRend
     /// Set once [#renderTypeGetter] threw. It is not run again.
     private boolean renderTypeFailed;
 
+    /// Who runs [#colorGetter], found on its first run.
+    private @Nullable ScriptCaller colorCaller;
+
+    /// Set once [#colorGetter] threw. It is not run again.
+    private boolean colorFailed;
+
     public MeshComponent(
         final @Nullable AssetAccessor<? extends Mesh<?>> mesh,
         final @Nullable PureNode renderTypeGetter,
+        final @Nullable PureNode colorGetter,
         final @Nullable EntityPatch<?> owner,
         final @Nullable ArmatureComponent armature,
         final @Nullable ComponentAttachable host,
@@ -99,6 +114,7 @@ public final class MeshComponent implements RenderableComponent<LivingEntityRend
     ) {
         this.mesh = mesh;
         this.renderTypeGetter = renderTypeGetter;
+        this.colorGetter = colorGetter;
         this.owner = owner;
         this.armature = armature;
         this.host = host;
@@ -165,6 +181,8 @@ public final class MeshComponent implements RenderableComponent<LivingEntityRend
         if (resolved == null) return;
 
         RenderType renderType = resolveRenderType(modelDraw);
+        int color = resolveColor();
+        int tintedColor = ARGB.multiply(modelDraw.tintedColor(), color);
 
         if (!(resolved instanceof SkeletalMesh skeletalMesh)) {
             submitNodeCollector.submitCustomGeometry(
@@ -175,10 +193,10 @@ public final class MeshComponent implements RenderableComponent<LivingEntityRend
                     buffer,
                     Mesh.DrawingFunction.trianglesAsQuads(Mesh.DrawingFunction.NEW_ENTITY),
                     lightCoords,
-                    1.0F,
-                    1.0F,
-                    1.0F,
-                    1.0F,
+                    ARGB.redFloat(color),
+                    ARGB.greenFloat(color),
+                    ARGB.blueFloat(color),
+                    ARGB.alphaFloat(color),
                     OverlayTexture.NO_OVERLAY
                 )
             );
@@ -212,7 +230,7 @@ public final class MeshComponent implements RenderableComponent<LivingEntityRend
                 Minecraft.getInstance().gameRenderer.mainCamera().position(),
                 lightCoords,
                 modelDraw.overlayCoords(),
-                modelDraw.tintedColor(),
+                tintedColor,
                 state.outlineColor
             );
         } else if (cloth != null) {
@@ -220,13 +238,13 @@ public final class MeshComponent implements RenderableComponent<LivingEntityRend
             if (computeSkinning && ClientComponentsFactory.getImpl().getShaderBackend() == ClientComponentsFactory.ShaderBackend.IRIS) {
                 PatchModelRenderer.getInstance().submitSkinnedMesh(
                     skeletalMesh, armatureAsset, animationPose, renderType, poseStack.last(),
-                    lightCoords, modelDraw.overlayCoords(), modelDraw.tintedColor(), state.outlineColor
+                    lightCoords, modelDraw.overlayCoords(), tintedColor, state.outlineColor
                 );
             }
         } else if (computeSkinning) {
             PatchModelRenderer.getInstance().submitSkinnedMesh(
                 skeletalMesh, armatureAsset, animationPose, renderType, poseStack.last(),
-                lightCoords, modelDraw.overlayCoords(), modelDraw.tintedColor(), state.outlineColor
+                lightCoords, modelDraw.overlayCoords(), tintedColor, state.outlineColor
             );
         } else {
             Armature resolvedArmature = armatureAsset.get();
@@ -250,10 +268,10 @@ public final class MeshComponent implements RenderableComponent<LivingEntityRend
                         buffer,
                         Mesh.DrawingFunction.trianglesAsQuads(Mesh.DrawingFunction.NEW_ENTITY),
                         lightCoords,
-                        1.0F,
-                        1.0F,
-                        1.0F,
-                        1.0F,
+                        ARGB.redFloat(color),
+                        ARGB.greenFloat(color),
+                        ARGB.blueFloat(color),
+                        ARGB.alphaFloat(color),
                         modelDraw.overlayCoords(),
                         boundTransforms
                     );
@@ -284,6 +302,29 @@ public final class MeshComponent implements RenderableComponent<LivingEntityRend
             ScriptRecorder.recordFailure(context, throwable);
 
             return modelDraw.renderType();
+        }
+    }
+
+    /// The color this mesh is tinted by: what [#colorGetter] answers, else white.
+    private int resolveColor() {
+        if (colorGetter == null || colorFailed) return -1;
+
+        if (colorCaller == null) {
+            colorCaller = ScriptCaller.ofComponent(owner, this, COLOR_SLOT);
+        }
+
+        ScriptVariables locals = new ScriptVariables();
+        locals.setValue(OWNER_PARAM, owner);
+
+        ScriptNode.ExecutionContext context = ScriptRecorder.newContext(colorCaller, locals);
+
+        try {
+            return colorGetter.execute(null, context) instanceof Integer picked ? picked : -1;
+        } catch (Throwable throwable) {
+            colorFailed = true;
+            ScriptRecorder.recordFailure(context, throwable);
+
+            return -1;
         }
     }
 

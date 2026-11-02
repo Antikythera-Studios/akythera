@@ -165,6 +165,9 @@ public final class Akythera {
         ColliderType.ENUM_MANAGER.loadEnum();
         BoneConstraintType.ENUM_MANAGER.loadEnum();
         WeaponStance.ENUM_MANAGER.loadEnum();
+        AbilitySlotGroup.ENUM_MANAGER.loadEnum();
+        AbilitySlot.ENUM_MANAGER.loadEnum();
+        AbilityTag.ENUM_MANAGER.loadEnum();
 
         // Pair logics reference the collider type constants, so they bind after the enum loads.
         CollisionDetectionLogics.registerBuiltInLogics();

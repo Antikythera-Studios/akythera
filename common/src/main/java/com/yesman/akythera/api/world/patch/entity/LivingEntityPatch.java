@@ -393,4 +393,9 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
     public boolean isDeadOrDying() {
         return getOriginal().isDeadOrDying();
     }
+
+    @ScriptFunction(pure = true, label = "Get Hurt Time", desc = "Ticks left of the hurt shake, counting down from 10 after a hit.")
+    public int getHurtTime() {
+        return getOriginal().hurtTime;
+    }
 }

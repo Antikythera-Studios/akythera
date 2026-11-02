@@ -42,6 +42,8 @@ public class Armature {
     /// Mirror partner by bone name, entered both ways. A bone with no partner is absent.
     private Map<String, String> mirrorBones = Map.of();
 
+    private List<ArmatureLoader.Leg> legs = List.of();
+
     public Armature(final Bone rootBone, final int boneCount, final Map<String, Bone> bonesByName) {
         this.boneCount = boneCount;
         this.rootBone = rootBone;
@@ -69,11 +71,17 @@ public class Armature {
     @ApiStatus.Internal
     public void applyMetadata(final ArmatureLoader.Metadata metadata) {
         mirrorBones = metadata.mirrorBoneMap();
+        legs = metadata.legs();
     }
 
     /// The bone `name` pairs with across the mirror plane, or `name` itself when it has no partner.
     public String getMirrorBone(final String name) {
         return mirrorBones.getOrDefault(name, name);
+    }
+
+    /// The legs the sidecar declares.
+    public List<ArmatureLoader.Leg> getLegs() {
+        return legs;
     }
 
     /// `pose` with every [BoneConstraint] of `physics` that poses it applied, the bones in hierarchy order.
