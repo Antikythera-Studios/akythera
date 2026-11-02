@@ -93,16 +93,24 @@ public final class AbilityInstance {
     ///
     /// @return whether the ability activated or recast
     public boolean tryActivate(final AbilitySystemComponent abilitySystemComponent) {
-        if (ability == null) return false;
+        if (activated) return canRecast(abilitySystemComponent) && recastAbility(abilitySystemComponent);
 
-        if (activated) return recastAbility(abilitySystemComponent);
-
-        if (!typed().canActivate(abilitySystemComponent, this, state)) return false;
+        if (!canActivate(abilitySystemComponent)) return false;
 
         activated = true;
         typed().onActivated(abilitySystemComponent, this, state);
 
         return true;
+    }
+
+    /// Whether the ability, not running, may activate now, see [Ability#canActivate].
+    public boolean canActivate(final AbilitySystemComponent abilitySystemComponent) {
+        return ability != null && !activated && typed().canActivate(abilitySystemComponent, this, state);
+    }
+
+    /// Whether the ability, already running, may recast now, see [Ability#canRecast].
+    public boolean canRecast(final AbilitySystemComponent abilitySystemComponent) {
+        return ability != null && activated && typed().canRecast(abilitySystemComponent, this, state);
     }
 
     /// Marks this activated and runs [Ability#onActivated], skipping [Ability#canActivate].

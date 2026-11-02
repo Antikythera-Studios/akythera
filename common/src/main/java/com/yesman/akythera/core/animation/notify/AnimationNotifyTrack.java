@@ -141,11 +141,18 @@ public final class AnimationNotifyTrack {
 
     /// Returns the first notify state of `type` whose time window holds `time`, or null.
     public <T extends AnimationNotifyState<?>> @Nullable T getNotifyStateAt(final Class<T> type, final float time) {
+        return notifyStatesAt(type, time).findFirst().orElse(null);
+    }
+
+    /// Every notify state of `type` whose time window holds `time`.
+    public <T extends AnimationNotifyState<?>> List<T> getNotifyStatesAt(final Class<T> type, final float time) {
+        return notifyStatesAt(type, time).toList();
+    }
+
+    private <T extends AnimationNotifyState<?>> Stream<T> notifyStatesAt(final Class<T> type, final float time) {
         return Stream.concat(worldNotifyStates.stream(), renderNotifyStates.stream())
             .filter(setup -> setup.timeWindow().isIn(time) && type.isInstance(setup.animNotifyState()))
-            .map(setup -> type.cast(setup.animNotifyState()))
-            .findFirst()
-            .orElse(null);
+            .map(setup -> type.cast(setup.animNotifyState()));
     }
 
     public boolean isEmpty() {

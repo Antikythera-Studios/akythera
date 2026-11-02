@@ -47,6 +47,16 @@ public abstract class Ability<S extends AbilityState> {
         return true;
     }
 
+    /// Whether the owner may recast this ability, already running, right now.
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.FUNCTION)
+    public boolean canRecast(
+        final AbilitySystemComponent abilitySystemComponent,
+        final AbilityInstance abilityInstance,
+        final S abilityState
+    ) {
+        return true;
+    }
+
     /// Called when this ability is equipped into a slot.
     @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.EVENT_GRAPH)
     public void onEquipped(

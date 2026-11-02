@@ -27,6 +27,7 @@ import net.minecraft.resources.Identifier;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
+import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -226,7 +227,7 @@ public final class AkytheraClientScriptFunctions {
             ),
             "Bind Action",
             "Input",
-            "Runs the pins as the camera entity when the input action fires: Started once per hold, Triggered every time, Completed and Canceled on release. Replaces an earlier binding of the action. Client side only",
+            "Runs the pins as the camera entity when the input action fires: Started once per hold, Triggered every time, Completed and Canceled on release, Canceled also when a higher action suppresses the key mid-hold. Replaces an earlier binding of the action. Client side only",
             false,
             ScriptFunction.Usage.SCRIPT
         );
@@ -242,6 +243,24 @@ public final class AkytheraClientScriptFunctions {
             "Unbind Action",
             "Input",
             "Stops running the pins Bind Action wired to the input action. Client side only",
+            false,
+            ScriptFunction.Usage.SCRIPT
+        );
+    }
+
+    /// Starts or stops the [InputAction] suppressing its key through [InputManager#suppressInputKey]. Does nothing off
+    /// the render thread.
+    public static ScriptFunction suppressInputKey() {
+        return ScriptModularizeHelper.makeCustomScript(
+            (BiConsumer<InputAction, Boolean>) (action, suppress) -> {
+                if (action != null && Minecraft.getInstance().isSameThread()) {
+                    InputManager.getInstance().suppressInputKey(action, Boolean.TRUE.equals(suppress));
+                }
+            },
+            FunctionSignature.create(void.class, List.of("action", "suppress"), InputAction.class, Boolean.class),
+            "Suppress Input Key",
+            "Input",
+            "While on, the input actions of a lower priority on the action's key never fire, and vanilla never reads the key. Lasts until the action is unbound. Client side only",
             false,
             ScriptFunction.Usage.SCRIPT
         );

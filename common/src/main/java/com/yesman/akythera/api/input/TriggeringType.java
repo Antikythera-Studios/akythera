@@ -8,8 +8,11 @@ package com.yesman.akythera.api.input;
 /// | Press      | press edge                  | never                            | never                           |
 /// | Down       | every tick the key is down  | never                            | never                           |
 /// | Release    | release edge                | never                            | never                           |
-/// | Hold       | every tick the key is down  | release                          | never                           |
-/// | Hold Until | every tick the key is down  | release at or above the threshold | release below the threshold    |
+/// | Hold       | every tick the key is down  | release                          | suppressed mid-hold             |
+/// | Hold Until | every tick the key is down  | release at or above the threshold | release below the threshold, or suppressed mid-hold |
+///
+/// The held types dispatch nothing until their [InputAction#holdStartTicks] pass, and count the threshold from
+/// then. A release after a held action started dispatches no Release.
 public enum TriggeringType {
     PRESS,
     DOWN,
@@ -24,7 +27,7 @@ public enum TriggeringType {
 
     /// Whether this type ever dispatches [TriggeringState#CANCELED].
     public boolean dispatchesCanceled() {
-        return this == HOLD_UNTIL;
+        return this == HOLD || this == HOLD_UNTIL;
     }
 
     /// Whether this type reads a held duration against a threshold.

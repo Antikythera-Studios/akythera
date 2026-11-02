@@ -1,6 +1,7 @@
 package com.yesman.akythera.api.world.patch.entity;
 
 import com.yesman.akythera.api.animation.animator.AnimationInterfaceKey;
+import com.yesman.akythera.api.animation.notify.impl.LivingHurtNotifyState;
 import com.yesman.akythera.api.animation.notify.impl.LockMovementNotifyState;
 import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.api.component.PatchComponent;
@@ -23,7 +24,9 @@ import com.yesman.akythera.core.reflection.ScriptType;
 import net.minecraft.core.Holder;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
@@ -37,6 +40,7 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @ScriptType(autoRegister = false)
 public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> implements EquipmentHolder {
@@ -64,6 +68,9 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
 
     /// Whether [#faceBodyToView] ran since the last tick's body turn.
     private boolean bodyFacesViewRequested;
+
+    /// The entities each [LivingHurtNotifyState] in its window struck so far.
+    private final Map<LivingHurtNotifyState, Set<Entity>> struckEntities = new HashMap<>();
 
     public LivingEntityPatch(@NonNull T original) {
         super(original);
@@ -347,6 +354,21 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
         bodyFacesViewRequested = false;
 
         return requested;
+    }
+
+    /// Strikes `target` with this entity's melee attack. Does nothing on the logical client.
+    ///
+    /// @param vanillaAttackEffects whether a player's attack sweeps and resets its attack strength
+    @ScriptFunction(label = "Hurt Target", desc = """
+        Strikes the target with the entity's melee attack. A player attacks as vanilla does, with the sweep and the attack strength reset only when Vanilla Attack Effects is on. Does nothing on the client
+    """)
+    public void hurtTarget(final Entity target, final boolean vanillaAttackEffects) {
+        if (getOriginal().level() instanceof ServerLevel serverLevel) getOriginal().doHurtTarget(serverLevel, target);
+    }
+
+    /// The entities each [LivingHurtNotifyState] in its window struck so far.
+    public Map<LivingHurtNotifyState, Set<Entity>> getStruckEntities() {
+        return struckEntities;
     }
 
     /// Returns the [LockMovementNotifyState] a playing montage holds at its playhead, or null.

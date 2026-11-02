@@ -19,6 +19,7 @@ import com.yesman.akythera.core.reflection.ScriptType;
 import com.yesman.akythera.core.util.ClientOnly;
 import com.yesman.akythera.core.util.LogicalSide;
 import net.minecraft.SharedConstants;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.Holder;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerPlayer;
@@ -428,6 +429,11 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
     @ScriptFunction(pure = true, label = "Get Id")
     public final int getId() {
         return original.getId();
+    }
+
+    @ScriptFunction(pure = true, label = "Is Local Player", desc = "Returns whether the entity is local player")
+    public boolean isLocalPlayer() {
+        return original instanceof Player player && player.isLocalPlayer();
     }
 
     @ScriptFunction(pure = true, label = "Is Logical Client", desc = "Returns whether the entity is in a client level")

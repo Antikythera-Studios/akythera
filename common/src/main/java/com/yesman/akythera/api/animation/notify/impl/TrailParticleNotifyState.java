@@ -8,6 +8,7 @@ import com.yesman.akythera.api.animation.notify.AnimationNotifyState;
 import com.yesman.akythera.api.animation.notify.NotifyTriggerThread;
 import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.client.api.lifecycle.ClientComponentsFactory;
 import com.yesman.akythera.client.api.particle.AkytheraParticleSystem;
 import com.yesman.akythera.client.api.particle.AkytheraParticles;
 import com.yesman.akythera.core.Akythera;
@@ -27,7 +28,6 @@ import net.minecraft.world.level.Level;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
-import java.util.WeakHashMap;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -50,9 +50,6 @@ public final class TrailParticleNotifyState extends AnimationNotifyState<EntityP
     /// The [ParticleAttachment#socketPath] the system follows.
     private final String socket;
 
-    /// The play of each owner, from [#onBegin] to [#onEnd]. Its system is stopped when the animation is interrupted.
-    private final Map<EntityPatch<?>, Play> playing = new WeakHashMap<>();
-
     public TrailParticleNotifyState(final ResourceKey<ParticleSystemBlueprint> particleSystem, final String socket) {
         super(LogicalSide.CLIENT, NotifyTriggerThread.RENDER);
 
@@ -71,13 +68,14 @@ public final class TrailParticleNotifyState extends AnimationNotifyState<EntityP
             return;
         }
 
-        playing.put(owner, new Play(blueprint, timeWindow, new ParticleAttachment(owner.getOriginal().getId(), socket)));
+        ClientComponentsFactory.getImpl().getTrailParticlePlays(owner).put(this, new Play(blueprint, timeWindow, new ParticleAttachment(owner.getOriginal().getId(), socket)));
     }
 
     /// Starts the system on the first frame, then gives it the frame's [#frameSampler].
     @Override
     public void onTick(final EntityPatch<?> owner, final PlayableAnimation animation, final float prevElapsedTime, final float currentElapsedTime) {
-        Play play = playing.get(owner);
+        Map<TrailParticleNotifyState, Play> plays = ClientComponentsFactory.getImpl().getTrailParticlePlays(owner);
+        Play play = plays.get(this);
         float frameTicks = Minecraft.getInstance().getDeltaTracker().getGameTimeDeltaTicks();
 
         if (play == null || currentElapsedTime <= prevElapsedTime || frameTicks <= 0.0F) return;
@@ -98,7 +96,7 @@ public final class TrailParticleNotifyState extends AnimationNotifyState<EntityP
             play.system = transform == null ? null : AkytheraParticles.play(blueprint, transform, play.attachment, partialTick - behind);
 
             if (play.system == null) {
-                playing.remove(owner);
+                plays.remove(this);
                 return;
             }
         }
@@ -120,7 +118,7 @@ public final class TrailParticleNotifyState extends AnimationNotifyState<EntityP
     /// The system plays on to the end of its time span unless the animation was interrupted.
     @Override
     public void onEnd(final EntityPatch<?> owner, final PlayableAnimation animation, final boolean interrupted) {
-        Play play = playing.remove(owner);
+        Play play = ClientComponentsFactory.getImpl().getTrailParticlePlays(owner).remove(this);
 
         if (interrupted && play != null && play.system != null) play.system.stop();
     }
@@ -173,8 +171,9 @@ public final class TrailParticleNotifyState extends AnimationNotifyState<EntityP
         return CODEC;
     }
 
-    /// One owner's play: the system its first [#onTick] starts from `blueprint`.
-    private static final class Play {
+    /// One owner's play, from [#onBegin] to [#onEnd]: the system its first [#onTick] starts from `blueprint`. Its
+    /// system is stopped when the animation is interrupted.
+    public static final class Play {
         private final ParticleSystemBlueprint blueprint;
         private final TimeWindow window;
         private final ParticleAttachment attachment;

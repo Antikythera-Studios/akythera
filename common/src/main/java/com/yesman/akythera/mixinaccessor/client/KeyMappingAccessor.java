@@ -21,6 +21,10 @@ public interface KeyMappingAccessor {
     /// Clears [action]'s slot; returns `true` when no bindings remain on this key.
     boolean akythera$unbindAction(Holder<InputAction> action);
 
+    /// Starts or stops [action] suppressing this key, as [InputAction#suppressLowerActions] does. Ignored for an
+    /// action not bound to this key.
+    void akythera$suppressAction(Holder<InputAction> action, boolean suppress);
+
     /// Runs the per-tick activation state machine; called only for bound key mappings.
     void akythera$dispatchInputActions();
 }

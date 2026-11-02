@@ -2,6 +2,7 @@ package com.yesman.akythera.core.registry.entry;
 
 import com.mojang.serialization.MapCodec;
 import com.yesman.akythera.api.animation.notify.AnimationNotify;
+import com.yesman.akythera.api.animation.notify.impl.LivingHurtNotify;
 import com.yesman.akythera.api.animation.notify.impl.LogNotify;
 import com.yesman.akythera.api.animation.notify.impl.PlaySoundNotify;
 import com.yesman.akythera.core.Akythera;
@@ -18,4 +19,5 @@ public final class AkytheraAnimNotifyTypes {
 
     public static final Holder<MapCodec<? extends AnimationNotify<?>>> LOG = REGISTRAR.register("log", () -> LogNotify.CODEC);
     public static final Holder<MapCodec<? extends AnimationNotify<?>>> PLAY_SOUND = REGISTRAR.register("play_sound", () -> PlaySoundNotify.CODEC);
+    public static final Holder<MapCodec<? extends AnimationNotify<?>>> LIVING_HURT = REGISTRAR.register("living_hurt", () -> LivingHurtNotify.CODEC);
 }

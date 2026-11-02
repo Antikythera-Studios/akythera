@@ -3,10 +3,12 @@ package com.yesman.akythera.client.api.lifecycle;
 import com.mojang.blaze3d.systems.DeviceInfo;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.yesman.akythera.api.animation.notify.impl.TrailParticleNotifyState;
 import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.api.component.impl.EquipmentSlotBinder;
 import com.yesman.akythera.api.component.impl.EquipmentSlotBinderBlueprint;
 import com.yesman.akythera.api.lifecycle.ComponentsFactory;
+import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.client.api.component.impl.ItemInSlotRenderer;
 import com.yesman.akythera.client.core.asset.mesh.SkeletalMesh;
 import com.yesman.akythera.client.core.physics.cloth.ClothColliderPacker;
@@ -40,6 +42,7 @@ import org.lwjgl.opengl.GLCapabilities;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.WeakHashMap;
 import java.util.function.Function;
 
 /// *Physical client*(commonly refers Minecraft launcher) side components factory.
@@ -66,6 +69,18 @@ public final class ClientComponentsFactory extends ComponentsFactory {
     @Override
     public EquipmentSlotBinder createEquipmentSlotBinder(final EquipmentSlotBinderBlueprint blueprint, final ComponentAttachable host) {
         return host.logicalSide().validInClientSide() ? new ItemInSlotRenderer(blueprint, host) : super.createEquipmentSlotBinder(blueprint, host);
+    }
+
+    // *********************************************************
+    //  Trail Particle Part
+    // *********************************************************
+
+    /// The plays of each owner's [TrailParticleNotifyState]s in their windows.
+    private final Map<EntityPatch<?>, Map<TrailParticleNotifyState, TrailParticleNotifyState.Play>> trailParticlePlays = new WeakHashMap<>();
+
+    /// The plays of `owner`'s [TrailParticleNotifyState]s in their windows, by notify state.
+    public Map<TrailParticleNotifyState, TrailParticleNotifyState.Play> getTrailParticlePlays(final EntityPatch<?> owner) {
+        return trailParticlePlays.computeIfAbsent(owner, _ -> new HashMap<>());
     }
 
     // *********************************************************

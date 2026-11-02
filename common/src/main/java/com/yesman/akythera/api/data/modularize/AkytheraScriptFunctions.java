@@ -509,6 +509,9 @@ public final class AkytheraScriptFunctions {
     public static final Holder<ScriptFunction> UNBIND_ACTION = registerClientOnly(
         "unbind_action", AkytheraClientScriptFunctions::unbindAction, List.of("action"), ScriptFunction.Usage.SCRIPT);
 
+    public static final Holder<ScriptFunction> SUPPRESS_INPUT_KEY = registerClientOnly(
+        "suppress_input_key", AkytheraClientScriptFunctions::suppressInputKey, List.of("action", "suppress"), ScriptFunction.Usage.SCRIPT);
+
     /// Registers `client` on a physical client. A dedicated server, which lacks the client classes `client` names,
     /// registers a [ScriptModularizeHelper#placeholder] taking `parameterNames` under the same id.
     private static Holder<ScriptFunction> registerClientOnly(

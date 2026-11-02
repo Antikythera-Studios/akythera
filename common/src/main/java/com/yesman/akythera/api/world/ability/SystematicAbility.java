@@ -222,6 +222,19 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
             && canPayCosts(owner, AbilityEffect.ApplicationType.INFINITE);
     }
 
+    /// Refuses the recast unless the owner carries every Recast Required Tag and no Recast Blocked Tag.
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.FUNCTION)
+    @Override
+    public boolean canRecast(
+        final AbilitySystemComponent abilitySystemComponent,
+        final AbilityInstance abilityInstance,
+        final S abilityState
+    ) {
+        return super.canRecast(abilitySystemComponent, abilityInstance, abilityState)
+            && abilitySystemComponent.hasAllAbilityTags(getTags().recastRequiredTags())
+            && !abilitySystemComponent.hasAnyAbilityTags(getTags().recastBlockedTags());
+    }
+
     /// Whether an activated ability refuses this one, by matching its own Block Abilities with Tag
     /// against this ability's IdTags.
     private boolean isBlockedByActivatedAbility(
@@ -418,7 +431,7 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
         }
     }
 
-    /// The six tag fields the editor shows.
+    /// The eight tag fields the editor shows.
     ///
     /// Only [#ownerAcquiredTags] reaches the owner's counted container.
     ///
@@ -429,8 +442,10 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
     /// @param blockAbilitiesWithTag  while activated, refuses any ability whose [#idTags] these
     ///                               match. Server side only
     /// @param ownerAcquiredTags      granted to the owner while activated
-    /// @param activationRequiredTags the owner must carry all of these
-    /// @param activationBlockedTags  the owner must carry none of these
+    /// @param activationRequiredTags the owner must carry all of these to activate
+    /// @param activationBlockedTags  the owner must carry none of these to activate
+    /// @param recastRequiredTags     the owner must carry all of these to recast
+    /// @param recastBlockedTags      the owner must carry none of these to recast
     @ScriptType(autoRegister = false)
     public record Tags(
         AbilityTagSet idTags,
@@ -438,11 +453,13 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
         AbilityTagSet blockAbilitiesWithTag,
         AbilityTagSet ownerAcquiredTags,
         AbilityTagSet activationRequiredTags,
-        AbilityTagSet activationBlockedTags
+        AbilityTagSet activationBlockedTags,
+        AbilityTagSet recastRequiredTags,
+        AbilityTagSet recastBlockedTags
     ) {
         public static final Tags NONE = new Tags(
-            AbilityTagSet.EMPTY, AbilityTagSet.EMPTY, AbilityTagSet.EMPTY,
-            AbilityTagSet.EMPTY, AbilityTagSet.EMPTY, AbilityTagSet.EMPTY
+            AbilityTagSet.EMPTY, AbilityTagSet.EMPTY, AbilityTagSet.EMPTY, AbilityTagSet.EMPTY,
+            AbilityTagSet.EMPTY, AbilityTagSet.EMPTY, AbilityTagSet.EMPTY, AbilityTagSet.EMPTY
         );
 
         public static final Codec<Tags> CODEC =
@@ -454,7 +471,9 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
                         tagSet("block_abilities_with_tag").forGetter(Tags::blockAbilitiesWithTag),
                         tagSet("owner_acquired_tags").forGetter(Tags::ownerAcquiredTags),
                         tagSet("activation_required_tags").forGetter(Tags::activationRequiredTags),
-                        tagSet("activation_blocked_tags").forGetter(Tags::activationBlockedTags)
+                        tagSet("activation_blocked_tags").forGetter(Tags::activationBlockedTags),
+                        tagSet("recast_required_tags").forGetter(Tags::recastRequiredTags),
+                        tagSet("recast_blocked_tags").forGetter(Tags::recastBlockedTags)
                     )
                     .apply(instance, Tags::new)
             );

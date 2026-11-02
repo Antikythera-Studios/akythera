@@ -4,6 +4,7 @@ import com.yesman.akythera.api.data.modularize.node.ScriptCallback;
 import com.yesman.akythera.api.event.BuiltInEventHooks;
 import com.yesman.akythera.api.input.InputAction;
 import com.yesman.akythera.api.input.TriggeringState;
+import com.yesman.akythera.api.input.TriggeringType;
 import com.yesman.akythera.api.world.patch.AkytheraPatches;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.Akythera;
@@ -97,6 +98,16 @@ public final class InputManager {
         if (listener != null) unregister(holder, listener);
     }
 
+    /// Starts or stops `action` suppressing its key, as [InputAction#suppressLowerActions] does: the actions of a
+    /// lower priority on the key never trigger, and vanilla never reads it. Lasts until `action` is unbound. Does
+    /// nothing for an action that is not bound.
+    public void suppressInputKey(final InputAction action, final boolean suppress) {
+        Holder<InputAction> holder = holderOf(action);
+        KeyMapping keyMapping = boundKeys.get(holder);
+
+        if (keyMapping != null) ((KeyMappingAccessor) keyMapping).akythera$suppressAction(holder, suppress);
+    }
+
     private void unbindActions() {
         actionBindings.forEach(this::unregister);
         actionBindings.clear();
@@ -140,11 +151,13 @@ public final class InputManager {
         }
     }
 
-    /// Key mappings the per-tick driver scans, copied because a listener may bind or unbind one
-    /// while the driver is still iterating.
+    /// Runs the [TriggeringType] timing table of every bound key mapping once. Iterates
+    /// a copy, since a listener may bind or unbind a key meanwhile.
     @ApiStatus.Internal
-    public Set<KeyMapping> boundKeyMappings() {
-        return Set.copyOf(boundKeyMappings);
+    public void dispatchInputActions() {
+        for (KeyMapping keyMapping : Set.copyOf(boundKeyMappings)) {
+            ((KeyMappingAccessor) keyMapping).akythera$dispatchInputActions();
+        }
     }
 
     /// Notifies every listener on `action` that `triggeringState` fired.

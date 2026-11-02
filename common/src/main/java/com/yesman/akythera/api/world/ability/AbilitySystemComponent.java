@@ -193,24 +193,31 @@ public final class AbilitySystemComponent
 
     /// Asks the server to [#activateAbility] the slot, sending the slot's state through its server bound codec.
     /// Calls it directly on the server. Does nothing on a client for any entity but the local player.
+    ///
+    /// @return on the server, what [#activateAbility] returned. On a client, whether the request was sent: the
+    ///         client's [AbilityInstance#canRecast] while the slot runs, its [AbilityInstance#canActivate] otherwise.
+    ///         A running Toggle or Hold preset always sends, since its second request ends it
     @ScriptFunction(
         label = "Request Ability Activation", category = "Ability",
-        desc = "Asks the server to activate the slot, or to recast it when it is already running. Only the local player can ask."
+        desc = "Asks the server to activate the slot, or to recast it when it is already running. Only the local player can ask. Returns whether the slot may activate or recast, as far as the client knows."
     )
-    public void requestActivation(final AbilitySlot slot) {
-        if (owner.isLogicalServer()) {
-            activateAbility(slot);
-
-            return;
-        }
+    public boolean requestActivation(final AbilitySlot slot) {
+        if (owner.isLogicalServer()) return activateAbility(slot);
 
         AbilityInstance instance = instances.get(slot);
 
-        if (instance == null || !(owner.getOriginal() instanceof Player player) || !player.isLocalPlayer()) return;
+        if (instance == null || !(owner.getOriginal() instanceof Player player) || !player.isLocalPlayer()) return false;
+
+        ActivationType activationType = activationTypeOf(instance);
+        boolean ends = instance.isActivated() && activationType != null && (activationType.recastCancels() || activationType.recastFinishes());
+
+        if (!ends && !(instance.isActivated() ? instance.canRecast(this) : instance.canActivate(this))) return false;
 
         byte[] state = AbilityState.encode(instance.getState(), PacketFlow.SERVERBOUND, player.level().registryAccess());
 
         NetworkingHelper.getInstance().sendToServer(new ServerBoundAbilityTrigger(slot, state));
+
+        return true;
     }
 
     /// Activates the ability in `slot`, or recasts it when it is already running. Server only.
@@ -232,14 +239,20 @@ public final class AbilitySystemComponent
             if (activationType.recastFinishes()) return endAbility(slot);
         }
 
-        if (wasActivated) syncLifecycle(slot, instance, ClientBoundAbilityLifecycle.Transition.RECAST);
+        if (wasActivated) {
+            // Checked before the transition is sent, so a refused recast tells the clients nothing.
+            if (!instance.canRecast(this)) return false;
 
-        if (!instance.tryActivate(this)) return false;
+            syncLifecycle(slot, instance, ClientBoundAbilityLifecycle.Transition.RECAST);
+            instance.recastAbility(this);
+        } else {
+            if (!instance.tryActivate(this)) return false;
 
-        if (!wasActivated) syncLifecycle(slot, instance, ClientBoundAbilityLifecycle.Transition.ACTIVATED);
+            syncLifecycle(slot, instance, ClientBoundAbilityLifecycle.Transition.ACTIVATED);
 
-        // An Instant preset ends on the tick it activated.
-        if (!wasActivated && activationType == ActivationType.INSTANT) endAbility(slot);
+            // An Instant preset ends on the tick it activated.
+            if (activationType == ActivationType.INSTANT) endAbility(slot);
+        }
 
         endGeneralIfIdle(instance);
 

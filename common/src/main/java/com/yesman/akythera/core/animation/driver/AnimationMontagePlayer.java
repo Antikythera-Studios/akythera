@@ -331,6 +331,11 @@ public final class AnimationMontagePlayer implements AnimationDriver {
         return currentPlaying == null || isFinished ? null : currentPlaying.value().notifyTrack().getNotifyStateAt(type, elapsedTime);
     }
 
+    /// Every notify state of `type` whose time window holds the playhead. Empty once the montage started fading out.
+    public <T extends AnimationNotifyState<?>> List<T> getActiveNotifyStates(final Class<T> type) {
+        return currentPlaying == null || isFinished ? List.of() : currentPlaying.value().notifyTrack().getNotifyStatesAt(type, elapsedTime);
+    }
+
     @Override
     public Pose getPose() {
         // While fading out, returns the raw pose so that it can be blended to the locomotion

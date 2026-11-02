@@ -29,6 +29,7 @@
     "common.MixinMappedRegistry",
     "common.MixinMinecraftServer",
     "common.MixinPersistentEntitySectionManager",
+    "common.MixinPlayer",
     "common.MixinRegistryDataLoader",
     "common.MixinRegistryLoadTask"
   ],
