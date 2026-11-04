@@ -9,10 +9,10 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
 import org.jspecify.annotations.NullMarked;
 
-/// Asks the server to trigger the ability in `slot`, carrying whatever that ability's state wrote
-/// through its server bound codec. `state` is empty when there is no such codec.
+/// Asks the server to run `request` on the ability in `slot`, carrying whatever that ability's state
+/// wrote through its server bound codec. `state` is empty when there is no such codec.
 @NullMarked
-public record ServerBoundAbilityTrigger(AbilitySlot slot, byte[] state) implements CustomPacketPayload {
+public record ServerBoundAbilityTrigger(AbilitySlot slot, Request request, byte[] state) implements CustomPacketPayload {
     /// Input is a handful of fields. A longer array fails in the decoder.
     public static final int MAX_STATE_BYTES = 1024;
 
@@ -23,6 +23,8 @@ public record ServerBoundAbilityTrigger(AbilitySlot slot, byte[] state) implemen
         StreamCodec.composite(
             AbilitySlot.ENUM_MANAGER.getStreamCodec(),
             ServerBoundAbilityTrigger::slot,
+            ByteBufCodecs.idMapper(ordinal -> Request.values()[ordinal], Request::ordinal),
+            ServerBoundAbilityTrigger::request,
             ByteBufCodecs.byteArray(MAX_STATE_BYTES),
             ServerBoundAbilityTrigger::state,
             ServerBoundAbilityTrigger::new
@@ -31,5 +33,16 @@ public record ServerBoundAbilityTrigger(AbilitySlot slot, byte[] state) implemen
     @Override
     public Type<? extends CustomPacketPayload> type() {
         return TYPE;
+    }
+
+    public enum Request {
+        /// Activates the slot, or recasts it when it is already running.
+        ACTIVATE,
+
+        /// Stops the running slot as interrupted.
+        CANCEL,
+
+        /// Stops the running slot as completed.
+        END
     }
 }

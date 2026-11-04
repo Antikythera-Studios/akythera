@@ -50,6 +50,8 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -68,6 +70,9 @@ public final class Model3DViewer extends AbstractWidget
     /// Gap between the debug messages and the view's left and bottom edges, in pixels.
     private static final int DEBUG_MESSAGE_MARGIN = 8;
     private static final int DEBUG_MESSAGE_LINE_H = 12;
+
+    /// How far from the last left press a press still counts as repeating it, in widget pixels.
+    private static final double CLICK_CYCLING_PIXELS = 3.0D;
 
     /// Default dimensions used for skeletal meshes that don't yet have a
     /// registered [EntityDimensions] association. Player-sized.
@@ -94,6 +99,18 @@ public final class Model3DViewer extends AbstractWidget
     /// press that commits a keyed transform. Swallows the rest of the gesture so the still-held left
     /// button does not fall through to the camera; cleared when that button comes up.
     private boolean dragCancelled;
+
+    /// Set by a right press that opens the focused component's options on its release. A drag or a camera key
+    /// while the button is held clears it.
+    private boolean optionsPending;
+
+    /// Whether a left press at the spot of the last one passes the pick over the focused component to the next
+    /// component under the cursor, as Blender's click cycling does.
+    private boolean clickCycling;
+
+    /// Where the last left press landed, in widget pixels. NaN before the first.
+    private double lastPressX = Double.NaN;
+    private double lastPressY = Double.NaN;
 
     /// Widgets floating over the 3D view. Hit-tested before picking, drawn after the blit.
     private final List<AbstractWidget> overlayWidgets = new ArrayList<>();
@@ -158,7 +175,7 @@ public final class Model3DViewer extends AbstractWidget
 
         debugMessages.remove(component);
 
-        if (focused == component) focused = null;
+        if (focused == component) focus(null);
         if (dragTarget == component) dragTarget = null;
 
         component.destroy();
@@ -260,14 +277,16 @@ public final class Model3DViewer extends AbstractWidget
         runPendingStructureChanges();
     }
 
-    /// The focusable component whose [Model3DViewerComponent#rayTrace] hit is nearest the camera.
+    /// The focusable component whose [Model3DViewerComponent#rayTrace] hit is nearest the camera. Under
+    /// [#setClickCycling], a press repeated at the last press's spot takes the hit behind the focused component,
+    /// wrapping around to the nearest.
     public @Nullable Model3DViewerComponent pick(double mouseX, double mouseY) {
         Ray ray = buildRay(mouseX, mouseY);
 
         if (ray == null) return null;
 
-        Model3DViewerComponent nearest = null;
-        float nearestDistance = Float.MAX_VALUE;
+        List<Model3DViewerComponent> hits = new ArrayList<>();
+        Map<Model3DViewerComponent, Float> distances = new HashMap<>();
 
         iterating = true;
 
@@ -277,17 +296,36 @@ public final class Model3DViewer extends AbstractWidget
 
                 float distance = c.rayTrace(this, ray);
 
-                if (distance < 0.0F || distance >= nearestDistance) continue;
+                if (distance < 0.0F) continue;
 
-                nearest = c;
-                nearestDistance = distance;
+                hits.add(c);
+                distances.put(c, distance);
             }
         } finally {
             iterating = false;
             runPendingStructureChanges();
         }
 
-        return nearest;
+        if (hits.isEmpty()) return null;
+
+        hits.sort(Comparator.comparing(distances::get));
+
+        int focusedIndex = clickCycling && isRepeatedPress(mouseX, mouseY) ? hits.indexOf(focused) : -1;
+
+        return hits.get((focusedIndex + 1) % hits.size());
+    }
+
+    public void setClickCycling(boolean clickCycling) {
+        this.clickCycling = clickCycling;
+    }
+
+    /// Whether a press at `(mouseX, mouseY)` cycles the pick from the focused `component` to another component.
+    public boolean cyclesPast(Model3DViewerComponent component, double mouseX, double mouseY) {
+        return clickCycling && focused == component && isRepeatedPress(mouseX, mouseY) && pick(mouseX, mouseY) != component;
+    }
+
+    private boolean isRepeatedPress(double mouseX, double mouseY) {
+        return Math.hypot(mouseX - lastPressX, mouseY - lastPressY) <= CLICK_CYCLING_PIXELS;
     }
 
     /// Unprojects a widget-space cursor position into a world-space ray. Null before the first frame
@@ -537,7 +575,7 @@ public final class Model3DViewer extends AbstractWidget
                 return true;
             }
 
-            if (focused != null) focused.showOptions(this);
+            optionsPending = focused != null;
             return true;
         }
 
@@ -556,21 +594,24 @@ public final class Model3DViewer extends AbstractWidget
         // The focused component gets the press before anything is re-picked.
         if (focused != null && focused.onMouseDown(this, event)) {
             dragTarget = focused;
-            runPendingStructureChanges();
-            return true;
+        } else {
+            // A press that hits nothing leaves the focus alone — empty space is where the camera is
+            // dragged from, and losing the gizmo on every orbit makes it unusable.
+            Model3DViewerComponent picked = pick(event.x(), event.y());
+
+            if (picked != null) focus(picked);
         }
 
-        // A press that hits nothing leaves the focus alone — empty space is where the camera is
-        // dragged from, and losing the gizmo on every orbit makes it unusable.
-        Model3DViewerComponent picked = pick(event.x(), event.y());
-
-        if (picked != null) focus(picked);
+        lastPressX = event.x();
+        lastPressY = event.y();
+        runPendingStructureChanges();
 
         return true;
     }
 
     @Override
     public boolean mouseDragged(@NonNull MouseButtonEvent event, double dx, double dy) {
+        if (event.button() == 1) optionsPending = false;
         if (dragCancelled) return true;
 
         if (dragTarget != null && event.button() == 0) {
@@ -591,6 +632,17 @@ public final class Model3DViewer extends AbstractWidget
     @Override
     public boolean mouseReleased(@NonNull MouseButtonEvent event) {
         if (event.button() == 0) dragCancelled = false;
+
+        if (event.button() == 1 && optionsPending) {
+            optionsPending = false;
+
+            if (focused != null) {
+                focused.showOptions(this);
+                runPendingStructureChanges();
+            }
+
+            return true;
+        }
 
         // Position-gated: AbstractWidget#mouseReleased answers true for any valid button wherever the
         // cursor is, which would swallow every release and leave [#dragTarget] latched.
@@ -619,19 +671,25 @@ public final class Model3DViewer extends AbstractWidget
         return true;
     }
 
-    /// Routes a key press to the focused component, then to the camera while the cursor is over the view.
+    /// Routes a key press to the focused component, then to the camera while the cursor is over the view. While
+    /// [CameraComponent#isFlying], the camera reads it first.
     @Override
     public boolean keyPressed(@NonNull KeyEvent event) {
         if (!isActive()) return false;
+
+        CameraComponent camera = isHovered() ? getComponent(CameraComponent.class) : null;
+
+        if (camera != null && CameraComponent.isFlying() && camera.onKeyPressed(this, event)) {
+            optionsPending = false;
+            return true;
+        }
 
         if (focused != null && focused.onKeyPressed(this, event)) {
             runPendingStructureChanges();
             return true;
         }
 
-        CameraComponent camera = getComponent(CameraComponent.class);
-
-        return camera != null && isHovered() && camera.onKeyPressed(this, event);
+        return camera != null && camera.onKeyPressed(this, event);
     }
 
     @Override

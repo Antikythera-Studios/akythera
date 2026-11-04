@@ -1,5 +1,7 @@
 package com.yesman.akythera.api.world.ability;
 
+import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
+import com.yesman.akythera.core.reflection.ScriptFunction;
 import com.yesman.akythera.core.reflection.ScriptType;
 import org.jetbrains.annotations.ApiStatus;
 import org.jspecify.annotations.Nullable;
@@ -19,13 +21,13 @@ public final class AbilityInstance {
     /// The last state sent to clients.
     private AbilityState prevState = AbilityState.EMPTY;
 
-    /// Ticks the activation input has been held. Server side only.
-    private int holdingTicks;
-
     /// Set once this instance's state threw while encoding, which latches its state sync off.
     private boolean stateSyncFailed;
 
     private boolean activated;
+
+    /// The owner's [LivingEntityPatch#getTickCount] when this instance last activated, on this side.
+    private int lastActivationTick;
 
     /// Re-points this instance and rebuilds its state.
     public void setAbility(final Ability<?> ability) {
@@ -54,10 +56,6 @@ public final class AbilityInstance {
         return prevState;
     }
 
-    public int getHoldingTicks() {
-        return holdingTicks;
-    }
-
     public boolean isStateSyncFailed() {
         return stateSyncFailed;
     }
@@ -67,12 +65,16 @@ public final class AbilityInstance {
         this.stateSyncFailed = stateSyncFailed;
     }
 
-    public void setHoldingTicks(final int holdingTicks) {
-        this.holdingTicks = holdingTicks;
-    }
-
     public boolean isActivated() {
         return activated;
+    }
+
+    @ScriptFunction(
+        pure = true, label = "Get Last Activation Tick", category = "Ability",
+        desc = "The owner's tick count when this ability last activated. Compare it with the owner's Get Tick Count."
+    )
+    public int getLastActivationTick() {
+        return lastActivationTick;
     }
 
     /// Binds this instance to `ability` in `slot` and builds its state.
@@ -82,7 +84,6 @@ public final class AbilityInstance {
         state = ability.createState();
         prevState = ability.createState();
         activated = false;
-        holdingTicks = 0;
         stateSyncFailed = false;
 
         typed().onEquipped(abilitySystemComponent, this, state);
@@ -105,16 +106,30 @@ public final class AbilityInstance {
     ///
     /// @return whether the ability activated or recast
     public boolean tryActivate(final AbilitySystemComponent abilitySystemComponent) {
-        if (ability == null) return false;
+        if (activated) return canRecast(abilitySystemComponent) && recastAbility(abilitySystemComponent);
 
-        if (activated) return recastAbility(abilitySystemComponent);
-
-        if (!typed().canActivate(abilitySystemComponent, this, state)) return false;
+        if (!canActivate(abilitySystemComponent)) return false;
 
         activated = true;
+        lastActivationTick = abilitySystemComponent.getOwner().getTickCount();
         typed().onActivated(abilitySystemComponent, this, state);
 
         return true;
+    }
+
+    /// Runs [Ability#onAbilityTick] while the ability is activated.
+    public void tick(final AbilitySystemComponent abilitySystemComponent) {
+        if (ability != null && activated) typed().onAbilityTick(abilitySystemComponent, this, state);
+    }
+
+    /// Whether the ability, not running, may activate now, see [Ability#canActivate].
+    public boolean canActivate(final AbilitySystemComponent abilitySystemComponent) {
+        return ability != null && !activated && typed().canActivate(abilitySystemComponent, this, state);
+    }
+
+    /// Whether the ability, already running, may recast now, see [Ability#canRecast].
+    public boolean canRecast(final AbilitySystemComponent abilitySystemComponent) {
+        return ability != null && activated && typed().canRecast(abilitySystemComponent, this, state);
     }
 
     /// Marks this activated and runs [Ability#onActivated], skipping [Ability#canActivate].
@@ -125,6 +140,7 @@ public final class AbilityInstance {
         if (ability == null || activated) return;
 
         activated = true;
+        lastActivationTick = abilitySystemComponent.getOwner().getTickCount();
         typed().onActivated(abilitySystemComponent, this, state);
     }
 

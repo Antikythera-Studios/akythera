@@ -4,7 +4,6 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.data.modularize.ScriptFunction;
-import com.yesman.akythera.api.input.InputAction;
 import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
 import com.yesman.akythera.core.blueprint.AbilityBlueprint;
 import com.yesman.akythera.core.blueprint.script.BlueprintBody;
@@ -17,26 +16,20 @@ import org.jspecify.annotations.Nullable;
 import java.text.MessageFormat;
 import java.util.*;
 
-/// An [Ability] whose common behaviors are settings rather than code: the activation preset, the
-/// cost, the cooldown and the duration effect. A developer extends this so other developers can
-/// parent entries on that subclass and fill the settings in the editor.
+/// An [Ability] whose common behaviors are settings rather than code: the cost, the cooldown and
+/// the duration effect. A developer extends this so other developers can parent entries on that
+/// subclass and fill the settings in the editor.
 ///
 /// Every setting is read through its getter, so a subclass may answer one by overriding it.
 public class SystematicAbility<S extends AbilityState> extends Ability<S> {
-    private final ActivationType activationType;
-
     /// Spent on activation, and checked before it.
     private final List<AbilityEffect> costs;
 
     /// The recharge timer banking this ability's charges.
     private final @Nullable AbilityEffect cooldownEffect;
 
-    /// Present only when [#activationType] is [ActivationType#DURATION], whose expiry is what
-    /// finishes the ability.
+    /// Applied on activation. Its expiry finishes the ability.
     private final @Nullable AbilityEffect durationEffect;
-
-    /// The key this ability reads, required by the presets that stay activated by input.
-    private final @Nullable Holder<InputAction> inputAction;
 
     private final Tags tags;
 
@@ -45,35 +38,22 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
     private final InstantiationScope instantiationScope;
 
     public SystematicAbility(
-        final ActivationType activationType,
         final InstantiationScope instantiationScope,
         final List<AbilityEffect> costs,
         final @Nullable AbilityEffect cooldownEffect,
         final @Nullable AbilityEffect durationEffect
     ) {
-        this(activationType, instantiationScope, costs, cooldownEffect, durationEffect, null, Tags.NONE, List.of());
+        this(instantiationScope, costs, cooldownEffect, durationEffect, Tags.NONE, List.of());
     }
 
     public SystematicAbility(
-        final ActivationType activationType,
         final InstantiationScope instantiationScope,
         final List<AbilityEffect> costs,
         final @Nullable AbilityEffect cooldownEffect,
         final @Nullable AbilityEffect durationEffect,
-        final @Nullable Holder<InputAction> inputAction,
         final Tags tags,
         final List<Trigger> triggers
     ) {
-        if (activationType == ActivationType.DURATION && durationEffect == null) {
-            throw new IllegalArgumentException("A Duration ability needs a Duration Effect.");
-        }
-
-        if (activationType.requiresInputAction() && inputAction == null) {
-            throw new IllegalArgumentException(
-                "A " + activationType + " ability stays activated by its key, and names no Input Action."
-            );
-        }
-
         // The ability's lifetime is the effect's.
         if (durationEffect != null
             && durationEffect.getApplicationType() != AbilityEffect.ApplicationType.DURATION) {
@@ -92,19 +72,11 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
             );
         }
 
-        if (activationType != ActivationType.DURATION && durationEffect != null) {
-            throw new IllegalArgumentException(
-                "A Duration Effect belongs to a Duration ability, not " + activationType + "."
-            );
-        }
-
         for (AbilityEffect cost : costs) {
-            if (!activationType.allowsCostType(cost.getApplicationType())) {
+            // An Instant cost is paid on activation and an Infinite cost on every tick the ability runs.
+            if (cost.getApplicationType() == AbilityEffect.ApplicationType.DURATION) {
                 throw new IllegalArgumentException(
-                    MessageFormat.format(
-                        "A {0} ability cannot carry a {1} cost: {2}",
-                        activationType, cost.getApplicationType(), cost.getId()
-                    )
+                    MessageFormat.format("There is no Duration cost: {0}", cost.getId())
                 );
             }
 
@@ -120,12 +92,10 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
             }
         }
 
-        this.activationType = activationType;
         this.instantiationScope = instantiationScope;
         this.costs = List.copyOf(costs);
         this.cooldownEffect = cooldownEffect;
         this.durationEffect = durationEffect;
-        this.inputAction = inputAction;
         this.tags = tags;
         this.triggers = List.copyOf(triggers);
     }
@@ -137,20 +107,13 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
 
     private SystematicAbility(final BlueprintBody body) {
         this(
-            body.property(SystematicAbility.class, "activationType", ActivationType.INSTANT),
             body.property(SystematicAbility.class, "instantiationScope", InstantiationScope.EVERYWHERE),
             body.property(SystematicAbility.class, "costs", List.of()),
             body.property(SystematicAbility.class, "cooldownEffect", null),
             body.property(SystematicAbility.class, "durationEffect", null),
-            body.property(SystematicAbility.class, "inputAction", null),
             body.property(SystematicAbility.class, "tags", Tags.NONE),
             body.property(SystematicAbility.class, "triggers", List.of())
         );
-    }
-
-    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.PROPERTY)
-    public ActivationType getActivationType() {
-        return activationType;
     }
 
     @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.PROPERTY)
@@ -167,11 +130,6 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
     @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.PROPERTY)
     public @Nullable AbilityEffect getDurationEffect() {
         return durationEffect;
-    }
-
-    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.PROPERTY)
-    public @Nullable Holder<InputAction> getInputAction() {
-        return inputAction;
     }
 
     @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.PROPERTY)
@@ -238,6 +196,19 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
         // and cancels itself on the same tick.
         return canPayCosts(owner, AbilityEffect.ApplicationType.INSTANT)
             && canPayCosts(owner, AbilityEffect.ApplicationType.INFINITE);
+    }
+
+    /// Refuses the recast unless the owner carries every Recast Required Tag and no Recast Blocked Tag.
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.FUNCTION)
+    @Override
+    public boolean canRecast(
+        final AbilitySystemComponent abilitySystemComponent,
+        final AbilityInstance abilityInstance,
+        final S abilityState
+    ) {
+        return super.canRecast(abilitySystemComponent, abilityInstance, abilityState)
+            && abilitySystemComponent.hasAllAbilityTags(getTags().recastRequiredTags())
+            && !abilitySystemComponent.hasAnyAbilityTags(getTags().recastBlockedTags());
     }
 
     /// Whether an activated ability refuses this one, by matching its own Block Abilities with Tag
@@ -436,7 +407,7 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
         }
     }
 
-    /// The six tag fields the editor shows.
+    /// The eight tag fields the editor shows.
     ///
     /// Only [#ownerAcquiredTags] reaches the owner's counted container.
     ///
@@ -447,8 +418,10 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
     /// @param blockAbilitiesWithTag  while activated, refuses any ability whose [#idTags] these
     ///                               match. Server side only
     /// @param ownerAcquiredTags      granted to the owner while activated
-    /// @param activationRequiredTags the owner must carry all of these
-    /// @param activationBlockedTags  the owner must carry none of these
+    /// @param activationRequiredTags the owner must carry all of these to activate
+    /// @param activationBlockedTags  the owner must carry none of these to activate
+    /// @param recastRequiredTags     the owner must carry all of these to recast
+    /// @param recastBlockedTags      the owner must carry none of these to recast
     @ScriptType(autoRegister = false)
     public record Tags(
         AbilityTagSet idTags,
@@ -456,11 +429,13 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
         AbilityTagSet blockAbilitiesWithTag,
         AbilityTagSet ownerAcquiredTags,
         AbilityTagSet activationRequiredTags,
-        AbilityTagSet activationBlockedTags
+        AbilityTagSet activationBlockedTags,
+        AbilityTagSet recastRequiredTags,
+        AbilityTagSet recastBlockedTags
     ) {
         public static final Tags NONE = new Tags(
-            AbilityTagSet.EMPTY, AbilityTagSet.EMPTY, AbilityTagSet.EMPTY,
-            AbilityTagSet.EMPTY, AbilityTagSet.EMPTY, AbilityTagSet.EMPTY
+            AbilityTagSet.EMPTY, AbilityTagSet.EMPTY, AbilityTagSet.EMPTY, AbilityTagSet.EMPTY,
+            AbilityTagSet.EMPTY, AbilityTagSet.EMPTY, AbilityTagSet.EMPTY, AbilityTagSet.EMPTY
         );
 
         public static final Codec<Tags> CODEC =
@@ -472,7 +447,9 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
                         tagSet("block_abilities_with_tag").forGetter(Tags::blockAbilitiesWithTag),
                         tagSet("owner_acquired_tags").forGetter(Tags::ownerAcquiredTags),
                         tagSet("activation_required_tags").forGetter(Tags::activationRequiredTags),
-                        tagSet("activation_blocked_tags").forGetter(Tags::activationBlockedTags)
+                        tagSet("activation_blocked_tags").forGetter(Tags::activationBlockedTags),
+                        tagSet("recast_required_tags").forGetter(Tags::recastRequiredTags),
+                        tagSet("recast_blocked_tags").forGetter(Tags::recastBlockedTags)
                     )
                     .apply(instance, Tags::new)
             );

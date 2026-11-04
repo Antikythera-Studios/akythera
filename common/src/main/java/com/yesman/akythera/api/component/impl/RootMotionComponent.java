@@ -27,6 +27,12 @@ public final class RootMotionComponent implements UniqueComponent, TickableDynam
     private Function<Float, Transform> rootMotionTransformProvider;
     private Supplier<Float> playbackTimeSupplier;
 
+    /// Playback speed multiplier of the source, converting the frame time to the playback time it advanced.
+    private float playRate = 1.0F;
+
+    /// Whether the root's vertical movement moves the owner.
+    private boolean moveVertical = true;
+
     private boolean enabled = true;
 
     public RootMotionComponent(final ArmatureComponent armature) {
@@ -34,9 +40,14 @@ public final class RootMotionComponent implements UniqueComponent, TickableDynam
     }
 
     /// Called on animation with root motion enabled
-    public void setSource(final Function<Float, Transform> rootMotionTransformProvider, final Supplier<Float> playbackTimeSupplier) {
+    public void setSource(
+        final Function<Float, Transform> rootMotionTransformProvider, final Supplier<Float> playbackTimeSupplier,
+        final float playRate, final boolean moveVertical
+    ) {
         this.rootMotionTransformProvider = rootMotionTransformProvider;
         this.playbackTimeSupplier = playbackTimeSupplier;
+        this.playRate = playRate;
+        this.moveVertical = moveVertical;
     }
 
     public void finishRootMotion() {
@@ -50,7 +61,7 @@ public final class RootMotionComponent implements UniqueComponent, TickableDynam
         if (movement == null) return;
 
         float currentTime = playbackTimeSupplier.get();
-        float previousTime = Math.max(currentTime - deltaTime, 0);
+        float previousTime = Math.max(currentTime - deltaTime * playRate, 0);
         Transform previousTransform = rootMotionTransformProvider.apply(previousTime);
         Transform currentTransform = rootMotionTransformProvider.apply(currentTime);
 
@@ -59,7 +70,8 @@ public final class RootMotionComponent implements UniqueComponent, TickableDynam
         Vec3 rootDelta = armature.modelTransform().mulDirection(previousTransform.loc().subtract(currentTransform.loc()));
 
         // TODO: may open a way to choose applying pitch rotation.
-        movement.move(movement.toWorldVector(rootDelta));
+        Vec3 worldDelta = movement.toWorldVector(rootDelta);
+        movement.move(moveVertical ? worldDelta : worldDelta.multiply(1.0D, 0.0D, 1.0D));
     }
 
     // ***************************************************************

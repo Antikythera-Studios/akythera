@@ -5,6 +5,7 @@ import com.yesman.akythera.core.blueprint.EntityPatchBlueprint;
 import com.yesman.akythera.core.reflection.ScriptFunction;
 import com.yesman.akythera.core.reflection.ScriptType;
 import net.minecraft.core.Holder;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.player.PlayerModelPart;
 import net.minecraft.world.entity.player.PlayerSkin;
@@ -23,6 +24,27 @@ public class PlayerPatch extends LivingEntityPatch<Player> {
 
     public PlayerPatch(final PlayerPatch copyTarget) {
         super(copyTarget);
+    }
+
+    /// Whether the attack [#hurtTarget] runs sweeps and resets the attack strength. True outside one.
+    private boolean vanillaAttackEffects = true;
+
+    /// Strikes `target` as a player's attack, with its attack strength and critical hit.
+    @Override
+    public void hurtTarget(final Entity target, final boolean vanillaAttackEffects) {
+        if (getOriginal().level().isClientSide()) return;
+
+        this.vanillaAttackEffects = vanillaAttackEffects;
+
+        try {
+            getOriginal().attack(target);
+        } finally {
+            this.vanillaAttackEffects = true;
+        }
+    }
+
+    public boolean hasVanillaAttackEffects() {
+        return vanillaAttackEffects;
     }
 
     @ScriptFunction(pure = true, label = "Get Player Skin", category = "Online", desc = """

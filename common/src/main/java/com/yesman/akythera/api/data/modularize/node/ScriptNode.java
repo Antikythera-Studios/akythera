@@ -66,6 +66,9 @@ public interface ScriptNode {
         /// What that [ReturnNode] carried.
         private @Nullable Object returnedValue;
 
+        /// What a [SelfNode] answers in this run instead of the script owner, or null to answer the owner.
+        private @Nullable Object self;
+
         ExecutionContext(final ScriptCaller caller, final ScriptVariables locals, final @Nullable ExecutionRecord record) {
             this.caller = caller;
             this.locals = locals;
@@ -78,6 +81,15 @@ public interface ScriptNode {
 
         public ScriptVariables locals() {
             return locals;
+        }
+
+        public @Nullable Object self() {
+            return self;
+        }
+
+        /// Makes every [SelfNode] of this run answer `self`, see [ScriptCallback#runAs].
+        public void setSelf(final @Nullable Object self) {
+            this.self = self;
         }
 
         /// The record this context writes to, or null when it is not recording.

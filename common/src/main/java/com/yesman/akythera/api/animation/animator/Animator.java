@@ -76,7 +76,9 @@ public interface Animator {
                 ) {
                     rootMotionComponent.setSource(
                         montageClip.getBoneTransform(ArmatureLoader.ROOT_BONE)::getTransformAt,
-                        getMontagePlayer(animMontageKey)::getTime
+                        getMontagePlayer(animMontageKey)::getTime,
+                        animMontage.value().playRate(),
+                        animMontage.value().moveVertical()
                     );
                     callbackHandle.addMontageCompletedCallback((_, _, _) -> rootMotionComponent.finishRootMotion());
                 }

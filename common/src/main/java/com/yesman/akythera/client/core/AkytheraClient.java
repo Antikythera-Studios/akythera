@@ -15,8 +15,8 @@ import com.yesman.akythera.client.core.shader.backend.ComputeBackends;
 import com.yesman.akythera.client.core.shader.backend.impl.gl.GlComputeBackend;
 import com.yesman.akythera.client.core.shader.backend.impl.vulkan.VulkanComputeBackend;
 import com.yesman.akythera.client.core.shader.backend.setup.VanillaAnimationComputeShader;
-import com.yesman.akythera.client.input.AbilityInputBinder;
 import com.yesman.akythera.client.input.AkytheraKeyMappings;
+import com.yesman.akythera.client.input.InputManager;
 import com.yesman.akythera.compat.CompatibleMod;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.math.physics.collider.AkytheraColliderType;
@@ -47,7 +47,7 @@ public final class AkytheraClient {
         WidgetTheme.ENUM_MANAGER.registerEnumCls(Akythera.MODID, BuiltInEditBoxTheme.class);
         WidgetTheme.ENUM_MANAGER.registerEnumCls(Akythera.MODID, BuiltInDragValueBoxTheme.class);
         AkytheraKeyMappings.bootStrap();
-        AbilityInputBinder.registerEvents();
+        InputManager.registerEvents();
         HudManager.registerEvents();
 
         ScriptModularizeHelper.registerBlueprintLayout(AkytheraScreen.class, ScreenScript.class);

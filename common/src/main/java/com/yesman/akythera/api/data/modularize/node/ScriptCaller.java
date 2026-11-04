@@ -17,6 +17,9 @@ public record ScriptCaller(@Nullable Object owner, @Nullable ResourceKey<?> blue
     /// Joins a component's path and its slot in a component site.
     public static final String SLOT_SEPARATOR = "#";
 
+    /// Joins a run site and a callback parameter in the site of a callback built there, e.g. `onPossessed/started`.
+    public static final String CALLBACK_SEPARATOR = "/";
+
     /// A run of `script` at `site`.
     public static ScriptCaller of(final DataDrivenScript<?, ?> script, final String site) {
         return new ScriptCaller(script.getScriptOwner(), script.getBlueprint().key(), site);

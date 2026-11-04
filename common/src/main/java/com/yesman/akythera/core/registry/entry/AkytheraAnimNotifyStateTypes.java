@@ -4,6 +4,7 @@ import com.mojang.serialization.MapCodec;
 import com.yesman.akythera.api.animation.notify.AnimationNotifyState;
 import com.yesman.akythera.api.animation.notify.impl.CancelOnMoveNotifyState;
 import com.yesman.akythera.api.animation.notify.impl.ExtendDeathTimeNotifyState;
+import com.yesman.akythera.api.animation.notify.impl.LivingHurtNotifyState;
 import com.yesman.akythera.api.animation.notify.impl.LockMovementNotifyState;
 import com.yesman.akythera.api.animation.notify.impl.LogNotifyState;
 import com.yesman.akythera.api.animation.notify.impl.StartRagdollNotifyState;
@@ -27,4 +28,5 @@ public final class AkytheraAnimNotifyStateTypes {
     public static final Holder<MapCodec<? extends AnimationNotifyState<?>>> CANCEL_ON_MOVE = REGISTRAR.register("cancel_on_move", () -> CancelOnMoveNotifyState.CODEC);
     public static final Holder<MapCodec<? extends AnimationNotifyState<?>>> EXTEND_DEATH_TIME = REGISTRAR.register("extend_death_time", () -> ExtendDeathTimeNotifyState.CODEC);
     public static final Holder<MapCodec<? extends AnimationNotifyState<?>>> START_RAGDOLL = REGISTRAR.register("start_ragdoll", () -> StartRagdollNotifyState.CODEC);
+    public static final Holder<MapCodec<? extends AnimationNotifyState<?>>> LIVING_HURT = REGISTRAR.register("living_hurt", () -> LivingHurtNotifyState.CODEC);
 }

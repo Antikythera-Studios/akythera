@@ -16,6 +16,7 @@ import com.yesman.akythera.api.world.ability.DataDrivenAbilityCue;
 import com.yesman.akythera.api.world.patch.AkytheraPatches;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.Akythera;
+import com.yesman.akythera.api.lifecycle.ComponentsFactory;
 import com.yesman.akythera.core.blueprint.AbilityBlueprint;
 import com.yesman.akythera.core.blueprint.AbilityCueBlueprint;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
@@ -92,7 +93,7 @@ public class AbilityControlCommand {
                                             forEachComponent(
                                                 EntityArgument.getEntities(context, "targets"),
                                                 component -> {
-                                                    Ability<?> ability = AbilityBlueprint.createAbility(blueprint);
+                                                    Ability<?> ability = ComponentsFactory.getImpl().getAbility(blueprint);
 
                                                     return ability != null && component.giveAbility(slot, ability) != null;
                                                 }

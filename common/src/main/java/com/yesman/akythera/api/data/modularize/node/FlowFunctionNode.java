@@ -21,10 +21,12 @@ import java.util.List;
 /// This node becomes an entry point of node sequences. Only common
 /// functions can be here. See [ScriptFunction.Type].
 ///
+/// As a [PureNode], it answers what the call returned, so a [ScriptVariableSetterNode] can keep the answer.
+///
 /// @param nextNode null if this node is the last flow.
 public record FlowFunctionNode(
     ScriptFunction function, List<PureNode> params, @Nullable FlowNode nextNode, int nodeId
-) implements FlowNode, FunctionNode
+) implements FlowNode, PureNode, FunctionNode
 {
     /// A node with no canvas row behind it — the builders, and any hand-assembled tree.
     public FlowFunctionNode(

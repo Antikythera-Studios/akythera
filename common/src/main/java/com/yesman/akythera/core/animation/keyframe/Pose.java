@@ -99,6 +99,19 @@ public final class Pose {
         }
     }
 
+    /// A copy of this pose with each bone moved as it moves from `from` to `to`, see [Transform#relativeTo].
+    public Pose offsetBy(final Pose from, final Pose to) {
+        Pose offset = new Pose(this);
+
+        to.forEachTransforms((name, transform) -> {
+            Transform base = from.get(name);
+
+            if (base != null) offset.putBoneTransform(name, orElseIdentity(name).applyAdditive(transform.relativeTo(base), 1.0F));
+        });
+
+        return offset;
+    }
+
     /// Set the pose from another pose, if the key exists replace from `other`
     public void setPose(final Pose other) {
         other.forEachTransforms(this::putBoneTransform);

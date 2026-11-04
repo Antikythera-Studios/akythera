@@ -1,6 +1,7 @@
 package com.yesman.akythera.core.reflection;
 
 import com.yesman.akythera.api.data.modularize.ScriptFunction;
+import com.yesman.akythera.api.data.modularize.ScriptType;
 import com.yesman.akythera.core.util.helper.ParseUtils;
 
 import java.lang.reflect.Type;
@@ -58,6 +59,9 @@ public record FunctionSignature(
     /// semantics, e.g. `Double` -> `float`): the synthesized SAM coerces the value
     /// through [Number] at the invocation boundary, so the conversion is guaranteed
     /// to succeed at runtime.
+    ///
+    /// A `ResourceKey<T>` slot of a registry entry type `T` also accepts a `T`, which the synthesized SAM turns
+    /// into its key at the invocation boundary.
     public boolean isParameterCompatible(Class<?> type, int index) {
         Class<?> provided = boxed(type);
         Class<?> expected = boxed(parameters().get(index));
@@ -66,7 +70,13 @@ public record FunctionSignature(
             return true;
         }
 
-        return isNumeric(expected) && isNumeric(provided);
+        if (isNumeric(expected) && isNumeric(provided)) {
+            return true;
+        }
+
+        ScriptType expectedType = ScriptType.of(genericParameters().get(index));
+
+        return expectedType != null && expectedType.isKeyOf(provided);
     }
 
     private static boolean isNumeric(Class<?> type) {

@@ -6,8 +6,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.client.api.particle.AkytheraTrailParticle;
 
 /// Spawns one particle when the emitter starts, then finishes after a time span of `duration` seconds. The rule every
-/// emitter of a [TrailParticleBlueprint] spawns by: the [AkytheraTrailParticle] samples edges until the emitter
-/// finishes.
+/// emitter of a [TrailParticleBlueprint] spawns by: the [AkytheraTrailParticle] samples edges until the time span ends.
 public record TrailSpawnRule(float duration) implements EmitterSpawnRule {
     public static final MapCodec<TrailSpawnRule> MAP_CODEC = RecordCodecBuilder.mapCodec(
         instance ->
@@ -30,9 +29,10 @@ public record TrailSpawnRule(float duration) implements EmitterSpawnRule {
                 return 1;
             }
 
+            /// Not before the trail spawned, for an emitter whose first tick is already past its time span.
             @Override
             public boolean isOver(final float seconds) {
-                return seconds >= duration;
+                return spawned && seconds >= duration;
             }
         };
     }

@@ -1,7 +1,6 @@
 package com.yesman.akythera.api.world.patch;
 
 import com.yesman.akythera.api.event.BuiltInEventHooks;
-import com.yesman.akythera.api.event.registry.RegistryAccessEvent;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.ClientOnly;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
@@ -32,19 +31,16 @@ public final class AkytheraPatches {
 
     @ApiStatus.Internal
     public static void registerEvents() {
-        BuiltInEventHooks.Registry.REGISTRY_ACCESS_UNLOAD.registerEvent(AkytheraPatches::clearCachedItemPatches);
+        BuiltInEventHooks.Registry.REGISTRY_ACCESS_UNLOAD.registerEvent(_ -> ITEM_PATCH_CACHE.clear());
+        BuiltInEventHooks.Registry.REGISTRY_ACCESS_RELOAD.registerEvent(_ -> ITEM_PATCH_CACHE.clear());
     }
 
-    /// Cached [ItemPatch]s after [StaticRegistryAccess#getRegistryAccess] is loaded
+    /// Cached [ItemPatch]s after [StaticRegistryAccess#getRegistryAccess] is loaded. Dropped when the registry
+    /// unloads or reloads.
     ///
     /// Since item patches can't be built on data pack load due to its parent-child hierarchy
     /// the patch is initially assembled in first reference
     private static final Map<Item, @Nullable ItemPatch> ITEM_PATCH_CACHE = new HashMap<>();
-
-    /// Unload registry access when quitting a world
-    private static void clearCachedItemPatches(RegistryAccessEvent.Unload event) {
-        ITEM_PATCH_CACHE.clear();
-    }
 
     public static @Nullable ItemPatch getItemPatch(ItemStack itemStack) {
         Item item = itemStack.getItem();

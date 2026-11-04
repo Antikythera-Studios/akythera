@@ -4,8 +4,10 @@ import com.yesman.akythera.core.util.LogicalSide;
 import org.jspecify.annotations.Nullable;
 
 import java.text.MessageFormat;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
 
@@ -99,6 +101,22 @@ public interface ComponentAttachable {
         }
 
         return null;
+    }
+
+    /// Every switched-on component of `type` anywhere under this host, depth first in listing order. A switched-off
+    /// host hides what is attached under it.
+    default <C extends PatchComponent> List<C> findComponentsBelow(final Class<C> type) {
+        List<C> found = new ArrayList<>();
+
+        for (PatchComponent component : getComponents().values()) {
+            if (!component.isEnabled()) continue;
+
+            if (type.isInstance(component)) found.add(type.cast(component));
+
+            if (component instanceof ComponentAttachable host) found.addAll(host.findComponentsBelow(type));
+        }
+
+        return found;
     }
 
     /// Indexes the [UniqueComponent]s among `components` by their runtime class — the map

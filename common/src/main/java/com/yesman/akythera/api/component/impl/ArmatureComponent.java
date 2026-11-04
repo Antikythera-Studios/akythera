@@ -44,6 +44,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.IntFunction;
+import java.util.function.Supplier;
 
 /// Module for skeletal mesh armature. Animator and armature are paired since both are coupled to work.
 ///
@@ -102,6 +103,9 @@ public class ArmatureComponent
     /// The skeleton [#boundTransforms] held before the last server pose, swapped with it rather than
     /// copied. Null on a client, which poses per frame and never needs a second one.
     private Matrix4f @Nullable [] previousBoundTransforms;
+
+    /// The skeleton [#readAt] binds its pose into, reused across reads.
+    private Matrix4f @Nullable [] readTransforms;
 
     /// Game tick [#boundTransforms] was built for, and the tick [#previousBoundTransforms] was built
     /// for. Server-side only; both stay [Long#MIN_VALUE] on a client.
@@ -272,6 +276,24 @@ public class ArmatureComponent
         ArmaturePhysicsData physics = ArmaturePhysicsManager.ofArmature(accessor);
         cachedPose = physics == null ? pose : resolved.applyBoneConstraints(pose, physics, ragdoll != null);
         cachedPose.getForwardBoundTransforms(accessor, boundTransforms);
+    }
+
+    /// Runs `reader` with the skeleton bound to `pose` in place of the drawn one, which is bound back after.
+    public <T> T readAt(final Pose pose, final Supplier<T> reader) {
+        AssetAccessor<? extends Armature> accessor = getArmature();
+        Matrix4f[] drawn = boundTransforms;
+
+        if (accessor == null || accessor.get() == null || drawn == null) return reader.get();
+
+        if (readTransforms == null || readTransforms.length != drawn.length) readTransforms = Matrix4fUtils.allocateMatrixArray(drawn.length);
+
+        boundTransforms = pose.getForwardBoundTransforms(accessor, readTransforms);
+
+        try {
+            return reader.get();
+        } finally {
+            boundTransforms = drawn;
+        }
     }
 
     /// Lets the bodies of this armature's [ArmaturePhysicsData] fall as a rag doll for `durationTicks`, drawn in place

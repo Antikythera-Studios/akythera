@@ -4,6 +4,7 @@
   "compatibilityLevel": "JAVA_21",
   "package": "com.yesman.akythera.mixin",
   "client": [
+    "client.MixinCamera",
     "client.MixinClientCommonPacketListenerImpl",
     "client.MixinClientConfigurationPacketListenerImpl",
     "client.MixinClientLevel",
@@ -28,6 +29,7 @@
     "common.MixinMappedRegistry",
     "common.MixinMinecraftServer",
     "common.MixinPersistentEntitySectionManager",
+    "common.MixinPlayer",
     "common.MixinRegistryDataLoader",
     "common.MixinRegistryLoadTask"
   ],

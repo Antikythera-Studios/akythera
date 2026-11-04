@@ -22,4 +22,8 @@ import java.util.function.Supplier;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface BlueprintFunction {
     ScriptFunction.BlueprintGraphType graphType();
+
+    /// Whether a new Event Graph leaves this [ScriptFunction.BlueprintGraphType#EVENT_GRAPH] entry out. The node
+    /// suggestions still place it.
+    boolean hidden() default false;
 }

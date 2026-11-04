@@ -47,6 +47,7 @@ public record NumericOperatorNode(Operator operator, PureNode a, PureNode b, int
                 case SUBTRACT -> p - q;
                 case MULTIPLY -> p * q;
                 case DIVIDE -> p / q;
+                case MODULO -> p % q;
             };
         }
 
@@ -57,6 +58,7 @@ public record NumericOperatorNode(Operator operator, PureNode a, PureNode b, int
                 case SUBTRACT -> p - q;
                 case MULTIPLY -> p * q;
                 case DIVIDE -> p / q;
+                case MODULO -> p % q;
             };
         }
 
@@ -67,6 +69,7 @@ public record NumericOperatorNode(Operator operator, PureNode a, PureNode b, int
                 case SUBTRACT -> p - q;
                 case MULTIPLY -> p * q;
                 case DIVIDE -> p / q;
+                case MODULO -> p % q;
             };
         }
 
@@ -77,11 +80,12 @@ public record NumericOperatorNode(Operator operator, PureNode a, PureNode b, int
             case SUBTRACT -> p - q;
             case MULTIPLY -> p * q;
             case DIVIDE -> p / q;
+            case MODULO -> p % q;
         };
     }
 
     public enum Operator {
-        ADD("+"), SUBTRACT("-"), MULTIPLY("x"), DIVIDE("/");
+        ADD("+"), SUBTRACT("-"), MULTIPLY("x"), DIVIDE("/"), MODULO("%");
 
         final String sign;
 

@@ -5,6 +5,7 @@ import com.yesman.akythera.core.blueprint.particle.ParticleAttachment;
 import com.yesman.akythera.core.blueprint.particle.ParticleSystemBlueprint;
 import com.yesman.akythera.core.math.Transform;
 import com.yesman.akythera.core.reflection.ScriptFunction;
+import com.yesman.akythera.mixinaccessor.client.ParticleEngineAccessor;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
@@ -18,7 +19,8 @@ public final class AkytheraParticles {
     ///
     /// The system takes its first tick here, since the particle engine ticks what is added only from its next tick on.
     ///
-    /// @param partialTick how far past the last tick the system starts: 0 on a tick, the frame's between two ticks
+    /// @param partialTick how far past the last tick the system starts: 0 on a tick, the frame's between two ticks,
+    ///                    negative before the last tick
     public static @Nullable AkytheraParticleSystem play(
         final ParticleSystemBlueprint blueprint, final Transform transform, final @Nullable ParticleAttachment attachment, final float partialTick
     ) {
@@ -29,7 +31,7 @@ public final class AkytheraParticles {
         AkytheraParticleSystem system = new AkytheraParticleSystem(minecraft.level, blueprint, transform, attachment);
         system.start(partialTick);
 
-        if (system.isAlive()) minecraft.particleEngine.add(system);
+        if (system.isAlive()) ((ParticleEngineAccessor)minecraft.particleEngine).akythera$addNow(system);
 
         return system;
     }

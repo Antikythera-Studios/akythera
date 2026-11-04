@@ -16,6 +16,7 @@ public interface PureNode extends ScriptNode {
         node ->
             switch (node) {
                 case SelfNode _                  -> "self_node";
+                case NullNode _                  -> "null_node";
                 case LiteralNode<?> _            -> "literal_node";
                 case PureFunctionNode _          -> "pure_task_node";
                 case ScriptVariableGetterNode _  -> "variable_getter";
@@ -34,6 +35,7 @@ public interface PureNode extends ScriptNode {
                 case RegistryKeyNode _           -> "registry_key";
                 case ParentCallNode _            -> "parent_call";
                 case FunctionCallNode _          -> "function_call";
+                case FlowFunctionNode _          -> "flow_function_node";
                 case BlueprintFieldGetterNode _  -> "blueprint_field_getter";
                 case ParticleSystemParameterNode _ -> "particle_system_parameter";
                 default -> throw new IllegalArgumentException(
@@ -43,6 +45,7 @@ public interface PureNode extends ScriptNode {
         literal ->
             switch (literal) {
                 case "self_node"             -> SelfNode.CODEC.fieldOf("self_node");
+                case "null_node"             -> NullNode.CODEC.fieldOf("null_node");
                 case "literal_node"          -> LiteralNode.CODEC.fieldOf("literal_node");
                 case "pure_task_node"        -> PureFunctionNode.CODEC.fieldOf("pure_task_node");
                 case "variable_getter"       -> ScriptVariableGetterNode.CODEC.fieldOf("variable_getter");
@@ -61,6 +64,7 @@ public interface PureNode extends ScriptNode {
                 case "registry_key"          -> RegistryKeyNode.CODEC.fieldOf("registry_key");
                 case "parent_call"           -> ParentCallNode.CODEC.fieldOf("parent_call");
                 case "function_call"         -> FunctionCallNode.CODEC.fieldOf("function_call");
+                case "flow_function_node"    -> FlowFunctionNode.CODEC.fieldOf("flow_function_node");
                 case "blueprint_field_getter" -> BlueprintFieldGetterNode.CODEC.fieldOf("blueprint_field_getter");
                 case "particle_system_parameter" -> ParticleSystemParameterNode.CODEC.fieldOf("particle_system_parameter");
                 default -> throw new IllegalArgumentException(

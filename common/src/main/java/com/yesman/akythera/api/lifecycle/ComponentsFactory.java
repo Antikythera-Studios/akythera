@@ -6,6 +6,9 @@ import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.api.component.impl.EquipmentSlotBinder;
 import com.yesman.akythera.api.component.impl.EquipmentSlotBinderBlueprint;
 import com.yesman.akythera.api.data.modularize.ScriptFunction;
+import com.yesman.akythera.api.event.BuiltInEventHooks;
+import com.yesman.akythera.api.world.ability.Ability;
+import com.yesman.akythera.api.world.ability.AbilitySystemComponent;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.client.api.gui.viewer.Model3DViewer;
 import com.yesman.akythera.client.api.lifecycle.ClientComponentsFactory;
@@ -14,6 +17,7 @@ import com.yesman.akythera.core.animation.animator.BlendingAnimator;
 import com.yesman.akythera.core.animation.animator.MontageOnlyAnimator;
 import com.yesman.akythera.core.asset.armature.Armature;
 import com.yesman.akythera.core.asset.armature.Bone;
+import com.yesman.akythera.core.blueprint.AbilityBlueprint;
 import com.yesman.akythera.core.blueprint.EntityPatchBlueprint;
 import com.yesman.akythera.core.blueprint.script.AnimatorScript;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
@@ -23,16 +27,19 @@ import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.player.PlayerSkin;
+import org.jetbrains.annotations.ApiStatus;
 import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
@@ -54,6 +61,13 @@ public abstract class ComponentsFactory {
         } else {
             impl = factory;
         }
+    }
+
+    /// Drops [#abilities] when the registry unloads or reloads.
+    @ApiStatus.Internal
+    public static void registerEvents() {
+        BuiltInEventHooks.Registry.REGISTRY_ACCESS_UNLOAD.registerEvent(_ -> getImpl().abilities.clear());
+        BuiltInEventHooks.Registry.REGISTRY_ACCESS_RELOAD.registerEvent(_ -> getImpl().abilities.clear());
     }
 
     /// Returns implementation
@@ -124,6 +138,36 @@ public abstract class ComponentsFactory {
             // The constructor's entity parameter is checked at the erased invocation boundary, so a
             // patch parented on a narrower one (a player patch on a zombie) only fails here.
             Akythera.LOGGER.error("Entity patch '{}' cannot be built for {}", entityId, entity.getType(), e);
+            return null;
+        }
+    }
+
+    /// One [Ability] per entry, so a slot cannot hold two of the same and [AbilitySystemComponent#giveAbility]'s
+    /// identity check still means something.
+    private final Map<ResourceKey<AbilityBlueprint>, Ability<?>> abilities = new ConcurrentHashMap<>();
+
+    /// Returns the ability `blueprint` describes, built by invoking its parent constructor on first request.
+    ///
+    /// @return null when the constructor is not a one-argument function, or refuses the blueprint
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public @Nullable Ability<?> getAbility(final Holder.Reference<AbilityBlueprint> blueprint) {
+        Ability<?> cached = abilities.get(blueprint.key());
+
+        if (cached != null) return cached;
+
+        try {
+            ScriptFunction.ScriptUniFunction uniFunction = (ScriptFunction.ScriptUniFunction)blueprint.value().ctor();
+            Ability<?> ability = (Ability<?>)uniFunction.function().apply(blueprint);
+
+            // Stamped here rather than in a constructor, so a third-party parent that never
+            // forwards the holder still ends up nameable on the wire.
+            ability.setBlueprintKey(blueprint.key());
+            abilities.put(blueprint.key(), ability);
+
+            return ability;
+        } catch (ClassCastException | IllegalStateException | IllegalArgumentException exception) {
+            Akythera.LOGGER.error("Ability {} cannot be built from its parent constructor", blueprint.key().identifier(), exception);
+
             return null;
         }
     }

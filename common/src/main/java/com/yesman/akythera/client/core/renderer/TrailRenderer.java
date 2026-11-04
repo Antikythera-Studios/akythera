@@ -18,7 +18,9 @@ import com.yesman.akythera.client.core.shader.backend.program.BarrierFlags;
 import com.yesman.akythera.client.core.shader.backend.program.ComputeProgram;
 import com.yesman.akythera.client.core.shader.backend.setup.DynamicStorageBuffer;
 import com.yesman.akythera.core.Akythera;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.client.renderer.rendertype.OutputTarget;
 import net.minecraft.client.renderer.rendertype.RenderSetup;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.resources.Identifier;
@@ -58,12 +60,16 @@ public final class TrailRenderer {
         .withDepthStencilState(new DepthStencilState(CompareOp.GREATER_THAN_OR_EQUAL, false))
         .build();
 
+    /// The level's particle target under Fabulous graphics, else the main target.
+    private static final OutputTarget PARTICLES_TARGET = new OutputTarget("akythera_particles_target", () -> Minecraft.getInstance().levelRenderer.particlesTarget());
+
     private static final Function<Identifier, RenderType> RENDER_TYPES = Util.memoize(
         texture -> RenderType.create(
             "akythera_trail",
             RenderSetup.builder(PIPELINE)
                 .withTexture("Sampler0", texture, () -> RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR))
                 .useLightmap()
+                .setOutputTarget(PARTICLES_TARGET)
                 .createRenderSetup()
         )
     );

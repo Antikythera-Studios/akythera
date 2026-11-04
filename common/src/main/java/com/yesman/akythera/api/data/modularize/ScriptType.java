@@ -232,6 +232,17 @@ public record ScriptType(
             .or(() -> StaticRegistryAccess.getRegistryAccess().lookupOrThrow(registry).getResourceKey(value));
     }
 
+    /// `value` as a key of `registry`: itself when it is a key or null, the key [#entryKey] finds when it is an entry.
+    ///
+    /// @throws IllegalArgumentException when `value` is no entry of `registry`
+    @SuppressWarnings("unchecked")
+    public static <T> @Nullable ResourceKey<T> asKey(final ResourceKey<? extends Registry<T>> registry, final @Nullable Object value) {
+        if (value == null || value instanceof ResourceKey<?>) return (ResourceKey<T>) value;
+
+        return entryKey(registry, (T) value).orElseThrow(() ->
+            new IllegalArgumentException(value + " is not registered in " + registry.identifier()));
+    }
+
     /// The entry `key` names, answered by [BuiltInEventHooks.Registry#LOOKUP_ENTRY_BY_KEY] subscribers
     /// first, then the live registries.
     public static <T> Optional<Holder<T>> lookupEntry(final ResourceKey<T> key) {
@@ -383,6 +394,11 @@ public record ScriptType(
         ScriptType scriptType = of(from);
 
         return scriptType != null && scriptType.implicitlyCastableTypes().containsKey(ParseUtils.box(to));
+    }
+
+    /// Whether this is the key type of the registry whose entries are `entryType`s, see [#keyOf].
+    public boolean isKeyOf(final Class<?> entryType) {
+        return type == ResourceKey.class && element != null && element.registry != null && element.type.isAssignableFrom(entryType);
     }
 
     /// Compare if the given class type can be used as parameter of `index`

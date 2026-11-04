@@ -73,8 +73,7 @@ public final class JsonAnimationLoader implements AnimationLoader, JsonAssetLoad
 
                 if (bone == null) {
                     if (!LEGACY_ROOT_BONE_NAME.equals(name)) {
-                        // Skip the bone that doesn't exist in armature
-                        root = false;
+                        // Skip the bone that doesn't exist in armature. The root correction goes to the next bone
                         continue;
                     } else {
                         // Add a fake bone to load old root motion bone

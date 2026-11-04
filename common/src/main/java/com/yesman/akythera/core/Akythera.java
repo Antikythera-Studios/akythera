@@ -15,7 +15,6 @@ import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.api.world.ability.Ability;
 import com.yesman.akythera.api.world.ability.AbilityCue;
 import com.yesman.akythera.api.world.ability.AbilityCueScript;
-import com.yesman.akythera.core.blueprint.AbilityBlueprint;
 import com.yesman.akythera.client.api.lifecycle.ClientComponentsFactory;
 import com.yesman.akythera.api.world.ability.AbilityResources;
 import com.yesman.akythera.api.world.ability.AbilitySystemComponent;
@@ -120,7 +119,7 @@ public final class Akythera {
         // Register level load & unload events to cache registry access for the helper class
         StaticRegistryAccess.registerEvents();
         AkytheraPatches.registerEvents();
-        AbilityBlueprint.registerEvents();
+        ComponentsFactory.registerEvents();
         AbilitySystemComponent.registerEvents();
 
         ScriptModularizeHelper.registerBlueprintLayout(EntityPatch.class, EntityPatchScript.class);

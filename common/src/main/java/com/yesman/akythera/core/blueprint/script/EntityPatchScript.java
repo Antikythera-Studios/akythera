@@ -21,6 +21,21 @@ public interface EntityPatchScript {
     @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.EVENT_GRAPH)
     void update();
 
+    /// Called on [EntityPatch#onPossessed]
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.EVENT_GRAPH, hidden = true)
+    default void onPossessed() {
+    }
+
+    /// Called on [EntityPatch#onUnpossessed]
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.EVENT_GRAPH, hidden = true)
+    default void onUnpossessed() {
+    }
+
+    /// Called on [EntityPatch#onDeath]
+    @BlueprintFunction(graphType = ScriptFunction.BlueprintGraphType.EVENT_GRAPH, hidden = true)
+    default void onDeath() {
+    }
+
     /// Entries of (name, components) to attach to the owner
     Map<String, ComponentBlueprint<?, ?>> componentsToAttach();
 }

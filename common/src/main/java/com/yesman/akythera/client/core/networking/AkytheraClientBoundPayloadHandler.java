@@ -13,9 +13,8 @@ import com.yesman.akythera.client.api.gui.BlueprintWidgets;
 import com.yesman.akythera.client.api.gui.HudManager;
 import com.yesman.akythera.client.api.particle.AkytheraParticleSystem;
 import com.yesman.akythera.client.api.particle.AkytheraParticles;
-import com.yesman.akythera.client.input.AbilityInputBinder;
 import com.yesman.akythera.core.Akythera;
-import com.yesman.akythera.core.blueprint.AbilityBlueprint;
+import com.yesman.akythera.api.lifecycle.ComponentsFactory;
 import com.yesman.akythera.core.blueprint.AbilityCueBlueprint;
 import com.yesman.akythera.core.blueprint.particle.ParticleAttachment;
 import com.yesman.akythera.core.math.Transform;
@@ -109,8 +108,6 @@ public interface AkytheraClientBoundPayloadHandler {
             if (payload.ability().isEmpty()) {
                 component.removeAbility(payload.slot());
 
-                if (isLocalPlayer(entity)) AbilityInputBinder.unbind(payload.slot());
-
                 return;
             }
 
@@ -124,17 +121,12 @@ public interface AkytheraClientBoundPayloadHandler {
             Minecraft.getInstance().level.registryAccess()
                 .lookup(AkytheraRegistries.DataPack.ABILITY_KEY)
                 .flatMap(registry -> registry.get(payload.ability().get()))
-                .map(AbilityBlueprint::createAbility)
+                .map(ComponentsFactory.getImpl()::getAbility)
                 .ifPresent(ability -> {
                     AbilityInstance equipped = component.giveAbility(payload.slot(), ability);
 
                     // A snapshot carries the current flag.
                     if (equipped != null && payload.activated()) equipped.applyActivated(component);
-
-                    // Only the local player has a keyboard, and only a filled slot has a key to read.
-                    if (equipped != null && isLocalPlayer(entity)) {
-                        AbilityInputBinder.bind(component, payload.slot(), equipped);
-                    }
                 });
         });
     }
@@ -167,10 +159,6 @@ public interface AkytheraClientBoundPayloadHandler {
                 case FINISHED -> instance.endAbility(component);
             }
         });
-    }
-
-    static boolean isLocalPlayer(final Entity entity) {
-        return entity == Minecraft.getInstance().player;
     }
 
     /// The client's entity `entityId`, or null.

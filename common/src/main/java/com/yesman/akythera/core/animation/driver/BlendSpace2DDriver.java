@@ -201,9 +201,9 @@ public final class BlendSpace2DDriver implements AnimationDriver {
         }
 
         cachedCycleTime =
-            cachedAnim1.getTotalFrameTime() / cachedAnim1.rateScale() * cachedWeight1 +
-            cachedAnim2.getTotalFrameTime() / cachedAnim2.rateScale() * cachedWeight2 +
-            cachedAnim3.getTotalFrameTime() / cachedAnim3.rateScale() * cachedWeight3;
+            cachedAnim1.getTotalFrameTime() / cachedAnim1.playRate() * cachedWeight1 +
+            cachedAnim2.getTotalFrameTime() / cachedAnim2.playRate() * cachedWeight2 +
+            cachedAnim3.getTotalFrameTime() / cachedAnim3.playRate() * cachedWeight3;
 
         phase += MathUtils.safeDivision(frameTime, cachedCycleTime, 0.0F);
 

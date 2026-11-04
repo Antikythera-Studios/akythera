@@ -6,8 +6,8 @@ import com.yesman.akythera.core.blueprint.script.DataDrivenAbilityState;
 import net.minecraft.core.Holder;
 
 /// A [SystematicAbility] whose event entry points run the blueprint's graphs after the Java ones, and whose
-/// `canActivate` runs the blueprint's override when it declares one, so an ability needs no class in the
-/// codebase.
+/// `canActivate` and `canRecast` run the blueprint's override when it declares one, so an ability needs no class in
+/// the codebase.
 ///
 /// What [AkytheraScriptFunctions#SYSTEMATIC_ABILITY_CONSTRUCTOR] builds for a [SystematicAbility] written in
 /// a data pack. It is never a parent of its own.
@@ -44,6 +44,20 @@ public class DataDrivenAbility extends SystematicAbility<DataDrivenAbilityState>
         ));
     }
 
+    /// Fails closed: an override that throws, or answers with anything but true, refuses the recast.
+    @Override
+    public boolean canRecast(
+        final AbilitySystemComponent abilitySystemComponent,
+        final AbilityInstance abilityInstance,
+        final DataDrivenAbilityState abilityState
+    ) {
+        return Boolean.TRUE.equals(abilityState.getBlueprintExecutor().invokeMethod(
+            "canRecast",
+            () -> super.canRecast(abilitySystemComponent, abilityInstance, abilityState),
+            abilitySystemComponent, abilityInstance, abilityState
+        ));
+    }
+
     @Override
     public void onEquipped(
         final AbilitySystemComponent abilitySystemComponent,
@@ -66,6 +80,18 @@ public class DataDrivenAbility extends SystematicAbility<DataDrivenAbilityState>
 
         abilityState.getBlueprintExecutor().invokeMethod(
             "onUnequipped", null, abilitySystemComponent, abilityInstance, abilityState);
+    }
+
+    @Override
+    public void onAbilityTick(
+        final AbilitySystemComponent abilitySystemComponent,
+        final AbilityInstance abilityInstance,
+        final DataDrivenAbilityState abilityState
+    ) {
+        super.onAbilityTick(abilitySystemComponent, abilityInstance, abilityState);
+
+        abilityState.getBlueprintExecutor().invokeMethod(
+            "onAbilityTick", null, abilitySystemComponent, abilityInstance, abilityState);
     }
 
     @Override

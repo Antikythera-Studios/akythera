@@ -16,10 +16,13 @@ import java.util.Map;
 public final class DataDrivenEntityPatchScript
     implements EntityPatchScript, DataDrivenScript<EntityPatch<Entity>, DataDrivenEntityPatchBlueprint>
 {
-    /// [ScriptCaller] sites of the three entry points, which are the events' method names.
+    /// [ScriptCaller] sites of the entry points, which are the events' method names.
     public static final String ON_CONSTRUCT = "onConstruct";
     public static final String ON_JOIN_WORLD = "onJoinWorld";
     public static final String UPDATE = "update";
+    public static final String ON_POSSESSED = "onPossessed";
+    public static final String ON_UNPOSSESSED = "onUnpossessed";
+    public static final String ON_DEATH = "onDeath";
 
     /// Script blueprint
     private final Holder.Reference<DataDrivenEntityPatchBlueprint> blueprint;
@@ -48,6 +51,21 @@ public final class DataDrivenEntityPatchScript
     @Override
     public void update() {
         executor.invokeMethod(UPDATE, null);
+    }
+
+    @Override
+    public void onPossessed() {
+        executor.invokeMethod(ON_POSSESSED, null);
+    }
+
+    @Override
+    public void onUnpossessed() {
+        executor.invokeMethod(ON_UNPOSSESSED, null);
+    }
+
+    @Override
+    public void onDeath() {
+        executor.invokeMethod(ON_DEATH, null);
     }
 
     @Override

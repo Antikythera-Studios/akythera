@@ -21,6 +21,11 @@ public abstract class MixinPreparedFrame {
     @Inject(at = @At("TAIL"), method = "executeTranslucent()V")
     private void akythera$renderTranslucentSkinnedMeshes(CallbackInfo callbackInfo) {
         PatchModelRenderer.getInstance().renderTranslucent();
+    }
+
+    /// Trails draw with the translucent particles, after the translucent terrain.
+    @Inject(at = @At("TAIL"), method = "executeTranslucentAfterTerrain()V")
+    private void akythera$renderTrails(CallbackInfo callbackInfo) {
         TrailRenderer.getInstance().render();
     }
 

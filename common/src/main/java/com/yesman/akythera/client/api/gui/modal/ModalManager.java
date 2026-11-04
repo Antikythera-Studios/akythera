@@ -163,6 +163,23 @@ public final class ModalManager {
             }
         }
 
+        openModalWidgetBeside(anchorRect, modal, width, height);
+    }
+
+    /// Push `modal` with its top-left at (`x`, `y`), the cursor usually. On an axis where it would run off
+    /// [#getViewport], it flips to the left of / above the point instead, as [#openModalWidgetUnder] does.
+    public void openModalWidgetAt(final @NonNull AbstractWidget modal, final int x, final int y) {
+        openModalWidgetBeside(new ScreenRectangle(x, y, 0, 0), modal, modal.getWidth(), modal.getHeight());
+    }
+
+    /// Opens `modal` at `width` x `height` under `anchorRect`, flipped per axis to stay inside [#getViewport].
+    private void openModalWidgetBeside(final ScreenRectangle anchorRect, final AbstractWidget modal, final int width, final int height) {
+        ScreenRectangle viewport = getViewport();
+
+        if (viewport == null) {
+            throw new IllegalStateException("Tried to open a modal with no screen to host it");
+        }
+
         int x = anchorRect.left() + width > viewport.right() ? anchorRect.right() - width : anchorRect.left();
         int y = anchorRect.bottom() + height > viewport.bottom() ? anchorRect.top() - height : anchorRect.bottom();
 
