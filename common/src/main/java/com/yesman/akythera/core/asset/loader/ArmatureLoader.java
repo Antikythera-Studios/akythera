@@ -4,7 +4,6 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.core.Akythera;
-import com.yesman.akythera.core.animation.driver.TurnInPlaceDriver;
 import com.yesman.akythera.core.animation.keyframe.AnimationClip;
 import com.yesman.akythera.core.asset.armature.Armature;
 import com.yesman.akythera.core.asset.armature.Bone;
@@ -13,8 +12,6 @@ import com.yesman.akythera.core.asset.loader.json.JsonArmatureLoader;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
-import net.minecraft.util.StringRepresentable;
-import org.jspecify.annotations.NonNull;
 
 import java.util.HashMap;
 import java.util.List;
@@ -71,23 +68,21 @@ public interface ArmatureLoader extends AssetLoader {
         throw new ResourceLoadingFailureException(resourcePath, "Found neither binary(.akasset) nor json(.json) asset file");
     }
 
-    record Metadata(List<MirrorBonePair> mirrorBonePairs, List<Leg> legs) {
+    record Metadata(List<MirrorBonePair> mirrorBonePairs) {
         /// The fields as they sit at the root of a sidecar, so a reader that carries fields of its
         /// own can place them alongside instead of under a section.
         public static final MapCodec<Metadata> MAP_CODEC = RecordCodecBuilder.mapCodec(
             instance ->
                 instance.group(
                     MirrorBonePair.CODEC.listOf().optionalFieldOf("mirror_bone_pairs", List.of())
-                        .forGetter(Metadata::mirrorBonePairs),
-                    Leg.CODEC.listOf().optionalFieldOf("legs", List.of())
-                        .forGetter(Metadata::legs)
+                        .forGetter(Metadata::mirrorBonePairs)
                 ).apply(instance, Metadata::new)
         );
 
         public static final Codec<Metadata> CODEC = MAP_CODEC.codec();
 
         /// What an asset without a sidecar file is read with.
-        public static final Metadata DEFAULT = new Metadata(List.of(), List.of());
+        public static final Metadata DEFAULT = new Metadata(List.of());
 
         /// [#mirrorBonePairs] as a lookup, each pair entered from both ends.
         public Map<String, String> mirrorBoneMap() {
@@ -111,39 +106,6 @@ public interface ArmatureLoader extends AssetLoader {
                     Codec.STRING.fieldOf("second").forGetter(MirrorBonePair::second)
                 ).apply(instance, MirrorBonePair::new)
         );
-    }
-
-    /// A two-bone leg whose foot, the tail of [#shin], stays planted while [TurnInPlaceDriver] turns the body. A leg
-    /// that [#leads] the turn's direction steps first. [#stepHeight] is how high the foot lifts, in armature units.
-    record Leg(String thigh, String shin, TurnDirection leads, float stepHeight) {
-        public static final Codec<Leg> CODEC = RecordCodecBuilder.create(
-            instance ->
-                instance.group(
-                    Codec.STRING.fieldOf("thigh").forGetter(Leg::thigh),
-                    Codec.STRING.fieldOf("shin").forGetter(Leg::shin),
-                    TurnDirection.CODEC.fieldOf("leads").forGetter(Leg::leads),
-                    Codec.floatRange(0.0F, Float.MAX_VALUE).optionalFieldOf("step_height", 0.0F).forGetter(Leg::stepHeight)
-                ).apply(instance, Leg::new)
-        );
-    }
-
-    /// The way a body turns, seen from above.
-    enum TurnDirection implements StringRepresentable {
-        LEFT("left"),
-        RIGHT("right");
-
-        public static final Codec<TurnDirection> CODEC = StringRepresentable.fromEnum(TurnDirection::values);
-
-        private final String name;
-
-        TurnDirection(final String name) {
-            this.name = name;
-        }
-
-        @Override
-        public @NonNull String getSerializedName() {
-            return name;
-        }
     }
 
     /// Typed armature constructors to return typed objects
