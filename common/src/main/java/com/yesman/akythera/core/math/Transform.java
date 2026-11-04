@@ -168,6 +168,17 @@ public record Transform(
         return VectorUtils.rotateByQuaternion(rot(), vector.multiply(sca()));
     }
 
+    /// The point [#mul] maps to `point`, the inverse of [#mul].
+    public Vec3 inverseMul(final Vec3 point) {
+        Vec3 unrotated = VectorUtils.rotateByQuaternion(rot().conjugate(new Quaterniond()), point.subtract(loc()));
+
+        return new Vec3(
+            MathUtils.divideOrZero(unrotated.x(), sca().x()),
+            MathUtils.divideOrZero(unrotated.y(), sca().y()),
+            MathUtils.divideOrZero(unrotated.z(), sca().z())
+        );
+    }
+
     /// Applies the weight
     /// Used for blending poses
     public Transform applyWeight(final float weight) {

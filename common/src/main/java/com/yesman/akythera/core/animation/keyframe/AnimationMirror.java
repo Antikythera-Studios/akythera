@@ -43,7 +43,7 @@ public final class AnimationMirror {
         return AssetLoader.readMetadata(animationId, resourceManager, Setup.CODEC, Setup.DISABLED);
     }
 
-    /// `source` reflected, with every track moved onto its bone's mirror partner in `vendor`.
+    /// `source` reflected, with every track and IK curve moved onto its bone's mirror partner in `vendor`.
     public static AnimationClip mirror(final AnimationClip source, final Armature vendor) {
         AnimationClip.Builder builder = AnimationClip.builder();
 
@@ -56,6 +56,8 @@ public final class AnimationMirror {
 
             builder.addBoneAnimation(vendor.getMirrorBone(boneName), new BoneAnimationTrack(keyframes));
         });
+
+        source.getIKCurves().forEach((tipBone, curves) -> builder.putIKCurves(vendor.getMirrorBone(tipBone), curves));
 
         return builder.build();
     }

@@ -13,9 +13,13 @@ import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.animation.AnimationLayerSignature;
 import com.yesman.akythera.core.animation.driver.AnimationMontagePlayer;
+import com.yesman.akythera.core.animation.ik.AkytheraIKType;
+import com.yesman.akythera.core.animation.ik.IKCurves;
+import com.yesman.akythera.core.animation.ik.IKType;
 import com.yesman.akythera.api.animation.impl.AkytheraAnimationLayerSignature;
 import com.yesman.akythera.core.animation.keyframe.AnimationClip;
 import com.yesman.akythera.core.animation.keyframe.BoneAnimationTrack;
+import com.yesman.akythera.core.animation.keyframe.FloatCurve;
 import com.yesman.akythera.core.animation.keyframe.Keyframe;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.notify.AnimationNotifyTrack;
@@ -30,6 +34,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.ExtraCodecs;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.*;
 import java.util.function.Supplier;
@@ -59,7 +64,8 @@ public final class AnimationMontage implements PlayableAnimation {
                 Codec.BOOL.fieldOf("loops").forGetter(AnimationMontage::loops),
                 Codec.BOOL.fieldOf("root_motion").forGetter(AnimationMontage::rootMotion),
                 Codec.BOOL.optionalFieldOf("move_vertical", true).forGetter(AnimationMontage::moveVertical),
-                ExtraCodecs.POSITIVE_FLOAT.optionalFieldOf("play_rate", 1.0F).forGetter(AnimationMontage::playRate)
+                ExtraCodecs.POSITIVE_FLOAT.optionalFieldOf("play_rate", 1.0F).forGetter(AnimationMontage::playRate),
+                IKType.ENUM_MANAGER.getNameCodec().optionalFieldOf("ik_type", AkytheraIKType.NONE).forGetter(AnimationMontage::ikType)
             )
             .apply(instance, AnimationMontage::new)
     );
@@ -123,6 +129,9 @@ public final class AnimationMontage implements PlayableAnimation {
     /// Playback speed multiplier. Fade times are not scaled.
     private final float playRate;
 
+    /// How the IK chains are placed while the montage plays
+    private final IKType ikType;
+
     private AnimationMontage(
         final AnimationNotifyTrack notifyTrack,
         final SectionInfo sectionInfo,
@@ -133,7 +142,8 @@ public final class AnimationMontage implements PlayableAnimation {
         final boolean loops,
         final boolean rootMotion,
         final boolean moveVertical,
-        final float playRate
+        final float playRate,
+        final IKType ikType
     ) {
         this.notifyTrack = notifyTrack;
         this.sectionInfo = sectionInfo;
@@ -145,10 +155,29 @@ public final class AnimationMontage implements PlayableAnimation {
         this.rootMotion = rootMotion;
         this.moveVertical = moveVertical;
         this.playRate = playRate;
+        this.ikType = ikType;
         this.mergedClip = Suppliers.memoize(this::buildMergedClip);
     }
 
     private AnimationClip buildMergedClip() {
+        List<AnimationClip> clips = segments.stream().<AnimationClip>map(AssetAccessor::get).toList();
+
+        if (rootMotion && clips.stream().noneMatch(clip -> clip.hasBoneTransform(ArmatureLoader.ROOT_BONE))) {
+            Akythera.LOGGER.warn(
+                "Root motion is on, but no clip of {} has a '{}' bone track, so its owner will not move",
+                segments.stream().map(AssetAccessor::identifier).toList(), ArmatureLoader.ROOT_BONE
+            );
+        }
+
+        return mergeSegments(clips, rootMotion);
+    }
+
+    /// `clips` played one after another as one clip, [#SEGMENT_GAP] apart.
+    ///
+    /// A bone a clip does not animate holds identity across that clip's window, and an IK curve a clip lacks holds the
+    /// value [IKCurves] reads a missing curve as. With `rootMotion`, each clip's root track continues where the previous
+    /// clip's ended.
+    public static AnimationClip mergeSegments(final List<AnimationClip> clips, final boolean rootMotion) {
         AnimationClip.Builder animClipBuilder = AnimationClip.builder();
         float time = 0.0F;
         // Running root offset so each segment's root track continues where the previous ended.
@@ -157,24 +186,22 @@ public final class AnimationMontage implements PlayableAnimation {
         // join (RootMotionComponent sees the per-segment reset as a huge reverse delta).
         Vec3 rootAccum = Vec3.ZERO;
         Map<String, List<Keyframe>> bones = new HashMap<>();
+        Map<String, List<FloatCurve.Key>> alphas = new HashMap<>();
+        Map<String, List<FloatCurve.Key>> plants = new HashMap<>();
 
         // Union of every bone across all segments. A bone missing from a segment is pinned to identity
         // across that segment's window so a neighbour's keyframes can't bleed into it
         Set<String> allBones = new HashSet<>();
 
-        for (AssetAccessor<AnimationClip> animation : segments) {
-            animation.get().visitBoneTracks((name, _) -> allBones.add(name));
+        for (AnimationClip clip : clips) {
+            clip.visitBoneTracks((name, _) -> allBones.add(name));
+            clip.getIKCurves().forEach((tipBone, curves) -> {
+                if (curves.alpha() != null) alphas.put(tipBone, new ArrayList<>());
+                if (curves.plant() != null) plants.put(tipBone, new ArrayList<>());
+            });
         }
 
-        if (rootMotion && !allBones.contains(ArmatureLoader.ROOT_BONE)) {
-            Akythera.LOGGER.warn(
-                "Root motion is on, but no clip of {} has a '{}' bone track, so its owner will not move",
-                segments.stream().map(AssetAccessor::identifier).toList(), ArmatureLoader.ROOT_BONE
-            );
-        }
-
-        for (AssetAccessor<AnimationClip> animation : segments) {
-            final AnimationClip clip = animation.get();
+        for (AnimationClip clip : clips) {
             final float segmentOffset = time;
             final float segEnd = clip.getTotalTime();
 
@@ -208,6 +235,15 @@ public final class AnimationMontage implements PlayableAnimation {
                 }
             }
 
+            alphas.forEach((tipBone, merged) -> {
+                IKCurves curves = clip.getIKCurves().get(tipBone);
+                appendCurveWindow(merged, curves == null ? null : curves.alpha(), 1.0F, segmentOffset, segEnd);
+            });
+            plants.forEach((tipBone, merged) -> {
+                IKCurves curves = clip.getIKCurves().get(tipBone);
+                appendCurveWindow(merged, curves == null ? null : curves.plant(), 0.0F, segmentOffset, segEnd);
+            });
+
             if (rootMotion) {
                 rootAccum = rootAccum.add(rootLocOf(clip, segEnd).subtract(segRootStart));
             }
@@ -219,7 +255,40 @@ public final class AnimationMontage implements PlayableAnimation {
             animClipBuilder.addBoneAnimation(name, new BoneAnimationTrack(keyframes))
         );
 
+        Set<String> curvedTipBones = new HashSet<>(alphas.keySet());
+        curvedTipBones.addAll(plants.keySet());
+
+        for (String tipBone : curvedTipBones) {
+            List<FloatCurve.Key> alpha = alphas.get(tipBone);
+            List<FloatCurve.Key> plant = plants.get(tipBone);
+            animClipBuilder.putIKCurves(tipBone, new IKCurves(
+                alpha == null ? null : new FloatCurve(alpha), plant == null ? null : new FloatCurve(plant)
+            ));
+        }
+
         return animClipBuilder.build();
+    }
+
+    /// Adds `curve` over the window of a segment that starts at `offset` and lasts `length` seconds to `merged`: its
+    /// values at the window's ends and its keys between them. A missing curve holds `missing` across the window.
+    private static void appendCurveWindow(
+        final List<FloatCurve.Key> merged, final @Nullable FloatCurve curve, final float missing, final float offset,
+        final float length
+    ) {
+        if (curve == null || curve.keys().isEmpty()) {
+            merged.add(new FloatCurve.Key(offset, missing, false));
+            merged.add(new FloatCurve.Key(offset + length, missing, false));
+
+            return;
+        }
+
+        merged.add(new FloatCurve.Key(offset, curve.valueAt(0.0F), curve.keys().getFirst().smooth()));
+
+        for (FloatCurve.Key key : curve.keys()) {
+            if (key.time() > 0.0F && key.time() < length) merged.add(new FloatCurve.Key(key.time() + offset, key.value(), key.smooth()));
+        }
+
+        merged.add(new FloatCurve.Key(offset + length, curve.valueAt(length), false));
     }
 
     /// Raw root-bone location at `t` (clip pose keeps the root, unlike [#getPose]).
@@ -269,6 +338,10 @@ public final class AnimationMontage implements PlayableAnimation {
         return playRate;
     }
 
+    public IKType ikType() {
+        return ikType;
+    }
+
     @Override
     public void tick(final ComponentAttachable owner, final float prevElapsedTime, final float currentElapsedTime) {
         notifyTrack.tick(this, owner, prevElapsedTime, currentElapsedTime);
@@ -286,7 +359,9 @@ public final class AnimationMontage implements PlayableAnimation {
 
     @Override
     public Pose getPose(final float time) {
-        Pose pose = mergedClip.get().getPose(time);
+        AnimationClip clip = mergedClip.get();
+        Pose pose = clip.getPose(time);
+        pose.setIKChannels(ikType.channels(clip, time));
 
         // Clear the root transform while `rootMotion` is activated
         if (rootMotion() && pose.hasTransform(ArmatureLoader.ROOT_BONE)) {
@@ -343,6 +418,7 @@ public final class AnimationMontage implements PlayableAnimation {
         boolean enableRootMotion;
         boolean moveVertical = true;
         float playRate = 1.0F;
+        IKType ikType = AkytheraIKType.NONE;
 
         private Builder() {}
 
@@ -445,6 +521,12 @@ public final class AnimationMontage implements PlayableAnimation {
             return this;
         }
 
+        /// How the IK chains are placed while the montage plays
+        public Builder ikType(final IKType ikType) {
+            this.ikType = ikType;
+            return this;
+        }
+
         public AnimationMontage create() throws IllegalStateException {
             return new AnimationMontage(
                 new AnimationNotifyTrack(
@@ -462,7 +544,8 @@ public final class AnimationMontage implements PlayableAnimation {
                 loops,
                 enableRootMotion,
                 moveVertical,
-                playRate
+                playRate,
+                ikType
             );
         }
     }

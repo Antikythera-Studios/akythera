@@ -1,6 +1,7 @@
 package com.yesman.akythera.core.util.helper;
 
 import com.mojang.datafixers.util.Pair;
+import com.yesman.akythera.core.animation.ik.IKChannels;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.asset.armature.Armature;
 import com.yesman.akythera.core.asset.armature.Bone;
@@ -51,6 +52,8 @@ public final class PoseOperators {
             }
         }
 
+        pose.setIKChannels(IKChannels.lerp(pose1.getIKChannels(), pose2.getIKChannels(), delta));
+
         return pose;
     }
 
@@ -62,6 +65,7 @@ public final class PoseOperators {
     public static Pose blendPoses(final Pair<Pose, Float>... posesToBlend) {
         Pose pose = new Pose();
         float weightSum = 0.0F;
+        float blendedWeight = 0.0F;
 
         for (var pair : posesToBlend) weightSum += pair.getSecond();
 
@@ -69,6 +73,9 @@ public final class PoseOperators {
             float weight = pair.getSecond() / weightSum;
 
             if (Float.compare(weight, 0.0F) == 1) {
+                blendedWeight += weight;
+                pose.setIKChannels(IKChannels.lerp(pose.getIKChannels(), pair.getFirst().getIKChannels(), weight / blendedWeight));
+
                 pair.getFirst().forEachTransforms((boneName, transform) -> {
                     Transform sum = pose.orElseZero(boneName);
                     Transform weighted = transform.applyWeight(weight);
@@ -112,6 +119,7 @@ public final class PoseOperators {
             armature.getRootBone(), base, layered, pose, boneWeights, weight, meshSpaceRotation,
             new Quaterniond(), new Quaterniond(), new Quaterniond()
         );
+        pose.setIKChannels(IKChannels.layered(base.getIKChannels(), layered.getIKChannels(), armature, boneWeights, weight));
 
         return pose;
     }

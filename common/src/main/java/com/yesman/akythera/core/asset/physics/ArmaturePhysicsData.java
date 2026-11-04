@@ -3,6 +3,7 @@ package com.yesman.akythera.core.asset.physics;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import com.yesman.akythera.core.animation.ik.IKChain;
 import com.yesman.akythera.core.asset.armature.Armature;
 import com.yesman.akythera.core.asset.physics.constraint.BoneConstraint;
 import com.yesman.akythera.core.math.physics.collider.AkytheraColliderType;
@@ -24,7 +25,12 @@ import java.util.Set;
 /// @param bodies      bone name to that bone's body; a bone with no body is absent
 /// @param constraints bone name to the constraints of that bone, in the order they run; a bone with none is absent
 /// @param simulation  the rag doll's solver settings
-public record ArmaturePhysicsData(Map<String, BoneBody> bodies, Map<String, List<BoneConstraint>> constraints, RagdollParameters simulation) {
+/// @param ikChains    the IK chains, each keyed by its tip bone
+/// @param rootFitting how the chains' shared parent moves to fit the feet before the chains are solved
+public record ArmaturePhysicsData(
+    Map<String, BoneBody> bodies, Map<String, List<BoneConstraint>> constraints, RagdollParameters simulation, List<IKChain> ikChains,
+    RootFitting rootFitting
+) {
     /// The shapes a body may carry.
     public static final Set<ColliderType> BODY_SHAPES = Set.of(
         AkytheraColliderType.SPHERE,
@@ -40,7 +46,11 @@ public record ArmaturePhysicsData(Map<String, BoneBody> bodies, Map<String, List
                 Codec.unboundedMap(Codec.STRING, BoneConstraint.CODEC.listOf()).optionalFieldOf("constraints", Map.of())
                     .forGetter(ArmaturePhysicsData::constraints),
                 RagdollParameters.CODEC.optionalFieldOf("simulation", RagdollParameters.DEFAULT)
-                    .forGetter(ArmaturePhysicsData::simulation)
+                    .forGetter(ArmaturePhysicsData::simulation),
+                IKChain.CODEC.listOf().optionalFieldOf("ik_chains", List.of())
+                    .forGetter(ArmaturePhysicsData::ikChains),
+                RootFitting.CODEC.optionalFieldOf("root_fitting", RootFitting.DEFAULT)
+                    .forGetter(ArmaturePhysicsData::rootFitting)
             ).apply(instance, ArmaturePhysicsData::new)
     );
 
@@ -107,6 +117,27 @@ public record ArmaturePhysicsData(Map<String, BoneBody> bodies, Map<String, List
                     FluidParameters.CODEC.optionalFieldOf("water", DEFAULT.water).forGetter(RagdollParameters::water),
                     FluidParameters.CODEC.optionalFieldOf("lava", DEFAULT.lava).forGetter(RagdollParameters::lava)
                 ).apply(instance, RagdollParameters::new)
+        );
+    }
+
+    /// How the IK chains' shared parent moves to fit the feet: lowered so the lowest foot reaches its ground, then
+    /// tilted parallel to the ground under the feet. Tilting needs three chains standing on ground; with fewer the parent
+    /// is only lowered. Both fade with the chains' IK weight.
+    ///
+    /// @param maxDrop  farthest the parent lowers, in blocks
+    /// @param maxPitch farthest the parent tilts around the armature's X axis, in degrees
+    /// @param maxRoll  farthest the parent tilts around the armature's Z axis, in degrees
+    public record RootFitting(boolean enabled, float maxDrop, float maxPitch, float maxRoll) {
+        public static final RootFitting DEFAULT = new RootFitting(false, 0.25F, 15.0F, 15.0F);
+
+        public static final Codec<RootFitting> CODEC = RecordCodecBuilder.create(
+            instance ->
+                instance.group(
+                    Codec.BOOL.optionalFieldOf("enabled", DEFAULT.enabled).forGetter(RootFitting::enabled),
+                    Codec.floatRange(0.0F, Float.MAX_VALUE).optionalFieldOf("max_drop", DEFAULT.maxDrop).forGetter(RootFitting::maxDrop),
+                    Codec.floatRange(0.0F, 90.0F).optionalFieldOf("max_pitch", DEFAULT.maxPitch).forGetter(RootFitting::maxPitch),
+                    Codec.floatRange(0.0F, 90.0F).optionalFieldOf("max_roll", DEFAULT.maxRoll).forGetter(RootFitting::maxRoll)
+                ).apply(instance, RootFitting::new)
         );
     }
 

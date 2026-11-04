@@ -34,6 +34,10 @@ import com.yesman.akythera.api.animation.impl.AkytheraAnimationState;
 import com.yesman.akythera.core.blueprint.AkytheraComponentBlueprints;
 import com.yesman.akythera.core.blueprint.script.AnimatorScript;
 import com.yesman.akythera.core.blueprint.script.EntityPatchScript;
+import com.yesman.akythera.core.animation.ik.AkytheraIKSolverType;
+import com.yesman.akythera.core.animation.ik.AkytheraIKType;
+import com.yesman.akythera.core.animation.ik.IKSolverType;
+import com.yesman.akythera.core.animation.ik.IKType;
 import com.yesman.akythera.core.asset.physics.constraint.AkytheraBoneConstraintType;
 import com.yesman.akythera.core.asset.physics.constraint.BoneConstraintType;
 import com.yesman.akythera.core.math.physics.collider.AkytheraColliderType;
@@ -163,6 +167,8 @@ public final class Akythera {
         AnimationLayerSignature.ENUM_MANAGER.loadEnum();
         ColliderType.ENUM_MANAGER.loadEnum();
         BoneConstraintType.ENUM_MANAGER.loadEnum();
+        IKSolverType.ENUM_MANAGER.loadEnum();
+        IKType.ENUM_MANAGER.loadEnum();
         WeaponStance.ENUM_MANAGER.loadEnum();
         AbilitySlotGroup.ENUM_MANAGER.loadEnum();
         AbilitySlot.ENUM_MANAGER.loadEnum();
@@ -177,6 +183,8 @@ public final class Akythera {
         AnimationLayerSignature.ENUM_MANAGER.registerEnumCls(MODID, AkytheraAnimationLayerSignature.class);
         ColliderType.ENUM_MANAGER.registerEnumCls(MODID, AkytheraColliderType.class);
         BoneConstraintType.ENUM_MANAGER.registerEnumCls(MODID, AkytheraBoneConstraintType.class);
+        IKSolverType.ENUM_MANAGER.registerEnumCls(MODID, AkytheraIKSolverType.class);
+        IKType.ENUM_MANAGER.registerEnumCls(MODID, AkytheraIKType.class);
     }
 
     /// Called on mod loader lifecycle when the mod initializes in a dedicated server

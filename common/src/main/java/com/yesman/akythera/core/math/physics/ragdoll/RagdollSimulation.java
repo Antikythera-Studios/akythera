@@ -6,19 +6,15 @@ import com.yesman.akythera.core.asset.armature.Bone;
 import com.yesman.akythera.core.asset.physics.ArmaturePhysicsData;
 import com.yesman.akythera.core.asset.physics.constraint.LimitRotationConstraint;
 import com.yesman.akythera.core.math.Transform;
+import com.yesman.akythera.core.math.physics.Terrain;
 import com.yesman.akythera.core.math.physics.collider.CapsuleCollider;
 import com.yesman.akythera.core.math.physics.collider.Collider;
 import com.yesman.akythera.core.math.physics.collider.OrientedBoxCollider;
 import com.yesman.akythera.core.math.physics.collider.SphereCollider;
 import com.yesman.akythera.core.util.helper.Matrix4fUtils;
-import net.minecraft.core.BlockPos;
-import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.phys.shapes.VoxelShape;
 import org.joml.Matrix4d;
 import org.joml.Matrix4f;
 import org.joml.Quaterniond;
@@ -31,7 +27,6 @@ import java.util.BitSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 /// A rag doll: one rigid body per [ArmaturePhysicsData.BoneBody], linked at the bone heads and kept inside the
@@ -134,87 +129,6 @@ public final class RagdollSimulation {
 
     /// How much of the way to its [#drive] target each body is pulled over the coming tick, 0 for none.
     private double driveStrength;
-
-    /// The colliders a rag doll falls over, and the fluids it floats in.
-    @FunctionalInterface
-    public interface Terrain {
-        /// Hands every collider box inside the world-space `area` to `sink`, in world space. False when part of `area`
-        /// is not loaded.
-        boolean collect(AABB area, Consumer<AABB> sink);
-
-        /// Hands every fluid inside the world-space `area` to `sink`, in world space. None by default.
-        default void collectFluids(final AABB area, final Consumer<FluidVolume> sink) {
-        }
-
-        /// The block colliders and the water and lava of `level`.
-        static Terrain of(final Level level) {
-            return new Terrain() {
-                @Override
-                public boolean collect(final AABB area, final Consumer<AABB> sink) {
-                    if (!level.hasChunksAt(Mth.floor(area.minX), Mth.floor(area.minZ), Mth.floor(area.maxX), Mth.floor(area.maxZ))) {
-                        return false;
-                    }
-
-                    for (VoxelShape shape : level.getBlockCollisions(null, area)) {
-                        shape.forAllBoxes((x0, y0, z0, x1, y1, z1) -> sink.accept(new AABB(x0, y0, z0, x1, y1, z1)));
-                    }
-
-                    return true;
-                }
-
-                @Override
-                public void collectFluids(final AABB area, final Consumer<FluidVolume> sink) {
-                    for (BlockPos pos : BlockPos.betweenClosed(area)) {
-                        FluidState fluid = level.getFluidState(pos);
-                        FluidKind kind = fluid.is(FluidTags.WATER) ? FluidKind.WATER : fluid.is(FluidTags.LAVA) ? FluidKind.LAVA : null;
-
-                        if (kind == null) continue;
-
-                        sink.accept(new FluidVolume(
-                            new AABB(pos.getX(), pos.getY(), pos.getZ(), pos.getX() + 1, pos.getY() + fluid.getHeight(level, pos), pos.getZ() + 1), kind
-                        ));
-                    }
-                }
-            };
-        }
-
-        /// An endless floor whose top is at `height`.
-        static Terrain floor(final double height) {
-            return (area, sink) -> {
-                if (area.minY < height) sink.accept(new AABB(area.minX, area.minY - 1.0D, area.minZ, area.maxX, height, area.maxZ));
-
-                return true;
-            };
-        }
-
-        /// Endless water whose surface is at `surface`, `depth` blocks deep over an endless floor.
-        static Terrain pool(final double surface, final double depth) {
-            Terrain floor = floor(surface - depth);
-
-            return new Terrain() {
-                @Override
-                public boolean collect(final AABB area, final Consumer<AABB> sink) {
-                    return floor.collect(area, sink);
-                }
-
-                @Override
-                public void collectFluids(final AABB area, final Consumer<FluidVolume> sink) {
-                    if (area.minY < surface && area.maxY > surface - depth) {
-                        sink.accept(new FluidVolume(new AABB(area.minX, surface - depth, area.minZ, area.maxX, surface, area.maxZ), FluidKind.WATER));
-                    }
-                }
-            };
-        }
-    }
-
-    /// The fluids a rag doll floats in, each set up by its [ArmaturePhysicsData.FluidParameters].
-    public enum FluidKind {
-        WATER,
-        LAVA
-    }
-
-    /// A box filled with a fluid.
-    public record FluidVolume(AABB box, FluidKind kind) {}
 
     /// The armature as it was drawn at one moment.
     ///
@@ -570,7 +484,7 @@ public final class RagdollSimulation {
         }
 
         List<AABB> boxes = new ArrayList<>();
-        List<FluidVolume> fluids = new ArrayList<>();
+        List<Terrain.FluidVolume> fluids = new ArrayList<>();
         Vec3 back = origin.reverse();
         AABB area = new AABB(minX, minY, minZ, maxX, maxY, maxZ).move(origin);
 
@@ -578,14 +492,14 @@ public final class RagdollSimulation {
             return false;
         }
 
-        terrain.collectFluids(area, fluid -> fluids.add(new FluidVolume(fluid.box().move(back), fluid.kind())));
+        terrain.collectFluids(area, fluid -> fluids.add(new Terrain.FluidVolume(fluid.box().move(back), fluid.kind())));
 
         for (Body body : bodies) {
             for (AABB box : boxes) {
                 if (box.intersects(body.reach)) body.terrain.add(box);
             }
 
-            for (FluidVolume fluid : fluids) {
+            for (Terrain.FluidVolume fluid : fluids) {
                 if (fluid.box().intersects(body.reach)) body.fluids.add(fluid);
             }
         }
@@ -628,7 +542,7 @@ public final class RagdollSimulation {
                     double bottom = center.y - radius;
                     double pointSpeed = pointVelocity.length();
 
-                    for (FluidVolume fluid : body.fluids) {
+                    for (Terrain.FluidVolume fluid : body.fluids) {
                         AABB box = fluid.box();
 
                         if (center.x < box.minX || center.x >= box.maxX || center.z < box.minZ || center.z >= box.maxZ) continue;
@@ -639,7 +553,7 @@ public final class RagdollSimulation {
                         if (high <= low) continue;
 
                         double submerged = share * (sphereCapShare(high - bottom, radius) - sphereCapShare(low - bottom, radius));
-                        ArmaturePhysicsData.FluidParameters setup = fluid.kind() == FluidKind.WATER ? parameters.water() : parameters.lava();
+                        ArmaturePhysicsData.FluidParameters setup = fluid.kind() == Terrain.FluidKind.WATER ? parameters.water() : parameters.lava();
                         double force = setup.density() * gravity * submerged * body.buoyancyScale;
 
                         lift += force;
@@ -1168,7 +1082,7 @@ public final class RagdollSimulation {
         private final List<AABB> terrain = new ArrayList<>();
 
         /// The fluids the body may reach this tick, relative to the simulation's origin.
-        private final List<FluidVolume> fluids = new ArrayList<>();
+        private final List<Terrain.FluidVolume> fluids = new ArrayList<>();
 
         private AABB reach = new AABB(0.0D, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D);
 

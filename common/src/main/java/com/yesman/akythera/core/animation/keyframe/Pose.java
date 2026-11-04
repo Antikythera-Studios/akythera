@@ -1,6 +1,7 @@
 package com.yesman.akythera.core.animation.keyframe;
 
 import com.yesman.akythera.api.asset.AssetAccessor;
+import com.yesman.akythera.core.animation.ik.IKChannels;
 import com.yesman.akythera.core.asset.armature.Armature;
 import com.yesman.akythera.core.asset.armature.Bone;
 import com.yesman.akythera.core.math.Transform;
@@ -27,12 +28,24 @@ public final class Pose {
 
     private Map<String, Transform> boneTransforms = new HashMap<>();
 
+    /// How the IK chains are placed under this pose, null when nothing that made it said.
+    private @Nullable IKChannels ikChannels;
+
     // Empty pose constructor
     public Pose() {}
 
     // Copy constructor
     public Pose(final Pose pose) {
         pose.forEachTransforms(this::putBoneTransform);
+        ikChannels = pose.ikChannels;
+    }
+
+    public @Nullable IKChannels getIKChannels() {
+        return ikChannels;
+    }
+
+    public void setIKChannels(final @Nullable IKChannels ikChannels) {
+        this.ikChannels = ikChannels;
     }
 
     public void putBoneTransform(final String name, Transform transform) {

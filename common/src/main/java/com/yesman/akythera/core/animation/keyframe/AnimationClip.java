@@ -2,7 +2,11 @@ package com.yesman.akythera.core.animation.keyframe;
 
 import com.google.common.collect.ImmutableMap;
 import com.mojang.datafixers.util.Pair;
+import com.yesman.akythera.core.animation.ik.AkytheraIKType;
+import com.yesman.akythera.core.animation.ik.IKCurves;
+import com.yesman.akythera.core.asset.loader.AnimationLoader;
 import com.yesman.akythera.core.math.algorithm.BinarySearchList;
+import org.jetbrains.annotations.ApiStatus;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -23,7 +27,12 @@ public final class AnimationClip {
     /// A max frame time
     private final float totalTime;
 
+    /// The curves IK chains follow under [AkytheraIKType#ANIMATION_CURVE], by the chain's tip bone.
+    private Map<String, IKCurves> ikCurves;
+
     private AnimationClip(Builder builder) {
+        ikCurves = Map.copyOf(builder.ikCurves);
+
         TreeSet<Float> allTimeStamps = new TreeSet<> ();
 
         // Gather all timestamps of bone animation to bake keyframe sheets
@@ -88,15 +97,32 @@ public final class AnimationClip {
         return totalTime;
     }
 
+    public Map<String, IKCurves> getIKCurves() {
+        return ikCurves;
+    }
+
+    /// Installs the sidecar-declared data on a freshly read clip.
+    ///
+    /// @see AnimationLoader#loadAnimationClip
+    @ApiStatus.Internal
+    public void applyMetadata(final AnimationLoader.Metadata metadata) {
+        ikCurves = metadata.ik();
+    }
+
     public static Builder builder() {
         return new Builder();
     }
 
     public static class Builder {
         private final Map<String, BoneAnimationTrack> boneAnimations = new HashMap<> ();
+        private final Map<String, IKCurves> ikCurves = new HashMap<> ();
 
         public void addBoneAnimation(String boneName, BoneAnimationTrack boneAnimationTrack) {
             boneAnimations.put(boneName, boneAnimationTrack);
+        }
+
+        public void putIKCurves(final String tipBone, final IKCurves curves) {
+            ikCurves.put(tipBone, curves);
         }
 
         public BoneAnimationTrack getBoneTrack(String boneName) {

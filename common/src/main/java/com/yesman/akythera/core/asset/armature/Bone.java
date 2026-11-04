@@ -28,6 +28,9 @@ public final class Bone {
 
     private final List<Bone> childBones = new ArrayList<> ();
 
+    /// The bone this one hangs under, null for the root.
+    private @Nullable Bone parent;
+
     public Bone(final String name, final int boneId, final Matrix4f localTransform, final Vector3f toTail) {
         this.boneId = boneId;
         this.boneName = name;
@@ -39,6 +42,7 @@ public final class Bone {
         for (Bone bone : bones) {
             if (!childBones.contains(bone)) {
                 childBones.add(bone);
+                bone.parent = this;
             }
         }
     }
@@ -95,6 +99,10 @@ public final class Bone {
 
     public List<Bone> getChildBones() {
         return childBones;
+    }
+
+    public @Nullable Bone getParent() {
+        return parent;
     }
 
     // Null if index out of range

@@ -6,6 +6,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.asset.AssetAccessor;
 import com.yesman.akythera.api.asset.animation.AnimationManager;
 import com.yesman.akythera.core.Akythera;
+import com.yesman.akythera.core.animation.ik.IKCurves;
 import com.yesman.akythera.core.animation.keyframe.AnimationClip;
 import com.yesman.akythera.core.animation.keyframe.BoneAnimationTrack;
 import com.yesman.akythera.core.animation.keyframe.Keyframe;
@@ -24,6 +25,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /// Loads common side animation asset, a [AnimationClip]
@@ -38,13 +40,15 @@ public interface AnimationLoader extends AssetLoader {
     /// The sidecar metadata of the asset this loader reads.
     Metadata metadata();
 
-    /// Loads the clip and applies [Metadata#importType].
+    /// Loads the clip and applies [Metadata#importType] and [Metadata#ik].
     ///
     /// @param armature is nullable for binary assets, but non-null for json assets
     default AnimationClip loadAnimationClip(AssetAccessor<? extends Armature> armature) throws ResourceLoadingFailureException {
-        AnimationClip clip = loadRawAnimationClip(armature);
+        AnimationClip raw = loadRawAnimationClip(armature);
+        AnimationClip clip = metadata().importType() == ImportType.ADDITIVE ? toAdditive(raw) : raw;
+        clip.applyMetadata(metadata());
 
-        return metadata().importType() == ImportType.ADDITIVE ? toAdditive(clip) : clip;
+        return clip;
     }
 
     /// Rewrites every keyframe as the transform relative to the reference pose named by [#metadata], or this clip.
@@ -109,9 +113,11 @@ public interface AnimationLoader extends AssetLoader {
         throw new ResourceLoadingFailureException(resourcePath, "Found neither binary(.akasset) nor json(.json) asset file");
     }
 
+    /// @param ik the [IKCurves] of the IK chains the clip drives, by each chain's tip bone
     record Metadata(
         ImportType importType,
-        @Nullable AssetAccessor<AnimationClip> refPoseProvider, float refPoseTimeStamp // Additive animation properties
+        @Nullable AssetAccessor<AnimationClip> refPoseProvider, float refPoseTimeStamp, // Additive animation properties
+        Map<String, IKCurves> ik
     ) {
         /// The fields as they sit at the root of a sidecar, so a reader that carries fields of its
         /// own can place them alongside instead of under a section.
@@ -120,18 +126,22 @@ public interface AnimationLoader extends AssetLoader {
                 instance.group(
                     ImportType.CODEC.fieldOf("import_type").forGetter(Metadata::importType),
                     AnimationManager.CODEC.optionalFieldOf("ref_pose_provider").forGetter(ParseUtils.provideOptional(Metadata::refPoseProvider)),
-                    Codec.FLOAT.fieldOf("ref_pose_timestamp").forGetter(Metadata::refPoseTimeStamp)
+                    Codec.FLOAT.fieldOf("ref_pose_timestamp").forGetter(Metadata::refPoseTimeStamp),
+                    Codec.unboundedMap(Codec.STRING, IKCurves.CODEC).optionalFieldOf("ik", Map.of()).forGetter(Metadata::ik)
                 ).apply(instance, Metadata::new)
         );
 
         public static final Codec<Metadata> CODEC = MAP_CODEC.codec();
 
         /// What an asset without a sidecar file is read with.
-        public static final Metadata DEFAULT = new Metadata(ImportType.COMMON, (AssetAccessor<AnimationClip>)null, 0.0F);
+        public static final Metadata DEFAULT = new Metadata(ImportType.COMMON, (AssetAccessor<AnimationClip>)null, 0.0F, Map.of());
 
         // Serialization
-        public Metadata(final ImportType importType, final Optional<AssetAccessor<AnimationClip>> refPoseProvider, final float refPoseTimeStamp) {
-            this(importType, refPoseProvider.orElse(null), refPoseTimeStamp);
+        public Metadata(
+            final ImportType importType, final Optional<AssetAccessor<AnimationClip>> refPoseProvider, final float refPoseTimeStamp,
+            final Map<String, IKCurves> ik
+        ) {
+            this(importType, refPoseProvider.orElse(null), refPoseTimeStamp, ik);
         }
     }
 

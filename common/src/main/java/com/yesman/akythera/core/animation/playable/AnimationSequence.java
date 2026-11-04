@@ -6,6 +6,8 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.asset.AssetAccessor;
 import com.yesman.akythera.api.asset.animation.AnimationManager;
 import com.yesman.akythera.api.component.ComponentAttachable;
+import com.yesman.akythera.core.animation.ik.AkytheraIKType;
+import com.yesman.akythera.core.animation.ik.IKType;
 import com.yesman.akythera.core.animation.keyframe.AnimationClip;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.notify.AnimationNotifyTrack;
@@ -30,6 +32,7 @@ import org.jspecify.annotations.NonNull;
 /// proper network handling.
 ///
 /// @param moveVertical whether [#rootMotion] moves the entity along the y axis
+/// @param ikType       how the IK chains are placed while the sequence plays
 public record AnimationSequence(
     AnimationNotifyTrack notifyTrack,
     AssetAccessor<AnimationClip> animClip,
@@ -39,7 +42,8 @@ public record AnimationSequence(
     boolean rootMotion,
     boolean moveVertical,
     float playRate,
-    float phaseOffset
+    float phaseOffset,
+    IKType ikType
 ) implements PlayableAnimation {
     public static final MapCodec<AnimationSequence> MAP_CODEC = RecordCodecBuilder.mapCodec(
         instance ->
@@ -52,7 +56,8 @@ public record AnimationSequence(
                 Codec.BOOL.fieldOf("root_motion").forGetter(AnimationSequence::rootMotion),
                 Codec.BOOL.optionalFieldOf("move_vertical", true).forGetter(AnimationSequence::moveVertical),
                 ExtraCodecs.POSITIVE_FLOAT.optionalFieldOf("play_rate", 1.0F).forGetter(AnimationSequence::playRate),
-                Codec.floatRange(0.0F, 1.0F).optionalFieldOf("phase_offset", 0.0F).forGetter(AnimationSequence::phaseOffset)
+                Codec.floatRange(0.0F, 1.0F).optionalFieldOf("phase_offset", 0.0F).forGetter(AnimationSequence::phaseOffset),
+                IKType.ENUM_MANAGER.getNameCodec().optionalFieldOf("ik_type", AkytheraIKType.NONE).forGetter(AnimationSequence::ikType)
             )
             .apply(instance, AnimationSequence::new)
     );
@@ -61,14 +66,23 @@ public record AnimationSequence(
 
     /// Convenience: no notifies, default fade times
     public AnimationSequence(final AssetAccessor<AnimationClip> animClip, final boolean loops, final boolean rootMotion) {
-        this(AnimationNotifyTrack.EMPTY, animClip, DEFAULT_FADE_TIME, DEFAULT_FADE_TIME, loops, rootMotion, true, 1.0F, 0.0F);
+        this(AnimationNotifyTrack.EMPTY, animClip, DEFAULT_FADE_TIME, DEFAULT_FADE_TIME, loops, rootMotion, true, 1.0F, 0.0F, AkytheraIKType.NONE);
     }
 
     public AnimationSequence(
         final AnimationNotifyTrack notifyTrack, final AssetAccessor<AnimationClip> animClip, final float fadeInTime,
         final float fadeOutTime, final boolean loops, final boolean rootMotion
     ) {
-        this(notifyTrack, animClip, fadeInTime, fadeOutTime, loops, rootMotion, true, 1.0F, 0.0F);
+        this(notifyTrack, animClip, fadeInTime, fadeOutTime, loops, rootMotion, true, 1.0F, 0.0F, AkytheraIKType.NONE);
+    }
+
+    /// Convenience: no IK
+    public AnimationSequence(
+        final AnimationNotifyTrack notifyTrack, final AssetAccessor<AnimationClip> animClip, final float fadeInTime,
+        final float fadeOutTime, final boolean loops, final boolean rootMotion, final boolean moveVertical, final float playRate,
+        final float phaseOffset
+    ) {
+        this(notifyTrack, animClip, fadeInTime, fadeOutTime, loops, rootMotion, moveVertical, playRate, phaseOffset, AkytheraIKType.NONE);
     }
 
     /// This sequence over the mirrored twin of its clip, see [AnimationManager#getMirrorAnimation].
@@ -76,7 +90,9 @@ public record AnimationSequence(
     @Override
     public AnimationSequence mirrored() {
         return new AnimationSequence(
-            notifyTrack, AnimationManager.getMirrorAnimation(animClip), fadeInTime, fadeOutTime, loops, rootMotion, moveVertical, playRate, phaseOffset);
+            notifyTrack, AnimationManager.getMirrorAnimation(animClip), fadeInTime, fadeOutTime, loops, rootMotion, moveVertical, playRate, phaseOffset,
+            ikType
+        );
     }
 
     @Override
@@ -96,7 +112,9 @@ public record AnimationSequence(
 
     @Override
     public Pose getPose(final float time) {
-        Pose pose = animClip.get().getPose(time);
+        AnimationClip clip = animClip.get();
+        Pose pose = clip.getPose(time);
+        pose.setIKChannels(ikType.channels(clip, time));
 
         // Clear the transform while root motion is activated
         if (rootMotion() && pose.hasTransform(ArmatureLoader.ROOT_BONE)) {

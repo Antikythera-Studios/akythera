@@ -13,6 +13,7 @@ import com.yesman.akythera.api.component.TransformInheritPolicy;
 import com.yesman.akythera.api.component.UniqueComponent;
 import com.yesman.akythera.api.event.BuiltInEventHooks;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.core.animation.ik.InverseKinematicsSimulation;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.playable.AnimationMontage;
 import com.yesman.akythera.core.asset.armature.Armature;
@@ -21,6 +22,7 @@ import com.yesman.akythera.core.asset.armature.TransformSocket;
 import com.yesman.akythera.core.asset.physics.ArmaturePhysicsData;
 import com.yesman.akythera.core.blueprint.ComponentBlueprint;
 import com.yesman.akythera.core.math.Transform;
+import com.yesman.akythera.core.math.physics.Terrain;
 import com.yesman.akythera.core.math.physics.ragdoll.RagdollSimulation;
 import com.yesman.akythera.core.networking.NetworkingHelper;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundRagdollImpulse;
@@ -141,6 +143,10 @@ public class ArmatureComponent
     /// Ticks the rag doll is pulled toward the animation in all, and ticks left of that pull. Client-side only.
     private int ragdollDriveTicks;
     private int ragdollDriveTicksLeft;
+
+    /// Places the [ArmaturePhysicsData#ikChains] of an armature an entity owns. Client-side only, made on the first
+    /// pose that has chains.
+    private @Nullable InverseKinematicsSimulation inverseKinematics;
 
     public ArmatureComponent(
         final ComponentAttachable owner,
@@ -274,6 +280,17 @@ public class ArmatureComponent
         if (ragdoll != null) pose = ragdoll.makePose(armatureToWorld(lastPartialTick), lastPartialTick);
 
         ArmaturePhysicsData physics = ArmaturePhysicsManager.ofArmature(accessor);
+        EntityPatch<?> entity = owner.logicalSide() == LogicalSide.SERVER || ragdoll != null ? null : TransformComponent.entityOf(owner);
+
+        if (physics != null && entity != null && !physics.ikChains().isEmpty()) {
+            if (inverseKinematics == null) inverseKinematics = new InverseKinematicsSimulation();
+
+            pose = inverseKinematics.apply(
+                pose, accessor, physics, armatureToWorld(lastPartialTick), Terrain.of(entity.getLevel()),
+                (clientTicks + lastPartialTick) * SERVER_FRAME_TIME
+            );
+        }
+
         cachedPose = physics == null ? pose : resolved.applyBoneConstraints(pose, physics, ragdoll != null);
         cachedPose.getForwardBoundTransforms(accessor, boundTransforms);
     }
@@ -348,7 +365,7 @@ public class ArmatureComponent
         RagdollSimulation.Snapshot previous = tickSnapshot != current ? tickSnapshot : previousTickSnapshot;
         EntityPatch<?> entity = TransformComponent.entityOf(owner);
 
-        ragdoll = RagdollSimulation.start(resolved, physics, entity == null ? null : RagdollSimulation.Terrain.of(entity.getLevel()), previous, current, velocityScale);
+        ragdoll = RagdollSimulation.start(resolved, physics, entity == null ? null : Terrain.of(entity.getLevel()), previous, current, velocityScale);
 
         if (ragdoll != null) {
             ragdollTicksLeft = duration;
@@ -456,6 +473,8 @@ public class ArmatureComponent
         frameSnapshot = null;
         tickSnapshot = null;
         previousTickSnapshot = null;
+
+        if (inverseKinematics != null) inverseKinematics.reset();
     }
 
     /// The entity a running rag doll places on the client, null when the armature belongs to none or the client
