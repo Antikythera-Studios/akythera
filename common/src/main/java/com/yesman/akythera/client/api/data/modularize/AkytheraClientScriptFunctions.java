@@ -3,7 +3,6 @@ package com.yesman.akythera.client.api.data.modularize;
 import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.api.data.modularize.ScriptFunction;
 import com.yesman.akythera.api.data.serializable.LocalizedMessage;
-import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.client.api.component.impl.MeshComponent;
 import com.yesman.akythera.client.api.gui.AkytheraHUD;
 import com.yesman.akythera.client.api.gui.AkytheraScreen;
@@ -21,14 +20,10 @@ import com.yesman.akythera.core.reflection.ScriptModularizeHelper;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.color.ColorLerper;
-import net.minecraft.client.renderer.entity.state.SheepRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.core.Holder;
-import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
-import net.minecraft.world.entity.animal.sheep.Sheep;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
@@ -74,31 +69,6 @@ public final class AkytheraClientScriptFunctions {
             "Get Entity Render Type",
             "Render",
             "The render type the entity's own model draws with",
-            true,
-            ScriptFunction.Usage.SCRIPT
-        );
-    }
-
-    /// The `minecraft:sheep_wool_color` function, answering the wool color [SheepRenderState#getWoolColor] gives.
-    public static ScriptFunction sheepWoolColor() {
-        return ScriptModularizeHelper.makeCustomScript(
-            (Function<EntityPatch<?>, Integer>) entityPatch -> {
-                if (entityPatch == null || !(entityPatch.getOriginal() instanceof Sheep sheep)) return -1;
-
-                Component customName = sheep.getCustomName();
-
-                if (customName != null && "jeb_".equals(customName.getString())) {
-                    float partialTick = Minecraft.getInstance().getDeltaTracker().getGameTimeDeltaPartialTick(false);
-
-                    return ColorLerper.getLerpedColor(ColorLerper.Type.SHEEP, sheep.tickCount + partialTick);
-                }
-
-                return ColorLerper.Type.SHEEP.getColor(sheep.getColor());
-            },
-            FunctionSignature.create(Integer.class, List.of("entityPatch"), EntityPatch.class),
-            "Wool Color",
-            "Sheep",
-            "The ARGB color the sheep's wool is tinted by, cycling for a sheep named jeb_. White for anything else",
             true,
             ScriptFunction.Usage.SCRIPT
         );
