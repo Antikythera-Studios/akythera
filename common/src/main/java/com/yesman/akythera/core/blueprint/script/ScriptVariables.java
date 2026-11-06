@@ -15,6 +15,7 @@ import org.jspecify.annotations.Nullable;
 
 import net.minecraft.network.protocol.PacketFlow;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.List;
@@ -61,6 +62,11 @@ public final class ScriptVariables {
     public <T> T setValue(final String name, final T value) {
         variables.put(name, value);
         return value;
+    }
+
+    /// Every variable this instance holds right now, members and locals, by name.
+    public Map<String, Object> values() {
+        return Collections.unmodifiableMap(variables);
     }
 
     /// A copy of the values this instance holds right now.
