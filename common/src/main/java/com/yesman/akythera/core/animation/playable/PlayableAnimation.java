@@ -1,5 +1,6 @@
 package com.yesman.akythera.core.animation.playable;
 
+import com.google.common.base.Suppliers;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.yesman.akythera.api.asset.animation.AnimationManager;
@@ -16,13 +17,15 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.ResourceKey;
 import org.jspecify.annotations.NonNull;
 
+import java.util.function.Supplier;
+
 /// A set of keyframe and pose data managed by [AnimationClip].
 ///
 /// Abstraction of modules that returns [Pose] in a given timestamp.
 public interface PlayableAnimation {
     /// An empty animation sequence holder for various purposes
-    Holder<@NonNull AnimationSequence> EMPTY_ANIM_HOLDER = Holder.direct(
-        new AnimationSequence(AnimationManager.EMPTY_ANIMATION_ACCESSOR, false, false)
+    Supplier<Holder<@NonNull AnimationSequence>> EMPTY_ANIM_HOLDER = Suppliers.memoize(
+        () -> Holder.direct(new AnimationSequence(AnimationManager.EMPTY_ANIMATION_ACCESSOR, false, false))
     );
 
     float DEFAULT_FADE_TIME = 0.25F;

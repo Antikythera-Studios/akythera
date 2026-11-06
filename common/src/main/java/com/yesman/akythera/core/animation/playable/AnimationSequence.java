@@ -57,7 +57,7 @@ public record AnimationSequence(
                 Codec.BOOL.optionalFieldOf("move_vertical", true).forGetter(AnimationSequence::moveVertical),
                 ExtraCodecs.POSITIVE_FLOAT.optionalFieldOf("play_rate", 1.0F).forGetter(AnimationSequence::playRate),
                 Codec.floatRange(0.0F, 1.0F).optionalFieldOf("phase_offset", 0.0F).forGetter(AnimationSequence::phaseOffset),
-                IKType.ENUM_MANAGER.getNameCodec().optionalFieldOf("ik_type", AkytheraIKType.NONE).forGetter(AnimationSequence::ikType)
+                IKType.ENUM_MANAGER.optionalFieldOf("ik_type", () -> AkytheraIKType.PROCEDURAL).forGetter(AnimationSequence::ikType)
             )
             .apply(instance, AnimationSequence::new)
     );
@@ -66,23 +66,23 @@ public record AnimationSequence(
 
     /// Convenience: no notifies, default fade times
     public AnimationSequence(final AssetAccessor<AnimationClip> animClip, final boolean loops, final boolean rootMotion) {
-        this(AnimationNotifyTrack.EMPTY, animClip, DEFAULT_FADE_TIME, DEFAULT_FADE_TIME, loops, rootMotion, true, 1.0F, 0.0F, AkytheraIKType.NONE);
+        this(AnimationNotifyTrack.EMPTY, animClip, DEFAULT_FADE_TIME, DEFAULT_FADE_TIME, loops, rootMotion, true, 1.0F, 0.0F, AkytheraIKType.PROCEDURAL);
     }
 
     public AnimationSequence(
         final AnimationNotifyTrack notifyTrack, final AssetAccessor<AnimationClip> animClip, final float fadeInTime,
         final float fadeOutTime, final boolean loops, final boolean rootMotion
     ) {
-        this(notifyTrack, animClip, fadeInTime, fadeOutTime, loops, rootMotion, true, 1.0F, 0.0F, AkytheraIKType.NONE);
+        this(notifyTrack, animClip, fadeInTime, fadeOutTime, loops, rootMotion, true, 1.0F, 0.0F, AkytheraIKType.PROCEDURAL);
     }
 
-    /// Convenience: no IK
+    /// Convenience: procedural IK
     public AnimationSequence(
         final AnimationNotifyTrack notifyTrack, final AssetAccessor<AnimationClip> animClip, final float fadeInTime,
         final float fadeOutTime, final boolean loops, final boolean rootMotion, final boolean moveVertical, final float playRate,
         final float phaseOffset
     ) {
-        this(notifyTrack, animClip, fadeInTime, fadeOutTime, loops, rootMotion, moveVertical, playRate, phaseOffset, AkytheraIKType.NONE);
+        this(notifyTrack, animClip, fadeInTime, fadeOutTime, loops, rootMotion, moveVertical, playRate, phaseOffset, AkytheraIKType.PROCEDURAL);
     }
 
     /// This sequence over the mirrored twin of its clip, see [AnimationManager#getMirrorAnimation].

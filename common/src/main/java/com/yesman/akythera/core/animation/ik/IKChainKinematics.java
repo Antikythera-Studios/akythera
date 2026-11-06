@@ -117,7 +117,33 @@ public final class IKChainKinematics {
     /// Turns bone `index` around its head so the next joint lies toward `target`, then holds it inside its limit. The
     /// bones after it follow.
     public void aim(final int index, final Vector3d target) {
-        Vector3d current = joints[index + 1].sub(joints[index], new Vector3d());
+        turn(index, joints[index + 1], target);
+    }
+
+    /// Turns bone `index` around its head so the tip swings toward `target`, then holds it inside its limit. The bones
+    /// after it follow.
+    public void swingTip(final int index, final Vector3d target) {
+        turn(index, joints[bones.length], target);
+    }
+
+    /// Brings the tip closer to `target` by swinging each bone toward it, tip bone first, for up to `passes` passes or
+    /// until the tip is within `tolerance`. A swing that leaves the tip farther, as a limit may, is undone.
+    public void settle(final Vector3d target, final int passes, final double tolerance) {
+        for (int pass = 0; pass < passes && joints[bones.length].distance(target) > tolerance; pass++) {
+            for (int i = bones.length - 1; i >= 0; i--) {
+                double before = joints[bones.length].distance(target);
+                Transform[] kept = snapshot();
+
+                swingTip(i, target);
+
+                if (joints[bones.length].distance(target) > before) restore(kept);
+            }
+        }
+    }
+
+    /// Turns bone `index` around its head so `point`, a joint at or after the bone's tail, lies toward `target`.
+    private void turn(final int index, final Vector3d point, final Vector3d target) {
+        Vector3d current = point.sub(joints[index], new Vector3d());
         Vector3d desired = target.sub(joints[index], new Vector3d());
 
         if (current.length() < MIN_AIM_LENGTH || desired.length() < MIN_AIM_LENGTH) return;
@@ -134,6 +160,22 @@ public final class IKChainKinematics {
 
         pose.putBoneTransform(bones[index].getName(), new Transform(transform.loc(), rotated, transform.sca()));
         updateFrom(index);
+    }
+
+    /// The pose transform of each bone in the chain, which [#restore] puts back.
+    public Transform[] snapshot() {
+        Transform[] transforms = new Transform[bones.length];
+
+        for (int i = 0; i < bones.length; i++) transforms[i] = pose.orElseIdentity(bones[i].getName());
+
+        return transforms;
+    }
+
+    /// Puts the bones back to `snapshot`, taken by [#snapshot] on this chain.
+    public void restore(final Transform[] snapshot) {
+        for (int i = 0; i < bones.length; i++) pose.putBoneTransform(bones[i].getName(), snapshot[i]);
+
+        updateFrom(0);
     }
 
     /// Rewrites [#models] and [#joints] from bone `index` on, from [#pose].

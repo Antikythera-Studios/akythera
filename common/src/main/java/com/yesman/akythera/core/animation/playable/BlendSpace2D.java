@@ -259,7 +259,7 @@ public final class BlendSpace2D implements PlayableAnimation {
         /// The animation [#animation] names, mirrored when [#mirrored]. The empty animation for an empty node, and
         /// empty when the key names no entry.
         public Optional<PlayableAnimation> resolveAnimation() {
-            if (animation == null) return Optional.of(PlayableAnimation.EMPTY_ANIM_HOLDER.value());
+            if (animation == null) return Optional.of(PlayableAnimation.EMPTY_ANIM_HOLDER.get().value());
 
             return ScriptType.lookupEntry(animation)
                 .map(holder -> mirrored ? holder.value().mirrored() : holder.value());

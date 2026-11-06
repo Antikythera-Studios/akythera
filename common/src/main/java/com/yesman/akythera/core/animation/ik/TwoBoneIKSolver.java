@@ -1,9 +1,11 @@
 package com.yesman.akythera.core.animation.ik;
 
 import com.mojang.serialization.MapCodec;
+import com.yesman.akythera.core.math.Transform;
 import org.joml.Vector3d;
 
-/// Solves a two-bone chain exactly, like a leg or an arm. The middle joint stays on the side the pose bends it toward.
+/// Solves a two-bone chain exactly, like a leg or an arm. The middle joint stays on the side the pose bends it toward,
+/// or goes to the mirrored side when a rotation limit keeps the tip off the target there.
 public record TwoBoneIKSolver() implements IKSolver {
     public static final TwoBoneIKSolver INSTANCE = new TwoBoneIKSolver();
 
@@ -11,6 +13,9 @@ public record TwoBoneIKSolver() implements IKSolver {
 
     /// Distance kept between the target's reach and the chain's fully folded or fully stretched length, in blocks.
     private static final double REACH_MARGIN = 1.0E-4D;
+
+    /// How far the tip may end from the reached point before the mirrored bend side is tried, in blocks.
+    private static final double MISS_TOLERANCE = 1.0E-3D;
 
     @Override
     public IKSolverType type() {
@@ -44,11 +49,32 @@ public record TwoBoneIKSolver() implements IKSolver {
         bend.normalize();
 
         double cosine = Math.clamp((upper * upper + reach * reach - lower * lower) / (2.0D * upper * reach), -1.0D, 1.0D);
+        Vector3d reached = root.add(direction.mul(reach, new Vector3d()), new Vector3d());
+        Transform[] start = chain.snapshot();
+
+        bendToward(chain, root, direction, upper, cosine, bend, reached);
+
+        double miss = chain.joint(2).distance(reached);
+
+        if (miss <= MISS_TOLERANCE) return;
+
+        Transform[] bent = chain.snapshot();
+        chain.restore(start);
+        bendToward(chain, root, direction, upper, cosine, bend.negate(new Vector3d()), reached);
+
+        if (chain.joint(2).distance(reached) >= miss) chain.restore(bent);
+    }
+
+    /// Aims the chain at `reached` with the middle joint pushed off the root-to-target line along `bend`.
+    private static void bendToward(
+        final IKChainKinematics chain, final Vector3d root, final Vector3d direction, final double upper, final double cosine,
+        final Vector3d bend, final Vector3d reached
+    ) {
         Vector3d newMiddle = new Vector3d(root)
             .add(direction.mul(upper * cosine, new Vector3d()))
             .add(bend.mul(upper * Math.sqrt(1.0D - cosine * cosine), new Vector3d()));
 
         chain.aim(0, newMiddle);
-        chain.aim(1, root.add(direction.mul(reach), new Vector3d()));
+        chain.aim(1, reached);
     }
 }

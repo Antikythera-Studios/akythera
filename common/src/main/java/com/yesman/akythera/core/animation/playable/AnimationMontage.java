@@ -65,7 +65,7 @@ public final class AnimationMontage implements PlayableAnimation {
                 Codec.BOOL.fieldOf("root_motion").forGetter(AnimationMontage::rootMotion),
                 Codec.BOOL.optionalFieldOf("move_vertical", true).forGetter(AnimationMontage::moveVertical),
                 ExtraCodecs.POSITIVE_FLOAT.optionalFieldOf("play_rate", 1.0F).forGetter(AnimationMontage::playRate),
-                IKType.ENUM_MANAGER.getNameCodec().optionalFieldOf("ik_type", AkytheraIKType.NONE).forGetter(AnimationMontage::ikType)
+                IKType.ENUM_MANAGER.optionalFieldOf("ik_type", () -> AkytheraIKType.PROCEDURAL).forGetter(AnimationMontage::ikType)
             )
             .apply(instance, AnimationMontage::new)
     );
@@ -418,7 +418,7 @@ public final class AnimationMontage implements PlayableAnimation {
         boolean enableRootMotion;
         boolean moveVertical = true;
         float playRate = 1.0F;
-        IKType ikType = AkytheraIKType.NONE;
+        IKType ikType = AkytheraIKType.PROCEDURAL;
 
         private Builder() {}
 

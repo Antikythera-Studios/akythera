@@ -121,14 +121,14 @@ public record ArmaturePhysicsData(
     }
 
     /// How the IK chains' shared parent moves to fit the feet: lowered so the lowest foot reaches its ground, then
-    /// tilted parallel to the ground under the feet. Tilting needs three chains standing on ground; with fewer the parent
-    /// is only lowered. Both fade with the chains' IK weight.
+    /// tilted parallel to the ground under the feet. Two chains tilt it along the line through their feet only; one
+    /// chain only lowers it. Both fade with the chains' IK weight.
     ///
     /// @param maxDrop  farthest the parent lowers, in blocks
     /// @param maxPitch farthest the parent tilts around the armature's X axis, in degrees
     /// @param maxRoll  farthest the parent tilts around the armature's Z axis, in degrees
     public record RootFitting(boolean enabled, float maxDrop, float maxPitch, float maxRoll) {
-        public static final RootFitting DEFAULT = new RootFitting(false, 0.25F, 15.0F, 15.0F);
+        public static final RootFitting DEFAULT = new RootFitting(false, 0.5F, 15.0F, 15.0F);
 
         public static final Codec<RootFitting> CODEC = RecordCodecBuilder.create(
             instance ->

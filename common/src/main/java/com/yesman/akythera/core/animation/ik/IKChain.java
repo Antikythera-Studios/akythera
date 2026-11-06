@@ -6,20 +6,18 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 
 /// A run of bones that IK turns so the tail of its tip bone reaches a target, keyed by the tip bone.
 ///
-/// @param tipBone       the chain's last bone, whose tail is placed
-/// @param chainLength   how many bones the chain spans, from the tip bone upward
-/// @param solver        how the bones turn to reach the target
-/// @param stepping      how procedural stepping moves the tip
-/// @param alignToNormal whether the bones under the tip bone tilt to the slope of the ground the tip stands on
-public record IKChain(String tipBone, int chainLength, IKSolver solver, Stepping stepping, boolean alignToNormal) {
+/// @param tipBone     the chain's last bone, whose tail is placed
+/// @param chainLength how many bones the chain spans, from the tip bone upward
+/// @param solver      how the bones turn to reach the target
+/// @param stepping    how procedural stepping moves the tip
+public record IKChain(String tipBone, int chainLength, IKSolver solver, Stepping stepping) {
     public static final Codec<IKChain> CODEC = RecordCodecBuilder.<IKChain>create(
         instance ->
             instance.group(
                 Codec.STRING.fieldOf("tip_bone").forGetter(IKChain::tipBone),
                 Codec.intRange(1, 64).fieldOf("chain_length").forGetter(IKChain::chainLength),
                 IKSolver.CODEC.fieldOf("solver").forGetter(IKChain::solver),
-                Stepping.CODEC.optionalFieldOf("stepping", Stepping.DEFAULT).forGetter(IKChain::stepping),
-                Codec.BOOL.optionalFieldOf("align_to_normal", false).forGetter(IKChain::alignToNormal)
+                Stepping.CODEC.optionalFieldOf("stepping", Stepping.DEFAULT).forGetter(IKChain::stepping)
             ).apply(instance, IKChain::new)
     ).validate(chain -> chain.solver().supportsLength(chain.chainLength())
         ? DataResult.success(chain)
@@ -34,10 +32,17 @@ public record IKChain(String tipBone, int chainLength, IKSolver solver, Stepping
     ///                          follows the animation
     /// @param stepTime          how long a step takes
     /// @param stepCooldown      how long after a step the next one waits; meanwhile a tip past a threshold slides
+    /// @param prediction        how far past the step's landing time the body's motion and turn are extrapolated to
+    ///                          place the landing spot
+    /// @param resetTime         how long after the last step the tip may step back to where the animation puts it
+    /// @param resetDistance     how far the planted tip may stand from where the animation puts it without stepping back
+    /// @param resetAngle        how far the body may turn away from the planted tip's facing without stepping back
+    /// @param resetStepTime     how long a step back to where the animation puts the tip takes
     public record Stepping(
-        float distanceThreshold, float angularThreshold, float stepHeight, float rayMaxDistance, float stepTime, float stepCooldown
+        float distanceThreshold, float angularThreshold, float stepHeight, float rayMaxDistance, float stepTime, float stepCooldown,
+        float prediction, float resetTime, float resetDistance, float resetAngle, float resetStepTime
     ) {
-        public static final Stepping DEFAULT = new Stepping(0.3F, 45.0F, 0.15F, 1.0F, 0.25F, 0.1F);
+        public static final Stepping DEFAULT = new Stepping(0.3F, 45.0F, 0.15F, 1.0F, 0.25F, 0.1F, 0.1F, 0.5F, 0.1F, 15.0F, 0.25F);
 
         public static final Codec<Stepping> CODEC = RecordCodecBuilder.create(
             instance ->
@@ -47,7 +52,12 @@ public record IKChain(String tipBone, int chainLength, IKSolver solver, Stepping
                     Codec.floatRange(0.0F, Float.MAX_VALUE).optionalFieldOf("step_height", DEFAULT.stepHeight).forGetter(Stepping::stepHeight),
                     Codec.floatRange(0.0F, Float.MAX_VALUE).optionalFieldOf("ray_max_distance", DEFAULT.rayMaxDistance).forGetter(Stepping::rayMaxDistance),
                     Codec.floatRange(0.01F, Float.MAX_VALUE).optionalFieldOf("step_time", DEFAULT.stepTime).forGetter(Stepping::stepTime),
-                    Codec.floatRange(0.0F, Float.MAX_VALUE).optionalFieldOf("step_cooldown", DEFAULT.stepCooldown).forGetter(Stepping::stepCooldown)
+                    Codec.floatRange(0.0F, Float.MAX_VALUE).optionalFieldOf("step_cooldown", DEFAULT.stepCooldown).forGetter(Stepping::stepCooldown),
+                    Codec.floatRange(0.0F, Float.MAX_VALUE).optionalFieldOf("prediction", DEFAULT.prediction).forGetter(Stepping::prediction),
+                    Codec.floatRange(0.0F, Float.MAX_VALUE).optionalFieldOf("reset_time", DEFAULT.resetTime).forGetter(Stepping::resetTime),
+                    Codec.floatRange(0.0F, Float.MAX_VALUE).optionalFieldOf("reset_distance", DEFAULT.resetDistance).forGetter(Stepping::resetDistance),
+                    Codec.floatRange(0.0F, 180.0F).optionalFieldOf("reset_angle", DEFAULT.resetAngle).forGetter(Stepping::resetAngle),
+                    Codec.floatRange(0.01F, Float.MAX_VALUE).optionalFieldOf("reset_step_time", DEFAULT.resetStepTime).forGetter(Stepping::resetStepTime)
                 ).apply(instance, Stepping::new)
         );
     }

@@ -447,6 +447,17 @@ public final class EnumerableDataBlockManager<T extends EnumerableDataBlock> {
         return byNameCodec.get();
     }
 
+    /// An optional name field that falls back to `defaultValue`, resolving it only on decode or encode.
+    ///
+    /// Static codecs use this in place of [Codec#optionalFieldOf(String, Object)], whose eager default would
+    /// initialize a hardcoded enum class before [#registerEnumCls] knows it.
+    public MapCodec<T> optionalFieldOf(final String name, final Supplier<? extends T> defaultValue) {
+        return getNameCodec().optionalFieldOf(name).xmap(
+            value -> value.orElseGet(defaultValue),
+            value -> value == defaultValue.get() ? Optional.empty() : Optional.of(value)
+        );
+    }
+
     /// The data block type's name, which is also its data pack directory.
     public String getEnumType() {
         return enumType;

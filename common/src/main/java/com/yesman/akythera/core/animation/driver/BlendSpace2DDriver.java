@@ -274,7 +274,7 @@ public final class BlendSpace2DDriver implements AnimationDriver {
                 warnedMissingAnimation = true;
             }
 
-            return PlayableAnimation.EMPTY_ANIM_HOLDER.value();
+            return PlayableAnimation.EMPTY_ANIM_HOLDER.get().value();
         });
     }
 
