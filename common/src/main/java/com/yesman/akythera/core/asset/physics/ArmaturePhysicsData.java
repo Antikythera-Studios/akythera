@@ -27,9 +27,10 @@ import java.util.Set;
 /// @param simulation  the rag doll's solver settings
 /// @param ikChains    the IK chains, each keyed by its tip bone
 /// @param rootFitting how the chains' shared parent moves to fit the feet before the chains are solved
+/// @param bodyTurn    how the shown body follows the body yaw while the chains' IK shows
 public record ArmaturePhysicsData(
     Map<String, BoneBody> bodies, Map<String, List<BoneConstraint>> constraints, RagdollParameters simulation, List<IKChain> ikChains,
-    RootFitting rootFitting
+    RootFitting rootFitting, BodyTurn bodyTurn
 ) {
     /// The shapes a body may carry.
     public static final Set<ColliderType> BODY_SHAPES = Set.of(
@@ -50,7 +51,9 @@ public record ArmaturePhysicsData(
                 IKChain.CODEC.listOf().optionalFieldOf("ik_chains", List.of())
                     .forGetter(ArmaturePhysicsData::ikChains),
                 RootFitting.CODEC.optionalFieldOf("root_fitting", RootFitting.DEFAULT)
-                    .forGetter(ArmaturePhysicsData::rootFitting)
+                    .forGetter(ArmaturePhysicsData::rootFitting),
+                BodyTurn.CODEC.optionalFieldOf("body_turn", BodyTurn.DEFAULT)
+                    .forGetter(ArmaturePhysicsData::bodyTurn)
             ).apply(instance, ArmaturePhysicsData::new)
     );
 
@@ -138,6 +141,30 @@ public record ArmaturePhysicsData(
                     Codec.floatRange(0.0F, 90.0F).optionalFieldOf("max_pitch", DEFAULT.maxPitch).forGetter(RootFitting::maxPitch),
                     Codec.floatRange(0.0F, 90.0F).optionalFieldOf("max_roll", DEFAULT.maxRoll).forGetter(RootFitting::maxRoll)
                 ).apply(instance, RootFitting::new)
+        );
+    }
+
+    /// How the shown body eases after the body yaw at a limited speed. Fades with the chains' IK weight.
+    ///
+    /// @param turnTime         how long the shown body takes to catch up with a turn, in seconds
+    /// @param maxTurnSpeed     fastest the shown body turns while the animation places the chains' tips, in degrees per
+    ///                         second
+    /// @param maxStepTurnSpeed fastest the shown body turns while procedural stepping places the tips, in degrees per
+    ///                         second
+    /// @param steadyBones      bones that keep their facing while the shown body is behind the yaw, like a head looking
+    ///                         at something
+    public record BodyTurn(boolean enabled, float turnTime, float maxTurnSpeed, float maxStepTurnSpeed, List<String> steadyBones) {
+        public static final BodyTurn DEFAULT = new BodyTurn(false, 0.2F, 360.0F, 180.0F, List.of());
+
+        public static final Codec<BodyTurn> CODEC = RecordCodecBuilder.create(
+            instance ->
+                instance.group(
+                    Codec.BOOL.optionalFieldOf("enabled", DEFAULT.enabled).forGetter(BodyTurn::enabled),
+                    Codec.floatRange(0.01F, Float.MAX_VALUE).optionalFieldOf("turn_time", DEFAULT.turnTime).forGetter(BodyTurn::turnTime),
+                    Codec.floatRange(1.0F, Float.MAX_VALUE).optionalFieldOf("max_turn_speed", DEFAULT.maxTurnSpeed).forGetter(BodyTurn::maxTurnSpeed),
+                    Codec.floatRange(1.0F, Float.MAX_VALUE).optionalFieldOf("max_step_turn_speed", DEFAULT.maxStepTurnSpeed).forGetter(BodyTurn::maxStepTurnSpeed),
+                    Codec.STRING.listOf().optionalFieldOf("steady_bones", DEFAULT.steadyBones).forGetter(BodyTurn::steadyBones)
+                ).apply(instance, BodyTurn::new)
         );
     }
 

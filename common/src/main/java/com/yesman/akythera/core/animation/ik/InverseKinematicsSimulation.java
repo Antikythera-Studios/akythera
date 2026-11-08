@@ -27,9 +27,10 @@ import java.util.Map;
 import java.util.OptionalDouble;
 import java.util.Set;
 
-/// Places the [IKChain]s of one armature each frame: steps them over the ground, follows the [IKCurves] of the playing
-/// animation, fits the chains' shared parent to the feet, and solves each chain. The [IKChannels] of the pose decide
-/// how much of each happens.
+/// Places the [IKChain]s of one armature each frame: turns the shown body after the body yaw under
+/// [ArmaturePhysicsData.BodyTurn], steps the chains over the ground in their gait groups, follows the [IKCurves] of the
+/// playing animation, fits the chains' shared parent to the feet, and solves each chain. The [IKChannels] of the pose
+/// decide how much of each happens.
 public final class InverseKinematicsSimulation {
     /// Longest time one frame advances the steps by, in seconds.
     private static final float MAX_FRAME_TIME = 0.25F;
@@ -44,6 +45,9 @@ public final class InverseKinematicsSimulation {
     /// How long the body's measured motion takes to reach about two thirds of [#bodyVelocity] and [#bodyYawRate], in
     /// seconds.
     private static final double MOTION_SMOOTHING = 0.1D;
+
+    /// Part of its thresholds a gait group steps at right after another group's step started.
+    private static final double GAIT_FOLLOW = 0.5D;
 
     /// Most [IKChainKinematics#settle] passes a chain takes after its solver.
     private static final int SETTLE_PASSES = 8;
@@ -72,8 +76,19 @@ public final class InverseKinematicsSimulation {
     /// The body's horizontal velocity, in blocks per second, smoothed over [#MOTION_SMOOTHING].
     private Vec3 bodyVelocity = Vec3.ZERO;
 
-    /// The body's turn rate, in degrees per second, smoothed over [#MOTION_SMOOTHING].
+    /// The shown body's turn rate, in degrees per second, smoothed over [#MOTION_SMOOTHING].
     private double bodyYawRate;
+
+    /// How far the last [#apply] turned the shown body from the body yaw, in degrees.
+    private float lastShownTurn;
+
+    /// The gait group that started the last group step, empty before the first.
+    private String lastGaitGroup = "";
+
+    /// When the last group step started, in seconds on the clock of [#apply].
+    private double lastGaitStart = Double.NEGATIVE_INFINITY;
+
+    private final BodyTurner bodyTurner = new BodyTurner();
 
     /// `pose` with the chains of `physics` placed and solved.
     ///
@@ -100,35 +115,71 @@ public final class InverseKinematicsSimulation {
         lastTime = time;
 
         IKChannels channels = pose.getIKChannels();
-        Matrix4f[] bound = pose.getForwardBoundTransforms(armatureAccessor);
         Vec3 forward = armatureToWorld.mulDirection(MathUtils.ZP);
         double bodyYaw = Math.toDegrees(Math.atan2(-forward.x(), forward.z()));
         double floorHeight = armatureToWorld.loc().y();
         Vec3 bodyPosition = armatureToWorld.loc();
+        boolean continued = lastBodyPosition != null && frameTime > 0.0F && bodyPosition.distanceTo(lastBodyPosition) <= SNAP_DISTANCE;
+        double blend = 1.0D - Math.exp(-frameTime / MOTION_SMOOTHING);
+        float frameTurn = continued ? (float) Mth.wrapDegrees(bodyYaw - lastBodyYaw) : 0.0F;
 
-        if (lastBodyPosition != null && frameTime > 0.0F) {
+        if (continued) {
             Vec3 moved = bodyPosition.subtract(lastBodyPosition);
-
-            if (moved.length() > SNAP_DISTANCE) {
-                bodyVelocity = Vec3.ZERO;
-                bodyYawRate = 0.0D;
-            } else {
-                double blend = 1.0D - Math.exp(-frameTime / MOTION_SMOOTHING);
-                bodyVelocity = bodyVelocity.lerp(new Vec3(moved.x(), 0.0D, moved.z()).scale(1.0D / frameTime), blend);
-                bodyYawRate = Mth.lerp(blend, bodyYawRate, Mth.wrapDegrees(bodyYaw - lastBodyYaw) / frameTime);
-            }
+            bodyVelocity = bodyVelocity.lerp(new Vec3(moved.x(), 0.0D, moved.z()).scale(1.0D / frameTime), blend);
+        } else if (lastBodyPosition != null && frameTime > 0.0F) {
+            bodyVelocity = Vec3.ZERO;
+            bodyYawRate = 0.0D;
+            bodyTurner.reset();
         }
 
         lastBodyPosition = bodyPosition;
         lastBodyYaw = bodyYaw;
 
-        BodyMotion motion = new BodyMotion(bodyPosition, bodyYaw, bodyVelocity, bodyYawRate);
+        ArmaturePhysicsData.BodyTurn bodyTurn = physics.bodyTurn();
+        float shownTurn = 0.0F;
+
+        if (bodyTurn.enabled()) {
+            float alpha = 0.0F;
+            float stepped = 0.0F;
+
+            for (IKChain chain : chains) {
+                IKChannel channel = channels == null ? IKChannel.NONE : channels.get(chain.tipBone());
+                alpha += channel.alpha();
+                stepped += channel.alpha() * channel.procedural();
+            }
+
+            bodyTurner.update(bodyTurn, Mth.lerp(stepped / chains.size(), bodyTurn.maxTurnSpeed(), bodyTurn.maxStepTurnSpeed()), frameTurn, frameTime);
+            shownTurn = bodyTurner.lag() * alpha / chains.size();
+        }
+
+        if (continued) bodyYawRate = Mth.lerp(blend, bodyYawRate, (frameTurn - shownTurn + lastShownTurn) / frameTime);
+
+        lastShownTurn = shownTurn;
+
+        Pose turned = pose;
+
+        if (shownTurn != 0.0F) {
+            turned = new Pose(pose);
+            PoseOperators.rotateInModelSpace(armature, turned, armature.getRootBone().getName(), new Quaterniond().rotateY(Math.toRadians(shownTurn)));
+
+            for (String steadyBone : bodyTurn.steadyBones()) {
+                PoseOperators.rotateInModelSpace(armature, turned, steadyBone, new Quaterniond().rotateY(Math.toRadians(-shownTurn)));
+            }
+        }
+
+        Matrix4f[] bound = turned.getForwardBoundTransforms(armatureAccessor);
+        BodyMotion motion = new BodyMotion(bodyPosition, bodyYaw - shownTurn, bodyVelocity, bodyYawRate);
 
         @Nullable Vector3d[] targets = new Vector3d[chains.size()];
         @Nullable Bone[] chainRoots = new Bone[chains.size()];
         float[] weights = new float[chains.size()];
         @Nullable Vector3d[] footholds = new Vector3d[chains.size()];
         double[] reaches = new double[chains.size()];
+        @Nullable Vec3[] homes = new Vec3[chains.size()];
+        @Nullable Vec3[] animatedTips = new Vec3[chains.size()];
+        @Nullable Vec3[] byCurves = new Vec3[chains.size()];
+        boolean[] stepping = new boolean[chains.size()];
+        double[] facingTurns = new double[chains.size()];
 
         for (int i = 0; i < chains.size(); i++) {
             IKChain chain = chains.get(i);
@@ -155,48 +206,153 @@ public final class InverseKinematicsSimulation {
 
             chainRoots[i] = chainRoot;
 
-            IKChain.Stepping stepping = chain.stepping();
             Vec3 animatedTip = armatureToWorld.mul(VectorUtils.toVec3(bound[tip.getId()].transformPosition(new Vector3f(tip.getToTail()))));
             double rootHeight = armatureToWorld.mul(VectorUtils.toVec3(bound[chainRoot.getId()].getTranslation(new Vector3f()))).y();
             OptionalDouble ground = terrain.groundHeight(
-                animatedTip.x(), animatedTip.z(), Math.max(rootHeight, animatedTip.y()), animatedTip.y() - stepping.rayMaxDistance()
+                animatedTip.x(), animatedTip.z(), Math.max(rootHeight, animatedTip.y()), animatedTip.y() - chain.stepping().rayMaxDistance()
             );
+            if (override == null && ground.isEmpty()) {
+                state.release();
+                continue;
+            }
+
             Vec3 home = ground.isPresent()
                 ? new Vec3(animatedTip.x(), ground.getAsDouble() + animatedTip.y() - floorHeight, animatedTip.z())
                 : animatedTip;
+
+            homes[i] = home;
+            animatedTips[i] = animatedTip;
+
+            if (override != null) {
+                footholds[i] = toVector3d(armatureToWorld.inverseMul(override));
+            } else if (ground.isPresent()) {
+                footholds[i] = toVector3d(armatureToWorld.inverseMul(new Vec3(animatedTip.x(), ground.getAsDouble(), animatedTip.z())));
+            }
+
+            if (override != null) continue;
+
+            byCurves[i] = state.placeByCurve(
+                home, ground.isPresent() ? animatedTip.y() - floorHeight : 0.0D, channel.plant(), motion.yaw(), chain.stepping(), frameTime
+            );
+
+            if (channel.procedural() <= WEIGHT_EPSILON) {
+                state.plant(byCurves[i], motion.yaw());
+            } else {
+                state.prepare(home, motion, chain.stepping(), frameTime);
+                stepping[i] = true;
+            }
+        }
+
+        // Ungrouped tips step on their own while their mirror tip is planted
+        for (int i = 0; i < chains.size(); i++) {
+            IKChain.Stepping settings = chains.get(i).stepping();
+            String mirrorTip = armature.getMirrorBone(chains.get(i).tipBone());
+            boolean mirrorSwinging = false;
+
+            if (!stepping[i] || !settings.gaitGroup().isEmpty() || !states[i].ready()) continue;
+
+            for (int j = 0; j < chains.size(); j++) {
+                if (j != i && chains.get(j).tipBone().equals(mirrorTip) && states[j].swinging()) mirrorSwinging = true;
+            }
+
+            if (mirrorSwinging) continue;
+
+            if (states[i].urgency(homes[i], motion, settings) > 1.0D) {
+                states[i].start(homes[i], motion, settings, false);
+            } else if (states[i].wantsReset(homes[i], motion, settings)) {
+                states[i].start(homes[i], motion, settings, true);
+            }
+        }
+
+        // A gait group steps all its tips at once, only while no other group swings
+        Map<String, List<Integer>> gaitGroups = new HashMap<>();
+        boolean groupSwinging = false;
+
+        for (int i = 0; i < chains.size(); i++) {
+            String group = chains.get(i).stepping().gaitGroup();
+
+            if (!stepping[i] || group.isEmpty()) continue;
+
+            gaitGroups.computeIfAbsent(group, _ -> new ArrayList<>()).add(i);
+            groupSwinging |= states[i].swinging();
+        }
+
+        String startingGroup = null;
+        boolean startingWaited = false;
+        boolean startingLeads = false;
+        double startingUrgency = 0.0D;
+        boolean startingReset = false;
+        IKChain.TurnLead turnLead = motion.yawRate() > 0.0D ? IKChain.TurnLead.RIGHT : IKChain.TurnLead.LEFT;
+
+        if (groupSwinging) gaitGroups.clear();
+
+        // The group that stepped last yields, then the one leading the turn goes first
+        for (Map.Entry<String, List<Integer>> group : gaitGroups.entrySet()) {
+            double urgency = 0.0D;
+            boolean reset = false;
+            boolean ready = true;
+            boolean leads = false;
+            boolean waited = !group.getKey().equals(lastGaitGroup);
+            double due = waited && time - lastGaitStart < 2.0D * chains.get(group.getValue().getFirst()).stepping().stepTime() ? GAIT_FOLLOW : 1.0D;
+
+            for (int i : group.getValue()) {
+                ready &= states[i].ready();
+                urgency = Math.max(urgency, states[i].urgency(homes[i], motion, chains.get(i).stepping()));
+                reset |= states[i].wantsReset(homes[i], motion, chains.get(i).stepping());
+                leads |= chains.get(i).stepping().turnLead() == turnLead;
+            }
+
+            if (!ready || urgency <= due && !reset) continue;
+
+            boolean better = startingGroup == null
+                || waited && !startingWaited
+                || waited == startingWaited && leads && !startingLeads
+                || waited == startingWaited && leads == startingLeads && urgency > startingUrgency;
+
+            if (better) {
+                startingGroup = group.getKey();
+                startingWaited = waited;
+                startingLeads = leads;
+                startingUrgency = urgency;
+                startingReset = urgency <= due;
+            }
+        }
+
+        if (startingGroup != null) {
+            for (int i : gaitGroups.get(startingGroup)) states[i].start(homes[i], motion, chains.get(i).stepping(), startingReset);
+
+            lastGaitGroup = startingGroup;
+            lastGaitStart = time;
+        }
+
+        for (int i = 0; i < chains.size(); i++) {
+            IKChain chain = chains.get(i);
+            ChainState state = states[i];
+            Vec3 home = homes[i];
+            Vec3 override = targetOverrides.get(chain.tipBone());
+            IKChannel channel = channels == null ? IKChannel.NONE : channels.get(chain.tipBone());
             Vec3 placed;
+
+            if (home == null) continue;
 
             if (override != null) {
                 placed = override;
                 weights[i] = 1.0F;
             } else {
-                String mirrorTip = armature.getMirrorBone(chain.tipBone());
-                boolean mirrorSwinging = false;
-
-                for (int j = 0; j < chains.size(); j++) {
-                    if (j != i && chains.get(j).tipBone().equals(mirrorTip) && states[j].swinging()) mirrorSwinging = true;
-                }
-
-                Vec3 byCurve = state.placeByCurve(home, channel.plant());
-                Vec3 stepped = channel.procedural() > WEIGHT_EPSILON
-                    ? state.step(home, motion, stepping, frameTime, mirrorSwinging)
-                    : state.plant(byCurve, bodyYaw);
-                placed = animatedTip.lerp(byCurve.lerp(stepped, channel.procedural()), channel.alpha());
+                Vec3 stepped = stepping[i] ? state.position(home, motion, chain.stepping()) : state.planted;
+                placed = animatedTips[i].lerp(byCurves[i].lerp(stepped, channel.procedural()), channel.alpha());
                 weights[i] = channel.alpha();
+
+                if (chain.stepping().holdFacing()) facingTurns[i] = state.facingTurn(motion, channel, chain.stepping());
             }
 
             state.placed = placed;
             state.animated = home;
             targets[i] = toVector3d(armatureToWorld.inverseMul(placed));
-
-            if (override != null) {
-                footholds[i] = targets[i];
-            } else if (ground.isPresent()) {
-                footholds[i] = toVector3d(armatureToWorld.inverseMul(new Vec3(animatedTip.x(), ground.getAsDouble(), animatedTip.z())));
-            }
         }
 
-        Pose result = new Pose(pose);
+        Pose result = new Pose(turned);
+
         ArmaturePhysicsData.RootFitting fitting = physics.rootFitting();
 
         if (fitting.enabled()) {
@@ -291,6 +447,11 @@ public final class InverseKinematicsSimulation {
 
             chain.solver().solve(kinematics, target);
             kinematics.settle(target, SETTLE_PASSES, SETTLE_TOLERANCE);
+
+            if (facingTurns[i] != 0.0D) {
+                Vector3d up = kinematics.joint(0).sub(kinematics.joint(kinematics.length()), new Vector3d()).normalize();
+                kinematics.rotate(0, new Quaterniond().rotationAxis(Math.toRadians(-facingTurns[i]), up.x, up.y, up.z));
+            }
         }
 
         return result;
@@ -327,6 +488,9 @@ public final class InverseKinematicsSimulation {
     /// Forgets every planted tip and step, so the chains plant afresh on the next [#apply].
     public void reset() {
         for (ChainState state : states) state.release();
+
+        bodyTurner.reset();
+        lastShownTurn = 0.0F;
 
         lastTime = Double.NaN;
         lastBodyPosition = null;
@@ -366,6 +530,9 @@ public final class InverseKinematicsSimulation {
         /// The body yaw the planted tip faces, in degrees.
         private double plantedYaw;
 
+        /// The body yaw the planted tip faced when it landed or the running step lifted it, in degrees.
+        private double facingYaw;
+
         /// Where the running step lands in the world, null while no step runs.
         private @Nullable Vec3 stepTo;
 
@@ -384,8 +551,17 @@ public final class InverseKinematicsSimulation {
         /// Whether the running step is a reset, which lands exactly where the animation puts the tip.
         private boolean resetting;
 
-        /// Where the tip is held while the plant curve stays at 1, null while it does not.
+        /// The ground point the tip is held on while the plant curve stays at 1, null while it does not.
         private @Nullable Vec3 held;
+
+        /// The body yaw the held tip faces, in degrees.
+        private double heldYaw;
+
+        /// Where the held tip let go from, null while none catches up.
+        private @Nullable Vec3 letGo;
+
+        /// Seconds since the held tip let go.
+        private float letGoElapsed;
 
         /// Where the last [#apply] placed the tip, in the world.
         private @Nullable Vec3 placed;
@@ -401,18 +577,45 @@ public final class InverseKinematicsSimulation {
             planted = null;
             stepTo = null;
             held = null;
+            letGo = null;
             placed = null;
             animated = null;
             cooldown = 0.0F;
             idle = 0.0F;
         }
 
-        /// The tip placed by the plant curve: `home` at 0, where it stood when the curve reached 1 at 1.
-        private Vec3 placeByCurve(final Vec3 home, final float plant) {
-            if (plant >= 1.0F - WEIGHT_EPSILON) {
-                if (held == null) held = home;
+        /// The tip placed by the plant curve: `home` at 0, the held ground point raised by `lift` at 1. A held tip that
+        /// drifts past [IKChain.Stepping#distanceThreshold] steps back onto `home`.
+        private Vec3 placeByCurve(
+            final Vec3 home, final double lift, final float plant, final double yaw, final IKChain.Stepping stepping, final float frameTime
+        ) {
+            if (letGo != null) {
+                letGoElapsed += frameTime;
+                float progress = Math.min(letGoElapsed / stepping.stepTime(), 1.0F);
 
-                return held;
+                if (progress < 1.0F) {
+                    return letGo.lerp(home, Mth.smoothstep(progress)).add(0.0D, stepping.stepHeight() * Mth.sin(progress * Mth.PI), 0.0D);
+                }
+
+                letGo = null;
+                placed = home;
+            }
+
+            if (plant >= 1.0F - WEIGHT_EPSILON) {
+                if (held == null) {
+                    held = (placed == null ? home : placed).subtract(0.0D, lift, 0.0D);
+                    heldYaw = yaw;
+                }
+
+                Vec3 standing = held.add(0.0D, lift, 0.0D);
+
+                if (standing.distanceTo(home) > stepping.distanceThreshold()) {
+                    letGo = standing;
+                    letGoElapsed = 0.0F;
+                    held = null;
+                }
+
+                return standing;
             }
 
             if (plant <= WEIGHT_EPSILON) {
@@ -421,73 +624,123 @@ public final class InverseKinematicsSimulation {
                 return home;
             }
 
-            return held == null ? home : home.lerp(held, plant);
+            if (held == null) return home;
+
+            Vec3 blended = home.lerp(held.add(0.0D, lift, 0.0D), plant);
+
+            if (held.add(0.0D, lift, 0.0D).distanceTo(home) > stepping.distanceThreshold()) {
+                letGo = blended;
+                letGoElapsed = 0.0F;
+                held = null;
+            }
+
+            return blended;
+        }
+
+        /// How far the tip faces away from the shown body, in degrees, at most [IKChain.Stepping#angularThreshold].
+        private double facingTurn(final BodyMotion motion, final IKChannel channel, final IKChain.Stepping stepping) {
+            double stepped = 0.0D;
+
+            if (planted != null) {
+                stepped = Mth.wrapDegrees(facingYaw - motion.yaw());
+
+                if (stepTo != null) stepped *= 1.0F - Math.min(stepElapsed / (resetting ? stepping.resetStepTime() : stepping.stepTime()), 1.0F);
+            }
+
+            double byCurve = held == null ? 0.0D : Mth.wrapDegrees(heldYaw - motion.yaw()) * channel.plant();
+            double turn = Mth.lerp(channel.procedural(), byCurve, stepped) * channel.alpha();
+
+            return Math.clamp(turn, -stepping.angularThreshold(), stepping.angularThreshold());
         }
 
         /// Plants the tip at `position` facing `yaw`, ending any step.
         private Vec3 plant(final Vec3 position, final double yaw) {
             planted = position;
             plantedYaw = yaw;
+            facingYaw = yaw;
             stepTo = null;
             idle = 0.0F;
 
             return position;
         }
 
-        /// Advances the steps by `frameTime` toward `home`, and answers where the tip is.
-        ///
-        /// A planted tip steps once it drifts past a threshold, landing as [#landing] says. While the step has to wait,
-        /// for the cooldown or for the mirror chain's step, the tip slides to stay inside the thresholds instead. A tip
-        /// left planted for [IKChain.Stepping#resetTime] steps back onto `home` itself once it stands past
-        /// [IKChain.Stepping#resetDistance] or [IKChain.Stepping#resetAngle].
-        private Vec3 step(final Vec3 home, final BodyMotion motion, final IKChain.Stepping stepping, final float frameTime, final boolean mirrorSwinging) {
+        /// Plants an unplanted or far tip at `home`, and moves a running step on by `frameTime`, landing it at its end.
+        private void prepare(final Vec3 home, final BodyMotion motion, final IKChain.Stepping stepping, final float frameTime) {
             cooldown = Math.max(cooldown - frameTime, 0.0F);
 
-            if (planted == null || planted.distanceTo(home) > SNAP_DISTANCE) return plant(home, motion.yaw());
+            if (planted == null || planted.distanceTo(home) > SNAP_DISTANCE) {
+                plant(home, motion.yaw());
 
-            if (stepTo != null) {
-                stepElapsed += frameTime;
-                float progress = Math.min(stepElapsed / (resetting ? stepping.resetStepTime() : stepping.stepTime()), 1.0F);
-
-                if (resetting) {
-                    stepTo = home;
-                    stepToYaw = motion.yaw();
-                } else {
-                    double remaining = Math.max(stepping.stepTime() - stepElapsed, 0.0F);
-                    stepTo = landing(home, motion, stepping, remaining);
-                    stepToYaw = motion.predictYaw(remaining + stepping.prediction());
-                }
-
-                if (progress >= 1.0F) {
-                    cooldown = stepping.stepCooldown();
-
-                    return plant(stepTo, stepToYaw);
-                }
-
-                return planted.lerp(stepTo, progress).add(0.0D, stepping.stepHeight() * Mth.sin(progress * Mth.PI), 0.0D);
+                return;
             }
 
-            idle += frameTime;
+            if (stepTo == null) {
+                idle += frameTime;
+
+                return;
+            }
+
+            stepElapsed += frameTime;
+
+            if (resetting) {
+                stepTo = home;
+                stepToYaw = motion.yaw();
+            } else {
+                double remaining = Math.max(stepping.stepTime() - stepElapsed, 0.0F);
+                stepTo = landing(home, motion, stepping, remaining);
+                stepToYaw = motion.predictYaw(remaining + stepping.prediction());
+            }
+
+            if (stepElapsed >= (resetting ? stepping.resetStepTime() : stepping.stepTime())) {
+                cooldown = stepping.stepCooldown();
+                plant(stepTo, stepToYaw);
+                facingYaw = motion.yaw();
+            }
+        }
+
+        /// Whether the tip stands planted and may start a step.
+        private boolean ready() {
+            return planted != null && stepTo == null && cooldown <= 0.0F;
+        }
+
+        /// How far past its thresholds the planted tip stands: over 1 once it should step, 0 while it swings.
+        private double urgency(final Vec3 home, final BodyMotion motion, final IKChain.Stepping stepping) {
+            if (planted == null || stepTo != null) return 0.0D;
+
+            double turn = Math.abs(Mth.wrapDegrees(motion.yaw() - plantedYaw));
+
+            return Math.max(
+                planted.distanceTo(home) / Math.max(stepping.distanceThreshold(), MathUtils.EPSILON),
+                turn / Math.max(stepping.angularThreshold(), MathUtils.EPSILON)
+            );
+        }
+
+        /// Whether the tip, planted for [IKChain.Stepping#resetTime], stands off its reset distance or angle.
+        private boolean wantsReset(final Vec3 home, final BodyMotion motion, final IKChain.Stepping stepping) {
+            if (planted == null || stepTo != null || idle < stepping.resetTime()) return false;
+
+            return planted.distanceTo(home) > stepping.resetDistance() || Math.abs(Mth.wrapDegrees(motion.yaw() - plantedYaw)) > stepping.resetAngle();
+        }
+
+        /// Starts a step: a reset lands exactly on `home`, any other step where [#landing] says.
+        private void start(final Vec3 home, final BodyMotion motion, final IKChain.Stepping stepping, final boolean reset) {
+            stepTo = reset ? home : landing(home, motion, stepping, stepping.stepTime());
+            stepToYaw = reset ? motion.yaw() : motion.predictYaw(stepping.stepTime() + stepping.prediction());
+            stepElapsed = 0.0F;
+            resetting = reset;
+        }
+
+        /// Where the tip is: planted, or on its way through a running step. A planted tip that must wait slides to stay
+        /// inside the thresholds.
+        private Vec3 position(final Vec3 home, final BodyMotion motion, final IKChain.Stepping stepping) {
+            if (stepTo != null) {
+                float progress = Math.min(stepElapsed / (resetting ? stepping.resetStepTime() : stepping.stepTime()), 1.0F);
+                double lift = Math.min(planted.distanceTo(stepTo) / Math.max(stepping.distanceThreshold(), MathUtils.EPSILON), 1.0D);
+
+                return planted.lerp(stepTo, progress).add(0.0D, stepping.stepHeight() * lift * Mth.sin(progress * Mth.PI), 0.0D);
+            }
 
             double turn = Mth.wrapDegrees(motion.yaw() - plantedYaw);
-            boolean free = cooldown <= 0.0F && !mirrorSwinging;
-
-            if (planted.distanceTo(home) <= stepping.distanceThreshold() && Math.abs(turn) <= stepping.angularThreshold()) {
-                boolean offBounds = planted.distanceTo(home) > stepping.resetDistance() || Math.abs(turn) > stepping.resetAngle();
-
-                if (free && idle >= stepping.resetTime() && offBounds) startStep(home, motion.yaw(), true);
-
-                return planted;
-            }
-
-            if (free) {
-                startStep(
-                    landing(home, motion, stepping, stepping.stepTime()), motion.predictYaw(stepping.stepTime() + stepping.prediction()), false
-                );
-
-                return planted;
-            }
-
             Vec3 drift = planted.subtract(home);
 
             if (drift.length() > stepping.distanceThreshold()) planted = home.add(drift.normalize().scale(stepping.distanceThreshold()));
@@ -495,13 +748,6 @@ public final class InverseKinematicsSimulation {
             plantedYaw = motion.yaw() - Math.clamp(turn, -stepping.angularThreshold(), stepping.angularThreshold());
 
             return planted;
-        }
-
-        private void startStep(final Vec3 to, final double yaw, final boolean reset) {
-            stepTo = to;
-            stepToYaw = yaw;
-            stepElapsed = 0.0F;
-            resetting = reset;
         }
 
         /// Where a step with `remaining` seconds left lands: where `home` will be when the step ends, carried on by the

@@ -3,6 +3,8 @@ package com.yesman.akythera.core.animation.ik;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import net.minecraft.util.StringRepresentable;
+import org.jspecify.annotations.NonNull;
 
 /// A run of bones that IK turns so the tail of its tip bone reaches a target, keyed by the tip bone.
 ///
@@ -38,11 +40,17 @@ public record IKChain(String tipBone, int chainLength, IKSolver solver, Stepping
     /// @param resetDistance     how far the planted tip may stand from where the animation puts it without stepping back
     /// @param resetAngle        how far the body may turn away from the planted tip's facing without stepping back
     /// @param resetStepTime     how long a step back to where the animation puts the tip takes
+    /// @param turnLead          the turn on which the tip's gait group steps first
+    /// @param gaitGroup         the chains whose tips step together, one group at a time; empty steps alone
+    /// @param holdFacing        whether a planted tip keeps its facing while the body turns, up to [#angularThreshold]
     public record Stepping(
         float distanceThreshold, float angularThreshold, float stepHeight, float rayMaxDistance, float stepTime, float stepCooldown,
-        float prediction, float resetTime, float resetDistance, float resetAngle, float resetStepTime
+        float prediction, float resetTime, float resetDistance, float resetAngle, float resetStepTime, TurnLead turnLead, String gaitGroup,
+        boolean holdFacing
     ) {
-        public static final Stepping DEFAULT = new Stepping(0.3F, 45.0F, 0.15F, 1.0F, 0.25F, 0.1F, 0.1F, 0.5F, 0.1F, 15.0F, 0.25F);
+        public static final Stepping DEFAULT = new Stepping(
+            0.3F, 45.0F, 0.15F, 1.0F, 0.25F, 0.1F, 0.1F, 0.5F, 0.1F, 15.0F, 0.25F, TurnLead.NONE, "", false
+        );
 
         public static final Codec<Stepping> CODEC = RecordCodecBuilder.create(
             instance ->
@@ -57,8 +65,31 @@ public record IKChain(String tipBone, int chainLength, IKSolver solver, Stepping
                     Codec.floatRange(0.0F, Float.MAX_VALUE).optionalFieldOf("reset_time", DEFAULT.resetTime).forGetter(Stepping::resetTime),
                     Codec.floatRange(0.0F, Float.MAX_VALUE).optionalFieldOf("reset_distance", DEFAULT.resetDistance).forGetter(Stepping::resetDistance),
                     Codec.floatRange(0.0F, 180.0F).optionalFieldOf("reset_angle", DEFAULT.resetAngle).forGetter(Stepping::resetAngle),
-                    Codec.floatRange(0.01F, Float.MAX_VALUE).optionalFieldOf("reset_step_time", DEFAULT.resetStepTime).forGetter(Stepping::resetStepTime)
+                    Codec.floatRange(0.01F, Float.MAX_VALUE).optionalFieldOf("reset_step_time", DEFAULT.resetStepTime).forGetter(Stepping::resetStepTime),
+                    TurnLead.CODEC.optionalFieldOf("turn_lead", DEFAULT.turnLead).forGetter(Stepping::turnLead),
+                    Codec.STRING.optionalFieldOf("gait_group", DEFAULT.gaitGroup).forGetter(Stepping::gaitGroup),
+                    Codec.BOOL.optionalFieldOf("hold_facing", DEFAULT.holdFacing).forGetter(Stepping::holdFacing)
                 ).apply(instance, Stepping::new)
         );
+    }
+
+    /// The turn on which a tip's gait group steps first. A right turn raises the body yaw.
+    public enum TurnLead implements StringRepresentable {
+        NONE("none"),
+        LEFT("left"),
+        RIGHT("right");
+
+        public static final Codec<TurnLead> CODEC = StringRepresentable.fromEnum(TurnLead::values);
+
+        private final String name;
+
+        TurnLead(final String name) {
+            this.name = name;
+        }
+
+        @Override
+        public @NonNull String getSerializedName() {
+            return name;
+        }
     }
 }
