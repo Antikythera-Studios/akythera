@@ -30,7 +30,7 @@ import java.util.function.Supplier;
 ///
 /// NOTE: This doesn't serialize the values itself, but rather
 /// serializes what values are belong to script.
-public final class ScriptVariables {
+public class ScriptVariables {
     private final Map<String, Object> variables = new HashMap<>();
     private final Map<String, VariableInfo> memberVariables = new HashMap<>();
 

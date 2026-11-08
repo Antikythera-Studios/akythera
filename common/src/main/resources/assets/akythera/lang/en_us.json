@@ -1,6 +1,9 @@
 {
   "commands.akythera.ability.unknown_slot": "Unknown ability slot: %s",
   "commands.akythera.ability.unknown_ability": "Unknown ability: %s",
+  "commands.akythera.brain.unknown_tree": "Unknown behavior tree: %s",
+  "commands.akythera.brain.set.success": "Set behavior tree %s on %s target(s)",
+  "commands.akythera.brain.set.failed": "No target took behavior tree %s",
   "commands.akythera.ability.unknown_cue": "Unknown ability cue: %s",
   "commands.akythera.ability.unknown_cue_script": "Unknown ability cue script: %s",
   "commands.akythera.ability.unknown_tag": "Unknown ability tag: %s",

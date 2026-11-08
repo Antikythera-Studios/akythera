@@ -26,6 +26,9 @@ public final class AbilityInstance {
 
     private boolean activated;
 
+    /// Whether the last run ended through [#cancelAbility] rather than [#endAbility].
+    private boolean lastRunCanceled;
+
     /// The owner's [LivingEntityPatch#getTickCount] when this instance last activated, on this side.
     private int lastActivationTick;
 
@@ -67,6 +70,10 @@ public final class AbilityInstance {
 
     public boolean isActivated() {
         return activated;
+    }
+
+    public boolean isLastRunCanceled() {
+        return lastRunCanceled;
     }
 
     @ScriptFunction(
@@ -170,6 +177,7 @@ public final class AbilityInstance {
         if (ability == null || !activated) return false;
 
         activated = false;
+        lastRunCanceled = true;
         typed().onCanceled(abilitySystemComponent, this, state);
 
         return true;
@@ -182,6 +190,7 @@ public final class AbilityInstance {
         if (ability == null || !activated) return false;
 
         activated = false;
+        lastRunCanceled = false;
         typed().onFinished(abilitySystemComponent, this, state);
 
         return true;

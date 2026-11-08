@@ -7,6 +7,8 @@ import com.yesman.akythera.api.animation.notify.impl.LockMovementNotifyState;
 import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.event.BuiltInEventHooks;
 import com.yesman.akythera.api.event.entity.LivingDeathEvent;
+import com.yesman.akythera.api.world.behavior.BehaviorTreeInstance;
+import com.yesman.akythera.api.world.behavior.BrainComponent;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
 import com.yesman.akythera.api.world.patch.entity.component.EntityMovementComponent;
@@ -17,6 +19,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -35,6 +38,19 @@ public abstract class MixinLivingEntity {
     /// Body yaw a [LockMovementNotifyState.Rotation#LOCKED] window keeps, or NaN outside one.
     @Unique
     private float akythera$lockedYBodyRot = Float.NaN;
+
+    /// Runs the [BrainComponent] of an entity that is no [Mob], following the full tick split of
+    /// [Mob#serverAiStep].
+    @Inject(at = @At("HEAD"), method = "serverAiStep()V")
+    private void akythera$tickBrain(CallbackInfo callbackInfo) {
+        LivingEntity self = (LivingEntity)(Object)this;
+
+        if (!(((EntityAccessor)self).akythera$getEntityPatch() instanceof EntityPatch<?> patch)) return;
+
+        BrainComponent brain = patch.getComponent(BrainComponent.class);
+
+        if (brain != null) brain.tick((self.tickCount + self.getId()) % 2 == 0 || self.tickCount <= 1);
+    }
 
     /// Drops the movement input read this tick while a [LockMovementNotifyState] holds, and stops the montages a
     /// [CancelOnMoveNotifyState] holds once there is any.
@@ -169,6 +185,14 @@ public abstract class MixinLivingEntity {
     @Inject(at = @At(value = "HEAD"), method = "hurtServer(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/damagesource/DamageSource;F)Z", cancellable = true)
     private void akythera$ignoreDamageInRagdoll(final ServerLevel level, final DamageSource source, final float damage, final CallbackInfoReturnable<Boolean> callbackInfo) {
         if (akythera$isRagdollRunning() && !source.is(DamageTypeTags.BYPASSES_INVULNERABILITY)) callbackInfo.setReturnValue(false);
+    }
+
+    /// Lets the brain of this entity feel damage it took.
+    @Inject(at = @At(value = "RETURN"), method = "hurtServer(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/damagesource/DamageSource;F)Z")
+    private void akythera$feelDamage(final ServerLevel level, final DamageSource source, final float damage, final CallbackInfoReturnable<Boolean> callbackInfo) {
+        BehaviorTreeInstance tree = callbackInfo.getReturnValueZ() ? BrainComponent.treeOf((LivingEntity)(Object)this) : null;
+
+        if (tree != null) tree.feelDamage(source);
     }
 
     @Unique

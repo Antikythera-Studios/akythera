@@ -19,18 +19,34 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.stream.Stream;
 
 public final class EnumerableDataBlockSync {
     private EnumerableDataBlockSync() {}
 
     private static final Map<Identifier, EnumerableDataBlockReloadListener<?>> LISTENERS = new LinkedHashMap<>();
 
+    /// Data block types loaded from data packs but never sent to clients.
+    private static final Map<Identifier, EnumerableDataBlockReloadListener<?>> SERVER_LISTENERS = new LinkedHashMap<>();
+
     /// Call in the mod constructor. Creates + registers the reload listener and ties the
     /// type into join//reload synchronization.
     public static <T extends EnumerableDataBlock> void addSyncedDataBlock(EnumerableDataBlockManager<T> enumManager) {
+        addReloadListener(LISTENERS, enumManager);
+    }
+
+    /// Call in the mod constructor. Creates + registers the reload listener of a type that only the server reads.
+    public static <T extends EnumerableDataBlock> void addServerDataBlock(EnumerableDataBlockManager<T> enumManager) {
+        addReloadListener(SERVER_LISTENERS, enumManager);
+    }
+
+    private static <T extends EnumerableDataBlock> void addReloadListener(
+        final Map<Identifier, EnumerableDataBlockReloadListener<?>> listeners,
+        final EnumerableDataBlockManager<T> enumManager
+    ) {
         EnumerableDataBlockReloadListener<T> listener = new EnumerableDataBlockReloadListener<>(enumManager);
         Identifier id = enumManager.directoryKey().identifier();
-        LISTENERS.put(id, listener);
+        listeners.put(id, listener);
         ModPlatformProvider.get().registerReloadListener(id, PackType.SERVER_DATA, listener);
     }
 
@@ -40,16 +56,20 @@ public final class EnumerableDataBlockSync {
 
         // Client leaves a world -> evict data pack entries
         BuiltInEventHooks.Registry.REGISTRY_ACCESS_UNLOAD.registerEvent(
-            _ -> LISTENERS.values().forEach(listener -> listener.getEnumManager().clearDataPackEntries())
+            _ -> allListeners().forEach(listener -> listener.getEnumManager().clearDataPackEntries())
         );
     }
 
     public static Collection<? extends EnumerableDataBlockManager<?>> getEditableManagers() {
-        return LISTENERS.values().stream().map(EnumerableDataBlockReloadListener::getEnumManager).toList();
+        return allListeners().map(EnumerableDataBlockReloadListener::getEnumManager).toList();
     }
 
     public static void loadBeforeRegistries(final ResourceManager resourceManager) {
-        LISTENERS.values().forEach(listener -> listener.loadNow(resourceManager));
+        allListeners().forEach(listener -> listener.loadNow(resourceManager));
+    }
+
+    private static Stream<EnumerableDataBlockReloadListener<?>> allListeners() {
+        return Stream.concat(LISTENERS.values().stream(), SERVER_LISTENERS.values().stream());
     }
 
     private static List<CustomPacketPayload> syncPayloads() {

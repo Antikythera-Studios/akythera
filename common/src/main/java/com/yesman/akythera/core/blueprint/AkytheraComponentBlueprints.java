@@ -11,6 +11,7 @@ import com.yesman.akythera.client.api.component.impl.PALPoseBinder;
 import com.yesman.akythera.client.api.component.impl.SkinnedArmorRendererBlueprint;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.asset.armature.TransformSocket;
+import com.yesman.akythera.core.blueprint.behavior.BrainComponentBlueprint;
 import com.yesman.akythera.core.blueprint.widget.ButtonBlueprint;
 import com.yesman.akythera.core.blueprint.widget.CheckBoxBlueprint;
 import com.yesman.akythera.core.blueprint.widget.ColorPickerBlueprint;
@@ -54,6 +55,9 @@ public final class AkytheraComponentBlueprints {
 
     public static final Holder<MapCodec<? extends ComponentBlueprint<?, ?>>> ABILITY_SYSTEM =
         ENTITY_PATCH_REGISTRAR.register("ability_system", () -> AbilitySystemComponentBlueprint.CODEC);
+
+    public static final Holder<MapCodec<? extends ComponentBlueprint<?, ?>>> BRAIN =
+        ENTITY_PATCH_REGISTRAR.register("brain", () -> BrainComponentBlueprint.CODEC);
 
     public static final Holder<MapCodec<? extends ComponentBlueprint<?, ?>>> TRANSFORM_SOCKET =
         ENTITY_PATCH_REGISTRAR.register("transform_socket", () -> TransformSocket.CODEC);

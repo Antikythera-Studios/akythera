@@ -21,8 +21,20 @@ import com.yesman.akythera.api.world.ability.AbilitySystemComponent;
 import com.yesman.akythera.api.world.ability.AbilitySlot;
 import com.yesman.akythera.api.world.ability.AbilitySlotGroup;
 import com.yesman.akythera.api.world.ability.AbilityTag;
+import com.yesman.akythera.api.world.behavior.AkytheraMobBehaviorState;
+import com.yesman.akythera.api.world.behavior.BehaviorTreeInstance;
+import com.yesman.akythera.api.world.behavior.BrainComponent;
+import com.yesman.akythera.api.world.behavior.script.BehaviorConditionScript;
+import com.yesman.akythera.api.world.behavior.script.BehaviorSubtaskScript;
+import com.yesman.akythera.api.world.behavior.script.BehaviorTaskScript;
+import com.yesman.akythera.api.world.behavior.script.BehaviorTreeScript;
+import com.yesman.akythera.api.world.behavior.script.DataDrivenBehaviorCondition;
+import com.yesman.akythera.api.world.behavior.script.DataDrivenBehaviorSubtask;
+import com.yesman.akythera.api.world.behavior.script.DataDrivenBehaviorTask;
+import com.yesman.akythera.api.world.behavior.MobBehaviorState;
 import com.yesman.akythera.commands.AbilityControlCommand;
 import com.yesman.akythera.commands.AnimatorControlCommand;
+import com.yesman.akythera.commands.BrainControlCommand;
 import com.yesman.akythera.commands.ParticleControlCommand;
 import com.yesman.akythera.commands.WidgetControlCommand;
 import com.yesman.akythera.compat.IModPlugin;
@@ -46,6 +58,7 @@ import com.yesman.akythera.core.math.physics.collider.CollisionDetectionLogics;
 import com.yesman.akythera.core.reflection.ScriptModularizeHelper;
 import com.yesman.akythera.core.registry.entry.AkytheraAnimNotifyStateTypes;
 import com.yesman.akythera.core.registry.entry.AkytheraAnimNotifyTypes;
+import com.yesman.akythera.core.registry.entry.AkytheraBehaviorNodeTypes;
 import com.yesman.akythera.core.registry.entry.AkytheraParticleTypes;
 import com.yesman.akythera.core.util.EnumerableDataBlockSync;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
@@ -105,6 +118,7 @@ public final class Akythera {
 
             AkytheraAnimNotifyTypes.REGISTRAR.notifyPresence();
             AkytheraAnimNotifyStateTypes.REGISTRAR.notifyPresence();
+            AkytheraBehaviorNodeTypes.REGISTRAR.notifyPresence();
             AkytheraComponentBlueprints.ENTITY_PATCH_REGISTRAR.notifyPresence();
             AkytheraComponentBlueprints.ITEM_PATCH_REGISTRAR.notifyPresence();
             AkytheraComponentBlueprints.WIDGET_REGISTRAR.notifyPresence();
@@ -125,15 +139,21 @@ public final class Akythera {
         AkytheraPatches.registerEvents();
         ComponentsFactory.registerEvents();
         AbilitySystemComponent.registerEvents();
+        BrainComponent.registerEvents();
 
         ScriptModularizeHelper.registerBlueprintLayout(EntityPatch.class, EntityPatchScript.class);
         ScriptModularizeHelper.registerBlueprintLayout(Animator.class, AnimatorScript.class);
         ScriptModularizeHelper.registerBlueprintLayout(Ability.class);
         ScriptModularizeHelper.registerBlueprintLayout(AbilityCue.class, AbilityCueScript.class);
+        ScriptModularizeHelper.registerBlueprintLayout(BehaviorTreeInstance.class, BehaviorTreeScript.class);
+        ScriptModularizeHelper.registerBlueprintLayout(DataDrivenBehaviorTask.class, BehaviorTaskScript.class);
+        ScriptModularizeHelper.registerBlueprintLayout(DataDrivenBehaviorSubtask.class, BehaviorSubtaskScript.class);
+        ScriptModularizeHelper.registerBlueprintLayout(DataDrivenBehaviorCondition.class, BehaviorConditionScript.class);
 
         EnumerableDataBlockSync.addSyncedDataBlock(AnimationInterfaceKey.ENUM_MANAGER);
         EnumerableDataBlockSync.addSyncedDataBlock(FSMAnimationState.ENUM_MANAGER);
         EnumerableDataBlockSync.addSyncedDataBlock(AnimationLayerSignature.ENUM_MANAGER);
+        EnumerableDataBlockSync.addServerDataBlock(MobBehaviorState.ENUM_MANAGER);
         EnumerableDataBlockSync.addSyncedDataBlock(WeaponStance.ENUM_MANAGER);
         EnumerableDataBlockSync.addSyncedDataBlock(AbilitySlotGroup.ENUM_MANAGER);
         EnumerableDataBlockSync.addSyncedDataBlock(AbilitySlot.ENUM_MANAGER);
@@ -165,6 +185,7 @@ public final class Akythera {
         AnimationInterfaceKey.ENUM_MANAGER.loadEnum();
         FSMAnimationState.ENUM_MANAGER.loadEnum();
         AnimationLayerSignature.ENUM_MANAGER.loadEnum();
+        MobBehaviorState.ENUM_MANAGER.loadEnum();
         ColliderType.ENUM_MANAGER.loadEnum();
         BoneConstraintType.ENUM_MANAGER.loadEnum();
         IKSolverType.ENUM_MANAGER.loadEnum();
@@ -181,6 +202,7 @@ public final class Akythera {
     public static void registerBuiltInDataBlockClasses() {
         FSMAnimationState.ENUM_MANAGER.registerEnumCls(MODID, AkytheraAnimationState.class);
         AnimationLayerSignature.ENUM_MANAGER.registerEnumCls(MODID, AkytheraAnimationLayerSignature.class);
+        MobBehaviorState.ENUM_MANAGER.registerEnumCls(MODID, AkytheraMobBehaviorState.class);
         ColliderType.ENUM_MANAGER.registerEnumCls(MODID, AkytheraColliderType.class);
         BoneConstraintType.ENUM_MANAGER.registerEnumCls(MODID, AkytheraBoneConstraintType.class);
         IKSolverType.ENUM_MANAGER.registerEnumCls(MODID, AkytheraIKSolverType.class);
@@ -206,6 +228,7 @@ public final class Akythera {
     public static void onRegisterCommands(CommandDispatcher<CommandSourceStack> dispatcher) {
         AnimatorControlCommand.register(dispatcher);
         AbilityControlCommand.register(dispatcher);
+        BrainControlCommand.register(dispatcher);
         WidgetControlCommand.register(dispatcher);
         ParticleControlCommand.register(dispatcher);
     }

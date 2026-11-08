@@ -8,7 +8,7 @@ import net.minecraft.resources.Identifier;
 
 public interface FSMAnimationState extends FSMState {
     EnumerableDataBlockManager<FSMAnimationState> ENUM_MANAGER = new EnumerableDataBlockManager<>(
-        "fsm_anim_state",
+        "state_ids/animation",
         MapCodec.unit(() -> new FSMAnimationState() {
             @Override
             public int universalOrdinal() {

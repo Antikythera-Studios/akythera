@@ -8,6 +8,7 @@ import com.yesman.akythera.api.component.PatchComponent;
 import com.yesman.akythera.api.component.UniqueComponent;
 import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.component.impl.EquipmentSlotBinder;
+import com.yesman.akythera.api.world.behavior.BrainComponent;
 import com.yesman.akythera.api.world.patch.AkytheraPatches;
 import com.yesman.akythera.api.world.patch.entity.component.EquipmentHolder;
 import com.yesman.akythera.api.world.patch.item.ItemPatch;
@@ -21,6 +22,9 @@ import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.blueprint.EntityPatchBlueprint;
 import com.yesman.akythera.core.reflection.ScriptFunction;
 import com.yesman.akythera.core.reflection.ScriptType;
+import com.yesman.akythera.mixinaccessor.common.HurtByTargetGoalAccessor;
+import com.yesman.akythera.mixinaccessor.common.MobAccessor;
+import com.yesman.akythera.mixinaccessor.common.NearestAttackableTargetGoalAccessor;
 import net.minecraft.core.Holder;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.resources.ResourceKey;
@@ -29,6 +33,10 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.goal.WrappedGoal;
+import net.minecraft.world.entity.ai.goal.target.HurtByTargetGoal;
+import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
 import net.minecraft.world.item.ItemStack;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -279,6 +287,60 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
     @Override
     public @Nullable ItemPatch getOffHandItemPatch() {
         return getItemPatchInSlot(EquipmentSlot.OFFHAND);
+    }
+
+    // ***************************************************************
+    // Hostility
+    // ***************************************************************
+
+    /// Tests the tag lists of the [BrainComponent], then the [NearestAttackableTargetGoal]s of the vanilla target
+    /// selector, ignoring distance and line of sight.
+    @ScriptFunction(pure = true, label = "Is Hostile", category = "Behavior", desc = """
+        Returns whether the entity's brain or vanilla AI would pick the other entity as a target, at any distance and without seeing it. Always false on the client
+    """)
+    public boolean isHostile(final LivingEntity target) {
+        BrainComponent brain = getComponent(BrainComponent.class);
+
+        if (brain != null && brain.isListedHostile(target)) return true;
+        if (brain != null && brain.isListedFriendly(target)) return false;
+        if (!(getOriginal() instanceof Mob mob) || !(mob.level() instanceof ServerLevel level)) return false;
+
+        for (WrappedGoal wrappedGoal : ((MobAccessor)mob).akythera$getTargetSelector().getAvailableGoals()) {
+            if (!(wrappedGoal.getGoal() instanceof NearestAttackableTargetGoal<?> goal)) continue;
+
+            NearestAttackableTargetGoalAccessor accessor = (NearestAttackableTargetGoalAccessor)goal;
+
+            if (accessor.akythera$getTargetType().isInstance(target)
+                && accessor.akythera$getTargetConditions().copy().range(0.0D).ignoreLineOfSight().test(level, mob, target)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// Tests the tag lists of the [BrainComponent], then [Entity#isAlliedTo] and the ignore lists of the
+    /// [HurtByTargetGoal]s of the vanilla target selector.
+    @ScriptFunction(pure = true, label = "Is Forgiven", category = "Behavior", desc = """
+        Returns whether the entity ignores damage from the attacker: a friendly type of its brain, an ally, or a type its vanilla AI does not strike back
+    """)
+    public boolean isForgiven(final LivingEntity attacker) {
+        BrainComponent brain = getComponent(BrainComponent.class);
+
+        if (brain != null && brain.isListedFriendly(attacker)) return true;
+        if (brain != null && brain.isListedHostile(attacker)) return false;
+        if (getOriginal().isAlliedTo(attacker)) return true;
+        if (!(getOriginal() instanceof Mob mob)) return false;
+
+        for (WrappedGoal wrappedGoal : ((MobAccessor)mob).akythera$getTargetSelector().getAvailableGoals()) {
+            if (!(wrappedGoal.getGoal() instanceof HurtByTargetGoal goal)) continue;
+
+            for (Class<?> ignored : ((HurtByTargetGoalAccessor)goal).akythera$getToIgnoreDamage()) {
+                if (ignored.isInstance(attacker)) return true;
+            }
+        }
+
+        return false;
     }
 
     // ***************************************************************

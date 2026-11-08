@@ -13,6 +13,9 @@ import com.yesman.akythera.api.world.ability.AbilityTag;
 import com.yesman.akythera.api.world.ability.AbilityTagSet;
 import com.yesman.akythera.api.world.ability.InstantiationScope;
 import com.yesman.akythera.api.world.ability.SystematicAbility;
+import com.yesman.akythera.api.world.behavior.BlackboardKey;
+import com.yesman.akythera.api.world.behavior.BrainComponent;
+import com.yesman.akythera.core.blueprint.behavior.BehaviorTreeBlueprint;
 import com.yesman.akythera.api.input.InputAction;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
@@ -34,6 +37,10 @@ import com.yesman.akythera.core.util.helper.QuaternionUtils;
 import com.yesman.akythera.platform.ModPlatform;
 import com.yesman.akythera.platform.ModPlatformProvider;
 import net.minecraft.core.Holder;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
@@ -123,6 +130,15 @@ public final class AkytheraScriptTypes {
     public static final Holder<ScriptType> PLAYER = MINECRAFT_REGISTRAR.register("player",
         () -> new ScriptType(Player.class));
 
+    public static final Holder<ScriptType> SOUND_EVENT = MINECRAFT_REGISTRAR.register("sound_event",
+        () -> ScriptType.registryEntry(SoundEvent.class, Registries.SOUND_EVENT));
+
+    public static final Holder<ScriptType> GAME_EVENT = MINECRAFT_REGISTRAR.register("game_event",
+        () -> ScriptType.registryEntry(GameEvent.class, Registries.GAME_EVENT));
+
+    public static final Holder<ScriptType> DAMAGE_SOURCE = MINECRAFT_REGISTRAR.register("damage_source",
+        () -> new ScriptType(DamageSource.class));
+
     public static final Holder<ScriptType> EQUIPMENT_SLOT = MINECRAFT_REGISTRAR.register("equipment_slot",
         () -> new ScriptType(EquipmentSlot.class, EquipmentSlot.CODEC));
 
@@ -198,6 +214,21 @@ public final class AkytheraScriptTypes {
 
     public static final Holder<ScriptType> ABILITY_TRIGGER = AKYTHERA_REGISTRAR.register("ability_trigger",
         () -> new ScriptType(SystematicAbility.Trigger.class, SystematicAbility.Trigger.CODEC));
+
+    // Behavior
+
+    public static final Holder<ScriptType> BEHAVIOR_TREE_BLUEPRINT = AKYTHERA_REGISTRAR.register("behavior_tree_blueprint",
+        () -> ScriptType.registryEntry(BehaviorTreeBlueprint.class, AkytheraRegistries.DataPack.BEHAVIOR_TREE_KEY));
+
+    public static final Holder<ScriptType> BRAIN_COMPONENT = AKYTHERA_REGISTRAR.register("brain_component",
+        () -> new ScriptType(BrainComponent.class, null,
+            Map.of(
+                EntityPatch.class, (Function<BrainComponent, EntityPatch<?>>)BrainComponent::getOwner
+            )
+        ));
+
+    public static final Holder<ScriptType> BLACKBOARD_KEY = AKYTHERA_REGISTRAR.register("blackboard_key",
+        () -> new ScriptType(BlackboardKey.class, BlackboardKey.CODEC));
 
     // Input
 

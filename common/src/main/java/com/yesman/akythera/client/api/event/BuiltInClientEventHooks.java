@@ -1,6 +1,7 @@
 package com.yesman.akythera.client.api.event;
 
 
+import com.yesman.akythera.client.api.event.render.CollectDebugCollidersEvent;
 import com.yesman.akythera.api.event.BuiltInEventHooks;
 import com.yesman.akythera.api.event.entity.EntityPatchEvent;
 import com.yesman.akythera.client.api.event.gui.ModalEvent;
@@ -23,6 +24,12 @@ import com.yesman.akythera.api.world.patch.entity.component.EntityEventListener;
 public final class BuiltInClientEventHooks {
     public static final class Entity {
         private Entity() {}
+    }
+
+    public static final class Render {
+        public static final EventHook<CollectDebugCollidersEvent> COLLECT_DEBUG_COLLIDERS = EventHook.createSidedEventHook(LogicalSide.CLIENT);
+
+        private Render() {}
     }
 
     public static final class Gui {

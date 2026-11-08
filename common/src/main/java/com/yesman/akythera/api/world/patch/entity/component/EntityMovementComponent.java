@@ -20,17 +20,25 @@ public final class EntityMovementComponent implements MovementComponent, Dynamic
     /// How the body yaw of a living owner turns.
     private final BodyRotation bodyRotation;
 
+    /// Whether the owner can swim up in water at all.
+    private final boolean canFloatInWater;
+
     public EntityMovementComponent(final EntityPatch<?> owner) {
-        this(owner, BodyRotation.VANILLA);
+        this(owner, BodyRotation.VANILLA, true);
     }
 
-    public EntityMovementComponent(final EntityPatch<?> owner, final BodyRotation bodyRotation) {
+    public EntityMovementComponent(final EntityPatch<?> owner, final BodyRotation bodyRotation, final boolean canFloatInWater) {
         this.owner = owner;
         this.bodyRotation = bodyRotation;
+        this.canFloatInWater = canFloatInWater;
     }
 
     public BodyRotation getBodyRotation() {
         return bodyRotation;
+    }
+
+    public boolean canFloatInWater() {
+        return canFloatInWater;
     }
 
     // ***************************************************************

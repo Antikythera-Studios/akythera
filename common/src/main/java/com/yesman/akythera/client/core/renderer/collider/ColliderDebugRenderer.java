@@ -1,5 +1,7 @@
 package com.yesman.akythera.client.core.renderer.collider;
 
+import com.yesman.akythera.client.api.event.BuiltInClientEventHooks;
+import com.yesman.akythera.client.api.event.render.CollectDebugCollidersEvent;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.yesman.akythera.api.animation.notify.impl.LivingHurtNotifyState;
 import com.yesman.akythera.api.component.ComponentAttachable;
@@ -59,6 +61,8 @@ public final class ColliderDebugRenderer {
         for (ColliderComponent<?> collider : patch.findComponentsBelow(ColliderComponent.class)) {
             out.add(new ColliderSubmit(collider.getCollider(), collider.modelTransform(), striking.contains(collider) ? STRIKING_COLOR : COLOR));
         }
+
+        BuiltInClientEventHooks.Render.COLLECT_DEBUG_COLLIDERS.post(new CollectDebugCollidersEvent(patch, out));
     }
 
     public static void submit(

@@ -3,6 +3,8 @@ package com.yesman.akythera.mixin.common;
 import com.yesman.akythera.api.event.BuiltInEventHooks;
 import com.yesman.akythera.api.event.entity.TickEvent;
 import com.yesman.akythera.api.lifecycle.ComponentsFactory;
+import com.yesman.akythera.api.world.behavior.BehaviorTreeInstance;
+import com.yesman.akythera.api.world.behavior.BrainComponent;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.mixinaccessor.common.EntityAccessor;
@@ -72,6 +74,16 @@ public abstract class MixinEntity implements EntityAccessor {
                 );
             }
         }
+    }
+
+    /// Lets the brain of this entity feel `pusher` pushing it.
+    @Inject(at = @At(value = "HEAD"), method = "push(Lnet/minecraft/world/entity/Entity;)V")
+    private void akythera$feelPush(final Entity pusher, final CallbackInfo callbackInfo) {
+        BehaviorTreeInstance tree = akythera$entityPatch == null || akythera$entityPatch.isLogicalClient()
+            ? null
+            : BrainComponent.treeOf((Entity)(Object)this);
+
+        if (tree != null) tree.feelPush(pusher);
     }
 
     @Override

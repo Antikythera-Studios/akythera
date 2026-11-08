@@ -19,6 +19,11 @@ import com.yesman.akythera.api.world.ability.AbilityEffectInstance;
 import com.yesman.akythera.api.world.ability.AbilityInstance;
 import com.yesman.akythera.api.world.ability.AbilitySystemComponent;
 import com.yesman.akythera.api.world.ability.AbilityTagSet;
+import com.yesman.akythera.api.world.behavior.BlackboardKey;
+import com.yesman.akythera.api.world.behavior.BrainComponent;
+import com.yesman.akythera.api.world.behavior.script.DataDrivenBehaviorCondition;
+import com.yesman.akythera.api.world.behavior.script.DataDrivenBehaviorSubtask;
+import com.yesman.akythera.api.world.behavior.script.DataDrivenBehaviorTask;
 import com.yesman.akythera.api.world.ability.AbilityTaskHandle;
 import com.yesman.akythera.api.world.ability.DataDrivenAbility;
 import com.yesman.akythera.api.world.ability.SystematicAbility;
@@ -118,6 +123,12 @@ public final class AkytheraScriptFunctions {
             ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, AbilityTaskHandle.class, "Ability/Task", ScriptFunction.Usage.SCRIPT);
             ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, AbilityCue.class, "Ability/Cue", ScriptFunction.Usage.SCRIPT);
             ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, AbilityTagSet.class, "Ability/Tag", ScriptFunction.Usage.SCRIPT);
+
+            // Behavior
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, BrainComponent.class, "Behavior", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, DataDrivenBehaviorTask.class, "Behavior", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, DataDrivenBehaviorSubtask.class, "Behavior", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, DataDrivenBehaviorCondition.class, "Behavior", ScriptFunction.Usage.SCRIPT);
 
             // Widgets, client-only
             ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.gui.AkytheraButton", "Widget/Button", ScriptFunction.Usage.SCRIPT);
@@ -1262,13 +1273,38 @@ public final class AkytheraScriptFunctions {
         )
     );
 
+    /// Object-typed, as a script variable is: the key's own type is only known at run time.
+    public static final Holder<ScriptFunction> GET_BLACKBOARD_VALUE = AKYTHERA_REGISTRAR.register("get_blackboard_value", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (BiFunction<BrainComponent, BlackboardKey, Object>)BrainComponent::getBlackboardValue,
+            FunctionSignature.create(Object.class, List.of("brain", "key"), BrainComponent.class, BlackboardKey.class),
+            "Get Blackboard Value",
+            "Behavior",
+            "Returns the value of a behavior tree variable, or null while no tree runs",
+            true,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
+    public static final Holder<ScriptFunction> SET_BLACKBOARD_VALUE = AKYTHERA_REGISTRAR.register("set_blackboard_value", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (ScriptFunction.TriConsumer<BrainComponent, BlackboardKey, Object>)BrainComponent::setBlackboardValue,
+            FunctionSignature.create(Void.class, List.of("brain", "key", "value"), BrainComponent.class, BlackboardKey.class, Object.class),
+            "Set Blackboard Value",
+            "Behavior",
+            "Writes the value of a behavior tree variable. Does nothing while no tree runs",
+            false,
+            ScriptFunction.Usage.SCRIPT
+        )
+    );
+
     public static final Holder<ScriptFunction> BEST_FIT_MELEE_DESTINATION = AKYTHERA_REGISTRAR.register("best_fit_melee_destination", () ->
         ScriptModularizeHelper.makeCustomScript(
             (Function<EntityPatch<?>, @Nullable Vec3>) entityPatch -> {
                 /*
-                if (entityPatch instanceof EnemyPerception enemyPerception && enemyPerception.getTarget() != null) {
-                    Vec3 fromAttackerToTarget = enemyPerception.getTarget().position().subtract(entityPatch.getOriginal().position());
-                    float distance = entityPatch.getOriginal().distanceTo(enemyPerception.getTarget());
+                if (entityPatch.getTarget() != null) {
+                    Vec3 fromAttackerToTarget = entityPatch.getTarget().position().subtract(entityPatch.getOriginal().position());
+                    float distance = entityPatch.getOriginal().distanceTo(entityPatch.getTarget());
 
                     if (entityPatch instanceof EquipmentHolder equipmentHolder) {
                         ItemPatch mainhandItemPatch = equipmentHolder.getMainHandItemPatch();

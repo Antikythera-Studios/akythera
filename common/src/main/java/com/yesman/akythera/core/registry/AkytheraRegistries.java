@@ -3,6 +3,7 @@ package com.yesman.akythera.core.registry;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.yesman.akythera.api.input.InputAction;
+import com.yesman.akythera.api.world.behavior.BehaviorNodeBlueprint;
 import com.yesman.akythera.core.blueprint.AbilityCueBlueprint;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.blueprint.script.DataDrivenAnimatorScript;
@@ -16,6 +17,10 @@ import com.yesman.akythera.core.animation.playable.AnimationSequence;
 import com.yesman.akythera.core.animation.playable.BlendSpace2D;
 import com.yesman.akythera.core.blueprint.EntityPatchBlueprint;
 import com.yesman.akythera.core.blueprint.ItemPatchBlueprint;
+import com.yesman.akythera.core.blueprint.behavior.BehaviorConditionBlueprint;
+import com.yesman.akythera.core.blueprint.behavior.BehaviorSubtaskBlueprint;
+import com.yesman.akythera.core.blueprint.behavior.BehaviorTaskBlueprint;
+import com.yesman.akythera.core.blueprint.behavior.BehaviorTreeBlueprint;
 import com.yesman.akythera.core.blueprint.ComponentBlueprint;
 import com.yesman.akythera.core.blueprint.particle.EmitterSpawnRule;
 import com.yesman.akythera.core.blueprint.particle.ParticleBlueprint;
@@ -67,6 +72,10 @@ public final class AkytheraRegistries {
         public static final ResourceKey<Registry<ParticleSystemBlueprint>> PARTICLE_SYSTEM_KEY = createRegistryKey("particle/system");
         public static final ResourceKey<Registry<ParticleInitializerScriptBlueprint>> PARTICLE_INITIALIZER_KEY = createRegistryKey("particle/initializer");
         public static final ResourceKey<Registry<ParticleUpdaterScriptBlueprint>> PARTICLE_UPDATER_KEY = createRegistryKey("particle/updater");
+        public static final ResourceKey<Registry<BehaviorTreeBlueprint>> BEHAVIOR_TREE_KEY = createRegistryKey("mob_behaviors/behavior_tree");
+        public static final ResourceKey<Registry<BehaviorTaskBlueprint>> BEHAVIOR_TASK_KEY = createRegistryKey("mob_behaviors/task");
+        public static final ResourceKey<Registry<BehaviorConditionBlueprint>> BEHAVIOR_CONDITION_KEY = createRegistryKey("mob_behaviors/condition");
+        public static final ResourceKey<Registry<BehaviorSubtaskBlueprint>> BEHAVIOR_SUBTASK_KEY = createRegistryKey("mob_behaviors/subtask");
 
         /// Checks across a registry's entries, run once it loads. An error fails the load the way a codec error does.
         private static final Map<ResourceKey<? extends Registry<?>>, RegistryValidator<?>> VALIDATORS = Map.of(
@@ -89,7 +98,11 @@ public final class AkytheraRegistries {
             new Registration<>(PARTICLE_PIECE_KEY, ParticleBlueprint.CODEC),
             new Registration<>(PARTICLE_SYSTEM_KEY, ParticleSystemBlueprint.CODEC),
             new Registration<>(PARTICLE_INITIALIZER_KEY, ParticleInitializerScriptBlueprint.CODEC),
-            new Registration<>(PARTICLE_UPDATER_KEY, ParticleUpdaterScriptBlueprint.CODEC)
+            new Registration<>(PARTICLE_UPDATER_KEY, ParticleUpdaterScriptBlueprint.CODEC),
+            new Registration<>(BEHAVIOR_TASK_KEY, BehaviorTaskBlueprint.CODEC),
+            new Registration<>(BEHAVIOR_CONDITION_KEY, BehaviorConditionBlueprint.CODEC),
+            new Registration<>(BEHAVIOR_SUBTASK_KEY, BehaviorSubtaskBlueprint.CODEC),
+            new Registration<>(BEHAVIOR_TREE_KEY, BehaviorTreeBlueprint.CODEC)
         );
 
         static {
@@ -126,6 +139,7 @@ public final class AkytheraRegistries {
         public static final ResourceKey<Registry<MapCodec<? extends EmitterSpawnRule>>> EMITTER_SPAWN_RULE_TYPE_KEY = createRegistryKey("emitter_spawn_rule_type");
         public static final ResourceKey<Registry<MapCodec<? extends ParticleInitializerBlueprint>>> PARTICLE_INITIALIZER_TYPE_KEY = createRegistryKey("particle_initializer_type");
         public static final ResourceKey<Registry<MapCodec<? extends ParticleUpdaterBlueprint>>> PARTICLE_UPDATER_TYPE_KEY = createRegistryKey("particle_updater_type");
+        public static final ResourceKey<Registry<MapCodec<? extends BehaviorNodeBlueprint<?>>>> BEHAVIOR_NODE_TYPE_KEY = createRegistryKey("behavior_node_type");
 
         // Registries
         public static final Registry<MapCodec<? extends AnimationNotify<?>>> ANIM_NOTIFY_TYPES = ModPlatformProvider.get().createRegistry(ANIM_NOTIFY_TYPE_KEY);
@@ -153,5 +167,8 @@ public final class AkytheraRegistries {
 
         /// Module types a [ParticleUpdaterBlueprint] dispatches on.
         public static final Registry<MapCodec<? extends ParticleUpdaterBlueprint>> PARTICLE_UPDATER_TYPES = ModPlatformProvider.get().createRegistry(PARTICLE_UPDATER_TYPE_KEY);
+
+        /// Node types a [BehaviorNodeBlueprint] dispatches on.
+        public static final Registry<MapCodec<? extends BehaviorNodeBlueprint<?>>> BEHAVIOR_NODE_TYPES = ModPlatformProvider.get().createRegistry(BEHAVIOR_NODE_TYPE_KEY);
     }
 }

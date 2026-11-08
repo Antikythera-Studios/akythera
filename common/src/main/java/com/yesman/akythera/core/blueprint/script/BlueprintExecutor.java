@@ -42,10 +42,20 @@ public final class BlueprintExecutor {
 
     /// @throws IllegalArgumentException when a member variable shares its name with a local that a run binds
     public BlueprintExecutor(final DataDrivenScript<?, ?> script, final BlueprintLayout layout, final BlueprintBody body) {
+        this(script, layout, body, new ScriptVariables(body.variables()));
+    }
+
+    /// Runs on `variables` instead of building its own from `body`.
+    ///
+    /// @throws IllegalArgumentException when a member variable shares its name with a local that a run binds
+    public BlueprintExecutor(
+        final DataDrivenScript<?, ?> script, final BlueprintLayout layout, final BlueprintBody body,
+        final ScriptVariables variables
+    ) {
         this.script = script;
         this.layout = layout;
         this.body = body;
-        this.variables = new ScriptVariables(body.variables());
+        this.variables = variables;
 
         Set<String> bound = new HashSet<>();
         bound.add(PARENT_LOCAL);

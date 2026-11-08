@@ -6,6 +6,7 @@ import com.yesman.akythera.core.reflection.ScriptFunction;
 import com.yesman.akythera.core.reflection.ScriptType;
 import net.minecraft.core.Holder;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.player.PlayerModelPart;
 import net.minecraft.world.entity.player.PlayerSkin;
@@ -28,6 +29,22 @@ public class PlayerPatch extends LivingEntityPatch<Player> {
 
     /// Whether the attack [#hurtTarget] runs sweeps and resets the attack strength. True outside one.
     private boolean vanillaAttackEffects = true;
+
+    /// The entity this player attacks, or null.
+    private @Nullable LivingEntity target;
+
+    /// Clears a target that left the level.
+    @Override
+    public @Nullable LivingEntity getTarget() {
+        if (target != null && target.isRemoved()) target = null;
+
+        return target;
+    }
+
+    @Override
+    public void setTarget(final @Nullable LivingEntity target) {
+        this.target = target;
+    }
 
     /// Strikes `target` as a player's attack, with its attack strength and critical hit.
     @Override

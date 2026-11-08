@@ -24,14 +24,19 @@
     "client.MixinRenderSystem"
   ],
   "mixins": [
+    "common.MixinBrain",
     "common.MixinEntity",
+    "common.MixinHurtByTargetGoal",
     "common.MixinLivingEntity",
     "common.MixinMappedRegistry",
     "common.MixinMinecraftServer",
+    "common.MixinMob",
+    "common.MixinNearestAttackableTargetGoal",
     "common.MixinPersistentEntitySectionManager",
     "common.MixinPlayer",
     "common.MixinRegistryDataLoader",
-    "common.MixinRegistryLoadTask"
+    "common.MixinRegistryLoadTask",
+    "common.MixinServerLevel"
   ],
   "injectors": {
     "defaultRequire": 1

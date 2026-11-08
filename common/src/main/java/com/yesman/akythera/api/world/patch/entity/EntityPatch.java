@@ -27,6 +27,11 @@ import com.yesman.akythera.core.math.Transform;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.Targeting;
+import net.minecraft.world.entity.ai.Brain;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
@@ -420,6 +425,38 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
     """)
     public @Nullable ArmatureComponent getArmatureComponent() {
         return findComponent(ArmatureComponent.class);
+    }
+
+    // *************************************
+    // Targeting
+    // *************************************
+
+    @ScriptFunction(pure = true, label = "Get Target", category = "Behavior", desc = """
+        Returns the entity this one attacks, or null when it has none
+    """)
+    public @Nullable LivingEntity getTarget() {
+        return original instanceof Targeting targeting ? targeting.getTarget() : null;
+    }
+
+    /// Also writes [MemoryModuleType#ATTACK_TARGET] when the vanilla [Brain] registers it, since the mobs on a
+    /// vanilla brain read their target from that memory.
+    @ScriptFunction(label = "Set Target", category = "Behavior", desc = """
+        Sets the entity this one attacks. Give null to clear the target
+    """)
+    public void setTarget(final @Nullable LivingEntity target) {
+        if (original instanceof Mob mob) mob.setTarget(target);
+
+        if (original instanceof LivingEntity livingEntity) {
+            Brain<?> brain = livingEntity.getBrain();
+
+            if (!brain.checkMemory(MemoryModuleType.ATTACK_TARGET, MemoryStatus.REGISTERED)) return;
+
+            if (target == null) {
+                brain.eraseMemory(MemoryModuleType.ATTACK_TARGET);
+            } else {
+                brain.setMemory(MemoryModuleType.ATTACK_TARGET, target);
+            }
+        }
     }
 
     // *************************************
