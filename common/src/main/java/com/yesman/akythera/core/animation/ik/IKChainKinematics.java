@@ -9,7 +9,9 @@ import com.yesman.akythera.core.asset.physics.constraint.LimitRotationConstraint
 import com.yesman.akythera.core.math.Transform;
 import org.joml.Matrix4d;
 import org.joml.Quaterniond;
+import org.joml.Quaterniondc;
 import org.joml.Vector3d;
+import org.joml.Vector3dc;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayDeque;
@@ -39,9 +41,6 @@ public final class IKChainKinematics {
     /// The head of each of [#bones] in armature space, then the tip bone's tail.
     private final Vector3d[] joints;
 
-    /// The length of each of [#bones]: from its head to the next joint.
-    private final double[] lengths;
-
     private IKChainKinematics(final Pose pose, final Bone[] bones, final @Nullable LimitRotationConstraint[] limits, final Matrix4d baseFrame) {
         this.pose = pose;
         this.bones = bones;
@@ -49,14 +48,11 @@ public final class IKChainKinematics {
         this.baseFrame = baseFrame;
         models = new Matrix4d[bones.length];
         joints = new Vector3d[bones.length + 1];
-        lengths = new double[bones.length];
 
         for (int i = 0; i < bones.length; i++) models[i] = new Matrix4d();
         for (int i = 0; i <= bones.length; i++) joints[i] = new Vector3d();
 
         updateFrom(0);
-
-        for (int i = 0; i < bones.length; i++) lengths[i] = joints[i].distance(joints[i + 1]);
     }
 
     /// The chain of `chainLength` bones ending at `tipBone` in `pose`, or null when the armature has no such bone or
@@ -109,9 +105,14 @@ public final class IKChainKinematics {
         return joints[index];
     }
 
-    /// The distance from the head of bone `index` to the next joint.
+    /// The distance from the head of bone `index` to the next joint, as the chain stands now.
     public double boneLength(final int index) {
-        return lengths[index];
+        return joints[index].distance(joints[index + 1]);
+    }
+
+    /// Bone `index`'s own `axis` in armature space, as a unit vector.
+    public Vector3d boneAxis(final int index, final Vector3dc axis) {
+        return models[index].transformDirection(axis, new Vector3d()).normalize();
     }
 
     /// Turns bone `index` around its head so the next joint lies toward `target`, then holds it inside its limit. The
@@ -127,16 +128,24 @@ public final class IKChainKinematics {
     }
 
     /// Brings the tip closer to `target` by swinging each bone toward it, tip bone first, for up to `passes` passes or
-    /// until the tip is within `tolerance`. A swing that leaves the tip farther, as a limit may, is undone.
+    /// until the tip is within `tolerance`. A swing that leaves the tip farther, as a limit may, is undone. A target
+    /// out of reach settles toward the nearest point the chain reaches.
     public void settle(final Vector3d target, final int passes, final double tolerance) {
-        for (int pass = 0; pass < passes && joints[bones.length].distance(target) > tolerance; pass++) {
+        double length = 0.0D;
+
+        for (int i = 0; i < bones.length; i++) length += boneLength(i);
+
+        Vector3d toTarget = target.sub(joints[0], new Vector3d());
+        Vector3d goal = toTarget.length() > length ? toTarget.normalize().mul(length).add(joints[0]) : new Vector3d(target);
+
+        for (int pass = 0; pass < passes && joints[bones.length].distance(goal) > tolerance; pass++) {
             for (int i = bones.length - 1; i >= 0; i--) {
-                double before = joints[bones.length].distance(target);
+                double before = joints[bones.length].distance(goal);
                 Transform[] kept = snapshot();
 
-                swingTip(i, target);
+                swingTip(i, goal);
 
-                if (joints[bones.length].distance(target) > before) restore(kept);
+                if (joints[bones.length].distance(goal) > before) restore(kept);
             }
         }
     }
@@ -148,7 +157,12 @@ public final class IKChainKinematics {
 
         if (current.length() < MIN_AIM_LENGTH || desired.length() < MIN_AIM_LENGTH) return;
 
-        Quaterniond turn = new Quaterniond().rotationTo(current.normalize(), desired.normalize());
+        rotate(index, new Quaterniond().rotationTo(current.normalize(), desired.normalize()));
+    }
+
+    /// Turns bone `index` around its head by `turn`, given in armature space, then holds it inside its limit. The bones
+    /// after it follow.
+    public void rotate(final int index, final Quaterniondc turn) {
         Matrix4d parent = index == 0 ? baseFrame : models[index - 1];
         Quaterniond frame = parent.getNormalizedRotation(new Quaterniond())
             .mul(new Matrix4d(bones[index].getLocalTransform()).getNormalizedRotation(new Quaterniond()));

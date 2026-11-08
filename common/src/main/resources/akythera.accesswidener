@@ -21,3 +21,6 @@ accessible field net/minecraft/client/renderer/entity/EntityRenderDispatcher equ
 accessible field net/minecraft/client/renderer/entity/layers/SimpleEquipmentLayer layer Lnet/minecraft/client/resources/model/EquipmentClientInfo$LayerType;
 accessible field net/minecraft/client/renderer/entity/layers/SimpleEquipmentLayer adultModel Lnet/minecraft/client/model/EntityModel;
 accessible field net/minecraft/client/renderer/entity/layers/SimpleEquipmentLayer babyModel Lnet/minecraft/client/model/EntityModel;
+accessible field net/minecraft/world/entity/Mob moveControl Lnet/minecraft/world/entity/ai/control/MoveControl;
+accessible field net/minecraft/world/entity/Mob bodyRotationControl Lnet/minecraft/world/entity/ai/control/BodyRotationControl;
+mutable field net/minecraft/world/entity/Mob bodyRotationControl Lnet/minecraft/world/entity/ai/control/BodyRotationControl;
