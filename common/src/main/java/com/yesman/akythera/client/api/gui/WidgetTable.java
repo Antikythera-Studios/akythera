@@ -16,10 +16,13 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 
 /// A layout class for multiple widgets. Each widget must inherit [AbstractWidget] and [AnchoredWidget]
@@ -29,6 +32,7 @@ public class WidgetTable extends ContainerObjectSelectionList<WidgetTable.@NonNu
     private static final int TITLE_GAP = 4;
     private static final int PRESSED_ROW_COLOR = 0xFF1E4D72;
     private static final int HOVERED_ROW_COLOR = 0xFF262626;
+    private static final int SEPARATOR_COLOR = 0xFF333333;
 
     /// Space above and below the widgets of a [#resizable] row, in pixels.
     private static final int ROW_MARGIN = 2;
@@ -38,8 +42,8 @@ public class WidgetTable extends ContainerObjectSelectionList<WidgetTable.@NonNu
 
     private WidgetTable.@Nullable WidgetEntry lastEntry;
 
-    /// The row [#onRowPressed] last ran for, drawn highlighted. Null until one is pressed.
-    private WidgetTable.@Nullable WidgetEntry pressedEntry;
+    /// The rows drawn highlighted: the row [#onRowPressed] last ran for, or the rows [#markPressed] marked.
+    private final Set<WidgetTable.WidgetEntry> pressedEntries = new HashSet<>();
 
     private final Screen parentScreen;
 
@@ -179,6 +183,16 @@ public class WidgetTable extends ContainerObjectSelectionList<WidgetTable.@NonNu
         return this;
     }
 
+    /// Adds a row `height` pixels tall holding only a horizontal line across its middle. It takes no widget.
+    public WidgetTable newSeparator(int height) {
+        WidgetEntry separator = new WidgetEntry(0, null);
+        separator.separator = true;
+        addEntry(separator, height);
+        lastEntry = separator;
+
+        return this;
+    }
+
     public <T extends AbstractWidget & AnchoredWidget> WidgetTable addWidget(T widget) {
         if (widget.getVerticalAnchorType() != VerticalAnchorType.TOP_HEIGHT) {
             throw new IllegalArgumentException("Only TOP_HEIGHT vertical anchor is allowed in WidgetTable");
@@ -209,7 +223,19 @@ public class WidgetTable extends ContainerObjectSelectionList<WidgetTable.@NonNu
     /// Makes the current row pressable: a press on it outside its widgets runs `onPressed` and
     /// highlights the row until another row is pressed.
     public WidgetTable onRowPressed(Runnable onPressed) {
+        return onRowPressed(_ -> onPressed.run());
+    }
+
+    /// [#onRowPressed(Runnable)] that hands the press to `onPressed`, for its modifier keys.
+    public WidgetTable onRowPressed(Consumer<MouseButtonEvent> onPressed) {
         Objects.requireNonNull(lastEntry).onPressed = onPressed;
+
+        return this;
+    }
+
+    /// Highlights the current row along with the other pressed ones, until the next press.
+    public WidgetTable markPressed() {
+        pressedEntries.add(Objects.requireNonNull(lastEntry));
 
         return this;
     }
@@ -255,7 +281,7 @@ public class WidgetTable extends ContainerObjectSelectionList<WidgetTable.@NonNu
     /// Removes all widgets in table
     public void clearWidgets() {
         clearEntries();
-        pressedEntry = null;
+        pressedEntries.clear();
         resizingEntry = null;
     }
 
@@ -437,13 +463,16 @@ public class WidgetTable extends ContainerObjectSelectionList<WidgetTable.@NonNu
         final @Nullable Static title;
         /// Runs on a press outside the row's widgets, see [WidgetTable#onRowPressed]. Null for a row
         /// that takes no press.
-        @Nullable Runnable onPressed;
+        @Nullable Consumer<MouseButtonEvent> onPressed;
 
         /// Runs when one of the row's widgets takes focus, see [WidgetTable#onRowFocused]. Null when nothing listens.
         @Nullable Runnable onFocused;
 
         /// The shortest a [WidgetTable#resizable] row gets, in pixels. 0 for a row of the default height.
         int minHeight;
+
+        /// Whether this row is a [WidgetTable#newSeparator].
+        boolean separator;
 
         /// Receives the height a drag of a [WidgetTable#resizable] row settles on. Null when nothing listens.
         @Nullable IntConsumer onResized;
@@ -500,15 +529,23 @@ public class WidgetTable extends ContainerObjectSelectionList<WidgetTable.@NonNu
             if (super.mouseClicked(event, doubleClick)) return true;
             if (onPressed == null || event.button() != 0) return false;
 
-            pressedEntry = this;
-            onPressed.run();
+            pressedEntries.clear();
+            pressedEntries.add(this);
+            onPressed.accept(event);
 
             return true;
         }
 
         @Override
         public void extractContent(@NonNull GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, boolean hovering, float a) {
-            if (this == pressedEntry) {
+            if (separator) {
+                int lineY = getY() + getHeight() / 2;
+
+                guiGraphics.fill(getX(), lineY, getX() + getWidth(), lineY + 1, SEPARATOR_COLOR);
+                return;
+            }
+
+            if (pressedEntries.contains(this)) {
                 guiGraphics.fill(getX(), getY(), getX() + getWidth(), getY() + getHeight(), PRESSED_ROW_COLOR);
             } else if (onPressed != null && hovering) {
                 guiGraphics.fill(getX(), getY(), getX() + getWidth(), getY() + getHeight(), HOVERED_ROW_COLOR);
