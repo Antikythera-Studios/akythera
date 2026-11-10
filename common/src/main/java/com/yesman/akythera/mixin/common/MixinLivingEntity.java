@@ -5,6 +5,7 @@ import com.yesman.akythera.api.animation.notify.impl.CancelOnMoveNotifyState;
 import com.yesman.akythera.api.animation.notify.impl.ExtendDeathTimeNotifyState;
 import com.yesman.akythera.api.animation.notify.impl.LockMovementNotifyState;
 import com.yesman.akythera.api.component.impl.ArmatureComponent;
+import com.yesman.akythera.api.component.impl.RootMotionComponent;
 import com.yesman.akythera.api.event.BuiltInEventHooks;
 import com.yesman.akythera.api.event.entity.LivingDeathEvent;
 import com.yesman.akythera.api.world.behavior.BehaviorTreeInstance;
@@ -35,9 +36,9 @@ public abstract class MixinLivingEntity {
     @Unique
     private static final int HELD_DEATH_TIME = 18;
 
-    /// Body yaw a [LockMovementNotifyState.Rotation#LOCKED] window keeps, or NaN outside one.
+    /// Body yaw before this tick's head turn, which a [LockMovementNotifyState.Rotation#LOCKED] window puts back.
     @Unique
-    private float akythera$lockedYBodyRot = Float.NaN;
+    private float akythera$yBodyRotBeforeHeadTurn;
 
     /// Runs the [BrainComponent] of an entity that is no [Mob], following the full tick split of
     /// [Mob#serverAiStep].
@@ -52,8 +53,8 @@ public abstract class MixinLivingEntity {
         if (brain != null) brain.tick((self.tickCount + self.getId()) % 2 == 0 || self.tickCount <= 1);
     }
 
-    /// Drops the movement input read this tick while a [LockMovementNotifyState] holds, and stops the montages a
-    /// [CancelOnMoveNotifyState] holds once there is any.
+    /// Drops the movement input read this tick while a [LockMovementNotifyState] holds or a root motion plays, and stops
+    /// the montages a [CancelOnMoveNotifyState] holds once there is any.
     @Inject(at = @At(value = "CONSTANT", args = "stringValue=jump"), method = "aiStep()V")
     private void akythera$applyMontageMovementRules(CallbackInfo callbackInfo) {
         LivingEntity self = (LivingEntity)(Object)this;
@@ -74,6 +75,13 @@ public abstract class MixinLivingEntity {
         boolean moving = self instanceof ServerPlayer serverPlayer
             ? serverPlayer.getLastClientMoveIntent().lengthSqr() > 0.0
             : self.xxa != 0.0F || self.zza != 0.0F;
+        RootMotionComponent rootMotion = armatureComponent.getComponent(RootMotionComponent.class);
+
+        if (rootMotion != null && rootMotion.isEnabled() && rootMotion.isPlaying()) {
+            self.xxa = 0.0F;
+            self.zza = 0.0F;
+            self.setJumping(false);
+        }
 
         if (!moving) return;
 
@@ -111,7 +119,18 @@ public abstract class MixinLivingEntity {
         return dx * dx + dz * dz > 0.0025F ? self.getYRot() : yBodyRotTarget;
     }
 
+    @Inject(
+        at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/LivingEntity;tickHeadTurn(F)V"),
+        method = "tick()V"
+    )
+    private void akythera$keepBodyRotBeforeHeadTurn(CallbackInfo callbackInfo) {
+        akythera$yBodyRotBeforeHeadTurn = ((LivingEntity)(Object)this).yBodyRot;
+    }
+
     /// Turns the body the way the held [LockMovementNotifyState] asks, over the vanilla head turn.
+    ///
+    /// [LockMovementNotifyState.Rotation#LOCKED] undoes only the head turn, the entity's own will. A root motion or a
+    /// motion warping still turns the body.
     @Inject(
         at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/LivingEntity;tickHeadTurn(F)V", shift = At.Shift.AFTER),
         method = "tick()V"
@@ -123,14 +142,9 @@ public abstract class MixinLivingEntity {
             : null;
         LockMovementNotifyState.Rotation rotation = lock == null ? LockMovementNotifyState.Rotation.FREE : lock.rotation();
 
-        if (rotation != LockMovementNotifyState.Rotation.LOCKED) akythera$lockedYBodyRot = Float.NaN;
-
         switch (rotation) {
             case FACE_VIEW -> self.yBodyRot = self.getYRot();
-            case LOCKED -> {
-                if (Float.isNaN(akythera$lockedYBodyRot)) akythera$lockedYBodyRot = self.yBodyRot;
-                self.yBodyRot = akythera$lockedYBodyRot;
-            }
+            case LOCKED -> self.yBodyRot = akythera$yBodyRotBeforeHeadTurn;
             case FREE -> {
             }
         }

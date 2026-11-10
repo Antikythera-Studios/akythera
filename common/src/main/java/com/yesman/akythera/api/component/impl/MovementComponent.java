@@ -25,6 +25,9 @@ public interface MovementComponent extends UniqueComponent {
     /// Turns the owner to `xRot` and `yRot`, in degrees.
     void lookAt(final float xRot, final float yRot);
 
+    /// Turns the owner by `yaw` degrees around the vertical axis, in Minecraft's yaw direction.
+    void turn(final float yaw);
+
     /// `relative`, given in the owner's facing space (+Z forward), rotated into world space by the owner's
     /// yaw.
     Vec3 toWorldVector(final Vec3 relative);

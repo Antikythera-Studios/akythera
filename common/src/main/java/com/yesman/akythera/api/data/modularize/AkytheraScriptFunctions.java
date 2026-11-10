@@ -3,6 +3,7 @@ package com.yesman.akythera.api.data.modularize;
 import com.yesman.akythera.api.animation.animator.AnimationInterfaceKey;
 import com.yesman.akythera.api.animation.animator.AnimationLayer;
 import com.yesman.akythera.api.animation.animator.Animator;
+import com.yesman.akythera.api.animation.warping.MotionWarpTarget;
 import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.component.PatchComponent;
@@ -62,7 +63,6 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.player.PlayerModelType;
 import net.minecraft.world.entity.player.PlayerSkin;
 import net.minecraft.world.phys.Vec3;
-import org.jspecify.annotations.Nullable;
 
 import java.lang.reflect.TypeVariable;
 import java.util.List;
@@ -129,6 +129,9 @@ public final class AkytheraScriptFunctions {
             ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, DataDrivenBehaviorTask.class, "Behavior", ScriptFunction.Usage.SCRIPT);
             ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, DataDrivenBehaviorSubtask.class, "Behavior", ScriptFunction.Usage.SCRIPT);
             ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, DataDrivenBehaviorCondition.class, "Behavior", ScriptFunction.Usage.SCRIPT);
+
+            // Motion warping
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, MotionWarpTarget.class, "Animation/Motion Warping", ScriptFunction.Usage.SCRIPT);
 
             // Widgets, client-only
             ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.gui.AkytheraButton", "Widget/Button", ScriptFunction.Usage.SCRIPT);
@@ -1295,37 +1298,6 @@ public final class AkytheraScriptFunctions {
             "Writes the value of a behavior tree variable. Does nothing while no tree runs",
             false,
             ScriptFunction.Usage.SCRIPT
-        )
-    );
-
-    public static final Holder<ScriptFunction> BEST_FIT_MELEE_DESTINATION = AKYTHERA_REGISTRAR.register("best_fit_melee_destination", () ->
-        ScriptModularizeHelper.makeCustomScript(
-            (Function<EntityPatch<?>, @Nullable Vec3>) entityPatch -> {
-                /*
-                if (entityPatch.getTarget() != null) {
-                    Vec3 fromAttackerToTarget = entityPatch.getTarget().position().subtract(entityPatch.getOriginal().position());
-                    float distance = entityPatch.getOriginal().distanceTo(entityPatch.getTarget());
-
-                    if (entityPatch instanceof EquipmentHolder equipmentHolder) {
-                        ItemPatch mainhandItemPatch = equipmentHolder.getMainHandItemPatch();
-
-                        if (mainhandItemPatch != null) {
-                            // Expand the distance by weapon reach
-                            distance += mainhandItemPatch.getReach();
-                        }
-                    }
-
-                    // TODO: return optimized position
-                }
-                */
-                return null;
-            },
-            FunctionSignature.create(Vec3.class, List.of("entityPatch"), EntityPatch.class),
-            "Melee Destination",
-            "World/Entity",
-            "Finds an optimized location for melee attacks",
-            true,
-            ScriptFunction.Usage.MOTION_WARPING
         )
     );
 }

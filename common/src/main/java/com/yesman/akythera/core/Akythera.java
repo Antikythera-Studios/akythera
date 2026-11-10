@@ -59,6 +59,7 @@ import com.yesman.akythera.core.reflection.ScriptModularizeHelper;
 import com.yesman.akythera.core.registry.entry.AkytheraAnimNotifyStateTypes;
 import com.yesman.akythera.core.registry.entry.AkytheraAnimNotifyTypes;
 import com.yesman.akythera.core.registry.entry.AkytheraBehaviorNodeTypes;
+import com.yesman.akythera.core.registry.entry.AkytheraMotionWarpTargetTypes;
 import com.yesman.akythera.core.registry.entry.AkytheraParticleTypes;
 import com.yesman.akythera.core.util.EnumerableDataBlockSync;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
@@ -119,6 +120,7 @@ public final class Akythera {
             AkytheraAnimNotifyTypes.REGISTRAR.notifyPresence();
             AkytheraAnimNotifyStateTypes.REGISTRAR.notifyPresence();
             AkytheraBehaviorNodeTypes.REGISTRAR.notifyPresence();
+            AkytheraMotionWarpTargetTypes.REGISTRAR.notifyPresence();
             AkytheraComponentBlueprints.ENTITY_PATCH_REGISTRAR.notifyPresence();
             AkytheraComponentBlueprints.ITEM_PATCH_REGISTRAR.notifyPresence();
             AkytheraComponentBlueprints.WIDGET_REGISTRAR.notifyPresence();

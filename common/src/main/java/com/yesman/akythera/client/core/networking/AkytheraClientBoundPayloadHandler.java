@@ -31,6 +31,7 @@ import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayAn
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayParticleSystem;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundRagdollImpulse;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundRagdollVelocity;
+import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundSetTarget;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundStartRagdoll;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundStopAnimMontage;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundStopRagdoll;
@@ -44,6 +45,7 @@ import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Optional;
@@ -384,6 +386,14 @@ public interface AkytheraClientBoundPayloadHandler {
         ArmatureComponent armatureComponent = armatureOf(payload.entityId());
 
         if (armatureComponent != null) armatureComponent.addRagdollVelocity(payload.velocity());
+    }
+
+    static void handleSetTarget(final ClientBoundSetTarget payload, final PayloadContext context) {
+        Entity target = payload.targetId().isPresent() ? entityOf(payload.targetId().getAsInt()) : null;
+
+        AkytheraPatches.getEntityPatchOptional(entityOf(payload.entityId())).ifPresent(entityPatch ->
+            entityPatch.setTarget(target instanceof LivingEntity livingEntity ? livingEntity : null)
+        );
     }
 
     /// The first armature of the client's entity `entityId`, or null.

@@ -7,6 +7,7 @@ import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.util.StringRepresentable;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.NonNull;
@@ -78,6 +79,17 @@ public final class EntityMovementComponent implements MovementComponent, Dynamic
         owner.getOriginal().setXRot(xRot);
         owner.getOriginal().setYRot(yRot);
         owner.getOriginal().setYHeadRot(yRot);
+    }
+
+    /// Turns the view, the head and the body together.
+    @Override
+    public void turn(final float yaw) {
+        Entity entity = owner.getOriginal();
+
+        entity.setYRot(entity.getYRot() + yaw);
+        entity.setYHeadRot(entity.getYHeadRot() + yaw);
+
+        if (entity instanceof LivingEntity livingEntity) livingEntity.setYBodyRot(livingEntity.yBodyRot + yaw);
     }
 
     @Override

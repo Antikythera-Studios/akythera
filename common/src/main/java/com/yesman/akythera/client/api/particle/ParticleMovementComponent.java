@@ -48,6 +48,11 @@ public final class ParticleMovementComponent implements MovementComponent {
     }
 
     @Override
+    public void turn(final float yaw) {
+        particle.setRotation(new Quaternionf().rotationY(-yaw * Mth.DEG_TO_RAD).mul(particle.getRotation()));
+    }
+
+    @Override
     public Vec3 toWorldVector(final Vec3 relative) {
         Vector3f rotated = particle.getRotation().transform(new Vector3f((float)relative.x, (float)relative.y, (float)relative.z));
 

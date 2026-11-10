@@ -29,6 +29,8 @@ import com.yesman.akythera.core.blueprint.particle.ParticleInitializerScriptBlue
 import com.yesman.akythera.core.blueprint.particle.ParticleUpdaterBlueprint;
 import com.yesman.akythera.core.blueprint.particle.ParticleUpdaterScriptBlueprint;
 import com.yesman.akythera.core.blueprint.particle.ParticleSystemBlueprint;
+import com.yesman.akythera.core.blueprint.warping.MotionWarpTargetBlueprint;
+import com.yesman.akythera.core.blueprint.warping.MotionWarpTargetScriptBlueprint;
 import com.yesman.akythera.core.blueprint.widget.WidgetBlueprint;
 import com.yesman.akythera.platform.ModPlatformProvider;
 import net.minecraft.core.Registry;
@@ -76,6 +78,7 @@ public final class AkytheraRegistries {
         public static final ResourceKey<Registry<BehaviorTaskBlueprint>> BEHAVIOR_TASK_KEY = createRegistryKey("mob_behaviors/task");
         public static final ResourceKey<Registry<BehaviorConditionBlueprint>> BEHAVIOR_CONDITION_KEY = createRegistryKey("mob_behaviors/condition");
         public static final ResourceKey<Registry<BehaviorSubtaskBlueprint>> BEHAVIOR_SUBTASK_KEY = createRegistryKey("mob_behaviors/subtask");
+        public static final ResourceKey<Registry<MotionWarpTargetScriptBlueprint>> MOTION_WARP_TARGET_KEY = createRegistryKey("motion_warp_target");
 
         /// Checks across a registry's entries, run once it loads. An error fails the load the way a codec error does.
         private static final Map<ResourceKey<? extends Registry<?>>, RegistryValidator<?>> VALIDATORS = Map.of(
@@ -102,7 +105,8 @@ public final class AkytheraRegistries {
             new Registration<>(BEHAVIOR_TASK_KEY, BehaviorTaskBlueprint.CODEC),
             new Registration<>(BEHAVIOR_CONDITION_KEY, BehaviorConditionBlueprint.CODEC),
             new Registration<>(BEHAVIOR_SUBTASK_KEY, BehaviorSubtaskBlueprint.CODEC),
-            new Registration<>(BEHAVIOR_TREE_KEY, BehaviorTreeBlueprint.CODEC)
+            new Registration<>(BEHAVIOR_TREE_KEY, BehaviorTreeBlueprint.CODEC),
+            new Registration<>(MOTION_WARP_TARGET_KEY, MotionWarpTargetScriptBlueprint.CODEC)
         );
 
         static {
@@ -140,6 +144,7 @@ public final class AkytheraRegistries {
         public static final ResourceKey<Registry<MapCodec<? extends ParticleInitializerBlueprint>>> PARTICLE_INITIALIZER_TYPE_KEY = createRegistryKey("particle_initializer_type");
         public static final ResourceKey<Registry<MapCodec<? extends ParticleUpdaterBlueprint>>> PARTICLE_UPDATER_TYPE_KEY = createRegistryKey("particle_updater_type");
         public static final ResourceKey<Registry<MapCodec<? extends BehaviorNodeBlueprint<?>>>> BEHAVIOR_NODE_TYPE_KEY = createRegistryKey("behavior_node_type");
+        public static final ResourceKey<Registry<MapCodec<? extends MotionWarpTargetBlueprint>>> MOTION_WARP_TARGET_TYPE_KEY = createRegistryKey("motion_warp_target_type");
 
         // Registries
         public static final Registry<MapCodec<? extends AnimationNotify<?>>> ANIM_NOTIFY_TYPES = ModPlatformProvider.get().createRegistry(ANIM_NOTIFY_TYPE_KEY);
@@ -170,5 +175,8 @@ public final class AkytheraRegistries {
 
         /// Node types a [BehaviorNodeBlueprint] dispatches on.
         public static final Registry<MapCodec<? extends BehaviorNodeBlueprint<?>>> BEHAVIOR_NODE_TYPES = ModPlatformProvider.get().createRegistry(BEHAVIOR_NODE_TYPE_KEY);
+
+        /// Target types a [MotionWarpTargetBlueprint] dispatches on.
+        public static final Registry<MapCodec<? extends MotionWarpTargetBlueprint>> MOTION_WARP_TARGET_TYPES = ModPlatformProvider.get().createRegistry(MOTION_WARP_TARGET_TYPE_KEY);
     }
 }

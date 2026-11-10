@@ -30,11 +30,14 @@ import com.yesman.akythera.core.math.Transform;
 import com.yesman.akythera.core.reflection.ScriptType;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
+import com.yesman.akythera.core.util.helper.QuaternionUtils;
+import com.yesman.akythera.core.util.helper.VectorUtils;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.ExtraCodecs;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
+import org.joml.Quaterniond;
 
 import java.util.*;
 import java.util.function.Supplier;
@@ -176,7 +179,7 @@ public final class AnimationMontage implements PlayableAnimation {
     ///
     /// A bone a clip does not animate holds identity across that clip's window, and an IK curve a clip lacks holds the
     /// value [IKCurves] reads a missing curve as. With `rootMotion`, each clip's root track continues where the previous
-    /// clip's ended.
+    /// clip's ended, in location and yaw.
     public static AnimationClip mergeSegments(final List<AnimationClip> clips, final boolean rootMotion) {
         AnimationClip.Builder animClipBuilder = AnimationClip.builder();
         float time = 0.0F;
@@ -185,6 +188,8 @@ public final class AnimationMontage implements PlayableAnimation {
         // would drift across segments). Without this, root motion lurches backward at every segment
         // join (RootMotionComponent sees the per-segment reset as a huge reverse delta).
         Vec3 rootAccum = Vec3.ZERO;
+        // Running root yaw, in radians, turning each segment's root track to face where the previous ended.
+        double rootYawAccum = clips.isEmpty() || !rootMotion ? 0.0D : rootYawOf(rootOf(clips.getFirst(), 0.0F));
         Map<String, List<Keyframe>> bones = new HashMap<>();
         Map<String, List<FloatCurve.Key>> alphas = new HashMap<>();
         Map<String, List<FloatCurve.Key>> plants = new HashMap<>();
@@ -205,8 +210,11 @@ public final class AnimationMontage implements PlayableAnimation {
             final float segmentOffset = time;
             final float segEnd = clip.getTotalTime();
 
-            final Vec3 segRootStart = rootMotion ? rootLocOf(clip, 0.0F) : Vec3.ZERO;
-            final Vec3 rootShift = rootMotion ? rootAccum.subtract(segRootStart) : Vec3.ZERO;
+            final Transform segRootStart = rootMotion ? rootOf(clip, 0.0F) : Transform.IDENTITY;
+            final Quaterniond segTurn = new Quaterniond().rotationY(rootMotion ? rootYawAccum - rootYawOf(segRootStart) : 0.0D);
+            final Transform rootShift = new Transform(
+                rootAccum.subtract(VectorUtils.rotateByQuaternion(segTurn, segRootStart.loc())), segTurn, new Vec3(1.0D, 1.0D, 1.0D)
+            );
 
             final Pose firstPose = clip.getPose(0.0F);
             final Pose lastPose = clip.getPose(segEnd);
@@ -245,7 +253,10 @@ public final class AnimationMontage implements PlayableAnimation {
             });
 
             if (rootMotion) {
-                rootAccum = rootAccum.add(rootLocOf(clip, segEnd).subtract(segRootStart));
+                Transform segRootEnd = rootOf(clip, segEnd);
+
+                rootAccum = rootShift.mul(segRootEnd.loc());
+                rootYawAccum += rootYawOf(segRootEnd) - rootYawOf(segRootStart);
             }
 
             time += segEnd + SEGMENT_GAP;
@@ -291,16 +302,20 @@ public final class AnimationMontage implements PlayableAnimation {
         merged.add(new FloatCurve.Key(offset + length, curve.valueAt(length), false));
     }
 
-    /// Raw root-bone location at `t` (clip pose keeps the root, unlike [#getPose]).
-    private static Vec3 rootLocOf(AnimationClip clip, float t) {
-        return clip.getPose(Math.clamp(t, 0.0F, clip.getTotalTime()))
-            .orElseZero(ArmatureLoader.ROOT_BONE).loc();
+    /// Raw root-bone transform at `t` (clip pose keeps the root, unlike [#getPose]).
+    private static Transform rootOf(final AnimationClip clip, final float t) {
+        return clip.getPose(Math.clamp(t, 0.0F, clip.getTotalTime())).orElseIdentity(ArmatureLoader.ROOT_BONE);
     }
 
-    /// Returns `transform` with `rootShift` added to its location — but only for the root bone.
-    private static Transform shiftRoot(String boneName, Transform transform, Vec3 rootShift) {
+    /// The twist of `root` around Y, in radians.
+    private static double rootYawOf(final Transform root) {
+        return QuaternionUtils.toSwingTwist(root.rot()).y;
+    }
+
+    /// Returns `transform` moved and turned by `rootShift`, but only for the root bone.
+    private static Transform shiftRoot(final String boneName, final Transform transform, final Transform rootShift) {
         if (!ArmatureLoader.ROOT_BONE.equals(boneName)) return transform;
-        return new Transform(transform.loc().add(rootShift), transform.rot(), transform.sca());
+        return new Transform(rootShift.mul(transform.loc()), rootShift.rot().mul(transform.rot(), new Quaterniond()), transform.sca());
     }
 
     public List<AssetAccessor<AnimationClip>> getAnimSegments() {

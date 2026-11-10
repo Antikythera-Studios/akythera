@@ -56,7 +56,7 @@ public final class LockMovementNotifyState extends AnimationNotifyState<LivingEn
     public enum Rotation implements StringRepresentable {
         FREE("free"), // turns as usual
         FACE_VIEW("face_view"), // body yaw follows the view yaw
-        LOCKED("locked"); // body yaw stays where it was when the lock began
+        LOCKED("locked"); // body yaw stops following the head; root motion and motion warping still turn it
 
         public static final Codec<Rotation> CODEC = StringRepresentable.fromEnum(Rotation::values);
 

@@ -8,6 +8,7 @@ import com.yesman.akythera.api.component.PatchComponent;
 import com.yesman.akythera.api.component.UniqueComponent;
 import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.component.impl.EquipmentSlotBinder;
+import com.yesman.akythera.api.event.BuiltInEventHooks;
 import com.yesman.akythera.api.world.behavior.BrainComponent;
 import com.yesman.akythera.api.world.patch.AkytheraPatches;
 import com.yesman.akythera.api.world.patch.entity.component.EquipmentHolder;
@@ -20,15 +21,20 @@ import com.yesman.akythera.core.animation.animator.BlendingAnimator;
 import com.yesman.akythera.core.animation.driver.AnimationMontagePlayer;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.blueprint.EntityPatchBlueprint;
+import com.yesman.akythera.core.networking.NetworkingHelper;
+import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundSetTarget;
 import com.yesman.akythera.core.reflection.ScriptFunction;
 import com.yesman.akythera.core.reflection.ScriptType;
+import com.yesman.akythera.core.util.IdentifierProvider;
 import com.yesman.akythera.mixinaccessor.common.HurtByTargetGoalAccessor;
 import com.yesman.akythera.mixinaccessor.common.MobAccessor;
 import com.yesman.akythera.mixinaccessor.common.NearestAttackableTargetGoalAccessor;
 import net.minecraft.core.Holder;
 import net.minecraft.core.RegistryAccess;
+import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -37,7 +43,10 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.WrappedGoal;
 import net.minecraft.world.entity.ai.goal.target.HurtByTargetGoal;
 import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -48,12 +57,18 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalInt;
 import java.util.Set;
 
 @ScriptType(autoRegister = false)
 public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> implements EquipmentHolder {
     /// Slots equipment is read from, in priority order — the main hand answers before the off hand.
     private static final List<EquipmentSlot> STANCE_SLOTS = List.of(EquipmentSlot.MAINHAND, EquipmentSlot.OFFHAND);
+
+    /// The listener [#onJoinWorld] registers to sync a target read from the brain.
+    private static final IdentifierProvider BRAIN_TARGET_SYNC = IdentifierProvider.constant(
+        Identifier.fromNamespaceAndPath(Akythera.MODID, "brain_target_sync")
+    );
 
     /// Horizontal distance over one tick, in blocks, below which [#getMovementYaw] keeps its last direction.
     private static final double MOVING_DISTANCE = 0.015D;
@@ -77,6 +92,9 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
     /// Whether [#faceBodyToView] ran since the last tick's body turn.
     private boolean bodyFacesViewRequested;
 
+    /// The target last sent to the tracking players.
+    private @Nullable LivingEntity syncedTarget;
+
     /// The entities each [LivingHurtNotifyState] in its window struck so far.
     private final Map<LivingHurtNotifyState, Set<Entity>> struckEntities = new HashMap<>();
 
@@ -94,6 +112,49 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
 
     public LivingEntityPatch(final LivingEntityPatch<T> copyTarget) {
         super(copyTarget);
+    }
+
+    @Override
+    protected void buildEventListeners() {
+        super.buildEventListeners();
+        getEntityEventListener().registerEvent(BuiltInEventHooks.Entity.MOB_SET_TARGET, event -> syncTarget(event.getTarget()));
+    }
+
+    /// Syncs the target each server tick for a mob whose brain registers [MemoryModuleType#ATTACK_TARGET]: its vanilla
+    /// brain writes that memory without [Mob#setTarget].
+    ///
+    /// Checked here, not in [#buildEventListeners]: the patch is built at the end of the [Entity] constructor, before
+    /// the [LivingEntity] constructor makes the brain.
+    @Override
+    public void onJoinWorld(final Level level, final boolean worldGenSpawn) {
+        super.onJoinWorld(level, worldGenSpawn);
+
+        if (!(getOriginal() instanceof Mob mob) || !mob.getBrain().checkMemory(MemoryModuleType.ATTACK_TARGET, MemoryStatus.REGISTERED)) return;
+
+        getEntityEventListener().removeListenersBelongTo(BRAIN_TARGET_SYNC);
+        getEntityEventListener().registerEvent(BuiltInEventHooks.Entity.SERVER_TICK_POST, _ -> syncTarget(getTarget()), BRAIN_TARGET_SYNC);
+    }
+
+    /// Sends `target` to the tracking players unless they have it already.
+    private void syncTarget(final @Nullable LivingEntity target) {
+        if (target == syncedTarget) return;
+
+        syncedTarget = target;
+        NetworkingHelper.getInstance().sendToPlayersTrackingEntity(getOriginal(), targetPayload(target));
+    }
+
+    /// Also sends the target to the new tracker.
+    @Override
+    public void onStartTracking(final ServerPlayer trackingPlayer) {
+        super.onStartTracking(trackingPlayer);
+
+        LivingEntity target = getTarget();
+
+        if (target != null) NetworkingHelper.getInstance().sendToClient(trackingPlayer, targetPayload(target));
+    }
+
+    private ClientBoundSetTarget targetPayload(final @Nullable LivingEntity target) {
+        return new ClientBoundSetTarget(getId(), target == null ? OptionalInt.empty() : OptionalInt.of(target.getId()));
     }
 
     /// Resolves the stance this entity holds its equipment in, then rewrites the animator to whatever
