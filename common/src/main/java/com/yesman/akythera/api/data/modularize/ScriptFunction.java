@@ -2,6 +2,7 @@ package com.yesman.akythera.api.data.modularize;
 
 import com.yesman.akythera.core.reflection.FunctionSignature;
 import com.yesman.akythera.core.reflection.ScriptModularizeHelper;
+import com.yesman.akythera.core.registry.AkytheraRegistries;
 import org.jspecify.annotations.Nullable;
 
 import java.util.function.*;
@@ -73,6 +74,15 @@ public interface ScriptFunction {
     FunctionSignature functionSignature();
 
     Metadata metadata();
+
+    /// The registered function of `usage` that returns `type`, or null when none is registered.
+    static @Nullable ScriptFunction constructorOf(final Class<?> type, final Usage usage) {
+        for (ScriptFunction function : AkytheraRegistries.Frozen.SCRIPT_FUNCTION) {
+            if (function.metadata().usage() == usage && function.functionSignature().returnType() == type) return function;
+        }
+
+        return null;
+    }
 
     /// Saying this function can be isolated from execution flow.
     default boolean isPure() {

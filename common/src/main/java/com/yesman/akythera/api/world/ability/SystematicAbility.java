@@ -457,6 +457,72 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
         private static MapCodec<AbilityTagSet> tagSet(final String name) {
             return AbilityTagSet.CODEC.optionalFieldOf(name, AbilityTagSet.EMPTY);
         }
+
+        /// A builder of tags, every set empty until it is given.
+        public static Builder builder() {
+            return new Builder();
+        }
+
+        /// Builds [Tags] one set at a time.
+        public static final class Builder {
+            private AbilityTagSet idTags = AbilityTagSet.EMPTY;
+            private AbilityTagSet cancelAbilitiesWithTag = AbilityTagSet.EMPTY;
+            private AbilityTagSet blockAbilitiesWithTag = AbilityTagSet.EMPTY;
+            private AbilityTagSet ownerAcquiredTags = AbilityTagSet.EMPTY;
+            private AbilityTagSet activationRequiredTags = AbilityTagSet.EMPTY;
+            private AbilityTagSet activationBlockedTags = AbilityTagSet.EMPTY;
+            private AbilityTagSet recastRequiredTags = AbilityTagSet.EMPTY;
+            private AbilityTagSet recastBlockedTags = AbilityTagSet.EMPTY;
+
+            private Builder() {}
+
+            public Builder idTags(final AbilityTag... tags) {
+                this.idTags = AbilityTagSet.of(List.of(tags));
+                return this;
+            }
+
+            public Builder cancelAbilitiesWithTag(final AbilityTag... tags) {
+                this.cancelAbilitiesWithTag = AbilityTagSet.of(List.of(tags));
+                return this;
+            }
+
+            public Builder blockAbilitiesWithTag(final AbilityTag... tags) {
+                this.blockAbilitiesWithTag = AbilityTagSet.of(List.of(tags));
+                return this;
+            }
+
+            public Builder ownerAcquiredTags(final AbilityTag... tags) {
+                this.ownerAcquiredTags = AbilityTagSet.of(List.of(tags));
+                return this;
+            }
+
+            public Builder activationRequiredTags(final AbilityTag... tags) {
+                this.activationRequiredTags = AbilityTagSet.of(List.of(tags));
+                return this;
+            }
+
+            public Builder activationBlockedTags(final AbilityTag... tags) {
+                this.activationBlockedTags = AbilityTagSet.of(List.of(tags));
+                return this;
+            }
+
+            public Builder recastRequiredTags(final AbilityTag... tags) {
+                this.recastRequiredTags = AbilityTagSet.of(List.of(tags));
+                return this;
+            }
+
+            public Builder recastBlockedTags(final AbilityTag... tags) {
+                this.recastBlockedTags = AbilityTagSet.of(List.of(tags));
+                return this;
+            }
+
+            public Tags build() {
+                return new Tags(
+                    idTags, cancelAbilitiesWithTag, blockAbilitiesWithTag, ownerAcquiredTags,
+                    activationRequiredTags, activationBlockedTags, recastRequiredTags, recastBlockedTags
+                );
+            }
+        }
     }
 
     /// One tag that activates the ability, and what has to happen to that tag for it to fire.
