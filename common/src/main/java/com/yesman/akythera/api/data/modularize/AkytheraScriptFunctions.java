@@ -160,6 +160,9 @@ public final class AkytheraScriptFunctions {
             ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.particle.AkytheraSkeletalMeshParticle", "Particle/Mesh", ScriptFunction.Usage.SCRIPT);
             ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.particle.module.ParticleInitializerModule", "Particle", ScriptFunction.Usage.SCRIPT);
             ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.particle.module.ParticleUpdateModule", "Particle", ScriptFunction.Usage.SCRIPT);
+
+            // Camera, client-only
+            ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.camera.CameraComponent", "Camera", ScriptFunction.Usage.SCRIPT);
         } catch (Throwable e) {
             throw new IllegalStateException("Failed at scanning and registering modular function", e);
         }

@@ -6,6 +6,7 @@ import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.api.world.patch.item.component.AttributeModifiersComponent;
 import com.yesman.akythera.api.world.patch.item.component.ReplaceAnimations;
 import com.yesman.akythera.api.world.patch.item.component.WeaponStanceVariationAdapter;
+import com.yesman.akythera.client.api.camera.CameraComponentBlueprint;
 import com.yesman.akythera.client.api.component.impl.MeshComponentBlueprint;
 import com.yesman.akythera.client.api.component.impl.PALPoseBinder;
 import com.yesman.akythera.client.api.component.impl.SkinnedArmorRendererBlueprint;
@@ -81,6 +82,9 @@ public final class AkytheraComponentBlueprints {
 
     public static final Holder<MapCodec<? extends ComponentBlueprint<?, ?>>> SKINNED_ARMOR =
         ENTITY_PATCH_REGISTRAR.register("skinned_armor", () -> SkinnedArmorRendererBlueprint.CODEC);
+
+    public static final Holder<MapCodec<? extends ComponentBlueprint<?, ?>>> CAMERA =
+        ENTITY_PATCH_REGISTRAR.register("camera", () -> CameraComponentBlueprint.CODEC);
 
     /// The same socket type as [#TRANSFORM_SOCKET]—an item patch places things too, it just has no
     /// bone to place them on. One codec, one entry per registry, as [Collider] already is.

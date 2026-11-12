@@ -8,6 +8,7 @@ import com.yesman.akythera.api.component.PatchComponent;
 import com.yesman.akythera.api.component.UniqueComponent;
 import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.component.impl.EquipmentSlotBinder;
+import com.yesman.akythera.api.component.impl.RootMotionComponent;
 import com.yesman.akythera.api.event.BuiltInEventHooks;
 import com.yesman.akythera.api.world.behavior.BrainComponent;
 import com.yesman.akythera.api.world.patch.AkytheraPatches;
@@ -507,6 +508,19 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
         }
 
         return null;
+    }
+
+    /// Whether the entity's own turn is held: a [LockMovementNotifyState] other than
+    /// [LockMovementNotifyState.Rotation#FREE] holds, or a root motion plays.
+    public boolean isTurnLocked() {
+        LockMovementNotifyState lock = getMovementLock();
+
+        if (lock != null && lock.rotation() != LockMovementNotifyState.Rotation.FREE) return true;
+
+        ArmatureComponent armatureComponent = getArmatureComponent();
+        RootMotionComponent rootMotion = armatureComponent == null ? null : armatureComponent.getComponent(RootMotionComponent.class);
+
+        return rootMotion != null && rootMotion.isPlaying();
     }
 
     @ScriptFunction(pure = true, label = "Is Baby")
