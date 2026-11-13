@@ -5,13 +5,16 @@ import com.yesman.akythera.api.event.entity.EntityPossessionEvent;
 import com.yesman.akythera.api.world.patch.AkytheraPatches;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.client.api.camera.CameraComponent;
+import com.yesman.akythera.core.math.Transform;
 import com.yesman.akythera.core.util.helper.VectorUtils;
 import net.minecraft.client.Camera;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Quaterniond;
 import org.joml.Quaternionf;
+import org.joml.Vector3d;
 import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -56,7 +59,7 @@ public abstract class MixinCamera {
     private float akythera$cameraYRot(final Entity viewed, final float partialTicks) {
         CameraComponent camera = CameraComponent.holdingView();
 
-        return camera != null && camera.getOwner().getOriginal() == viewed ? camera.getViewYRot(partialTicks) : viewed.getViewYRot(partialTicks);
+        return camera != null && camera.getPatch().getOriginal() == viewed ? camera.getViewYRot(partialTicks) : viewed.getViewYRot(partialTicks);
     }
 
     @Redirect(
@@ -66,7 +69,7 @@ public abstract class MixinCamera {
     private float akythera$cameraXRot(final Entity viewed, final float partialTicks) {
         CameraComponent camera = CameraComponent.holdingView();
 
-        return camera != null && camera.getOwner().getOriginal() == viewed ? camera.getViewXRot(partialTicks) : viewed.getViewXRot(partialTicks);
+        return camera != null && camera.getPatch().getOriginal() == viewed ? camera.getViewXRot(partialTicks) : viewed.getViewXRot(partialTicks);
     }
 
     /// Places the camera at the [CameraComponent]'s location in place of vanilla's distance behind the eyes, then turns
@@ -75,22 +78,24 @@ public abstract class MixinCamera {
     private void akythera$placeCamera(final float partialTicks, final CallbackInfo callbackInfo) {
         CameraComponent camera = CameraComponent.holdingView();
 
-        if (camera == null || !detached || entity == null || level == null || camera.getOwner().getOriginal() != entity) return;
+        if (camera == null || !detached || entity == null || level == null || camera.getPatch().getOriginal() != entity) return;
 
-        if (camera.hasCustomLocation()) {
-            float eye = Mth.lerp(partialTicks, eyeHeightOld, eyeHeight);
-            Vec3 pivot = new Vec3(
-                Mth.lerp(partialTicks, entity.xo, entity.getX()),
-                Mth.lerp(partialTicks, entity.yo, entity.getY()) + eye,
-                Mth.lerp(partialTicks, entity.zo, entity.getZ())
-            );
+        float eye = Mth.lerp(partialTicks, eyeHeightOld, eyeHeight);
+        Vec3 eyes = new Vec3(
+            Mth.lerp(partialTicks, entity.xo, entity.getX()),
+            Mth.lerp(partialTicks, entity.yo, entity.getY()) + eye,
+            Mth.lerp(partialTicks, entity.zo, entity.getZ())
+        );
+        Transform place = camera.place(level, eyes, eye, partialTicks, rotation);
 
-            setPosition(camera.locate(level, pivot, eye, rotation));
+        setPosition(place.loc());
+
+        if (!place.rot().equals(new Quaterniond(rotation), 1.0E-6D)) {
+            Vector3d look = place.rot().transform(new Vector3d(0.0D, 0.0D, -1.0D));
+            Vec3 direction = new Vec3(look.x, look.y, look.z);
+
+            setRotation((float)VectorUtils.getVectorYRot(direction), (float)VectorUtils.getVectorXRot(direction));
         }
-
-        Vec3 look = camera.lookDirection(rotation);
-
-        if (look != null) setRotation((float)VectorUtils.getVectorYRot(look), (float)VectorUtils.getVectorXRot(look));
     }
 
     /// The patch [BuiltInEventHooks.Entity#POSSESSED] was last posted for.

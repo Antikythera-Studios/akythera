@@ -1,5 +1,6 @@
 package com.yesman.akythera.client.api.gui.viewer;
 
+import com.mojang.blaze3d.ProjectionType;
 import com.mojang.blaze3d.pipeline.MainTarget;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -21,6 +22,7 @@ import com.yesman.akythera.client.core.renderer.RenderUtils;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.asset.armature.Armature;
 import com.yesman.akythera.core.asset.loader.ResourceLoadingFailureException;
+import com.yesman.akythera.core.math.Transform;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -40,10 +42,12 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.FormattedCharSequence;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.EntityType;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fStack;
+import org.joml.Quaternionf;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 import org.jspecify.annotations.NonNull;
@@ -56,6 +60,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalDouble;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 public final class Model3DViewer extends AbstractWidget
@@ -73,6 +78,28 @@ public final class Model3DViewer extends AbstractWidget
 
     /// How far from the last left press a press still counts as repeating it, in widget pixels.
     private static final double CLICK_CYCLING_PIXELS = 3.0D;
+
+    /// Width of the [InsetView] until it is resized, as a share of the view's width.
+    private static final float INSET_WIDTH_RATIO = 0.3F;
+
+    /// Gap between the [InsetView] and the view's edges, in pixels.
+    private static final int INSET_MARGIN = 8;
+
+    /// Narrowest the [InsetView] resizes to, in pixels.
+    private static final int INSET_MIN_WIDTH = 48;
+
+    /// How far in from its border a press on the [InsetView] resizes it instead of moving it, in pixels.
+    private static final int INSET_GRIP = 5;
+
+    private static final int INSET_BORDER_COLOR = 0xFFFFAA33;
+    private static final int INSET_BORDER_HOVER_COLOR = 0xFFFFDD55;
+    private static final int INSET_TITLE_COLOR = 0xFFFFFFFF;
+
+    /// Gap between the [InsetView]'s title and the inset's right and bottom edges, in pixels.
+    private static final int INSET_TITLE_MARGIN = 4;
+
+    /// Behind the [InsetView] when the view has no [BackgroundComponent].
+    private static final int INSET_BACKGROUND_COLOR = 0xFF101010;
 
     /// Default dimensions used for skeletal meshes that don't yet have a
     /// registered [EntityDimensions] association. Player-sized.
@@ -130,6 +157,29 @@ public final class Model3DViewer extends AbstractWidget
 
     @Nullable
     private ProjectionMatrixBuffer projectionMatrixBuffer;
+
+    /// The second view drawn into the bottom right corner, null for none.
+    private @Nullable InsetView insetView;
+
+    /// What [#insetView] renders into. Made on its first frame, resized to follow the inset's size.
+    private @Nullable RenderTarget insetTarget;
+
+    @Nullable
+    private ProjectionMatrixBuffer insetProjectionMatrixBuffer;
+
+    /// The [#insetView]'s top left corner and width, in widget pixels from the view's top left corner. NaN until it
+    /// is first drawn, which puts it in the bottom right corner.
+    private double insetLeft = Double.NaN;
+    private double insetTop = Double.NaN;
+    private double insetWidth = Double.NaN;
+
+    /// Whether the left press held now moves the [#insetView] or resizes it. Null while neither.
+    private @Nullable InsetDrag insetDrag;
+
+    /// While moving, where the press landed from the inset's top left corner. While resizing, the corner that stays
+    /// put, from the view's top left corner. In widget pixels.
+    private double insetAnchorX;
+    private double insetAnchorY;
 
     /// Returns a multiplier to get exact pixel size on the screen, designed for AkytheraLabs.
     private final Supplier<Integer> framebufferSizeMultiplier;
@@ -257,6 +307,11 @@ public final class Model3DViewer extends AbstractWidget
         } else {
             debugMessages.put(source, List.copyOf(messages));
         }
+    }
+
+    /// Shows `insetView` in the bottom right corner, or takes the inset down with null.
+    public void setInsetView(final @Nullable InsetView insetView) {
+        this.insetView = insetView;
     }
 
     public @Nullable Model3DViewerComponent getFocused() {
@@ -415,6 +470,16 @@ public final class Model3DViewer extends AbstractWidget
             projectionMatrixBuffer = null;
         }
 
+        if (insetTarget != null) {
+            insetTarget.destroyBuffers();
+            insetTarget = null;
+        }
+
+        if (insetProjectionMatrixBuffer != null) {
+            insetProjectionMatrixBuffer.close();
+            insetProjectionMatrixBuffer = null;
+        }
+
         for (Model3DViewerComponent c : components) c.destroy();
 
         overlayWidgets.clear();
@@ -431,59 +496,13 @@ public final class Model3DViewer extends AbstractWidget
         CameraComponent camera = getComponent(CameraComponent.class);
 
         if (previewTarget != null && camera != null && projectionMatrixBuffer != null) {
-            // Clear the preview target. Depth clears to the far plane, which reversed-Z puts at 0.
-            RenderSystem.getDevice().createCommandEncoder().clearColorAndDepthTextures(
-                previewTarget.getColorTexture(), TRANSPARENT_CLEAR_COLOR,
-                previewTarget.getDepthTexture(), 0.0
-            );
-
-            // Save render state
-            RenderSystem.backupProjectionMatrix();
-            GpuTextureView savedColorOverride = RenderSystem.outputColorTextureOverride;
-            GpuTextureView savedDepthOverride = RenderSystem.outputDepthTextureOverride;
-
-            // Redirect all RenderType draws into previewTarget
-            RenderSystem.outputColorTextureOverride = previewTarget.getColorTextureView();
-            RenderSystem.outputDepthTextureOverride = previewTarget.getDepthTextureView();
-
             Matrix4f projection = camera.buildProjection(previewTarget.width, previewTarget.height);
 
-            // Set projection matrix
-            RenderSystem.setProjectionMatrix(
-                projectionMatrixBuffer.getBuffer(projection),
-                camera.getViewMode().projectionType()
-            );
-
-            // Set camera model-view transform
-            Matrix4fStack modelViewStack = RenderSystem.getModelViewStack();
-            modelViewStack.pushMatrix();
-            PoseStack cameraPS = camera.buildPoseStack(a);
-            modelViewStack.set(cameraPS.last().pose());
-
-            lastView.set(cameraPS.last().pose());
+            lastView.set(camera.buildPoseStack(a).last().pose());
             lastProjection.set(projection);
             matricesValid = true;
 
-            // Per-frame shared render scratch — threaded through PreviewComponent#render.
-            PoseStack poseStack = new PoseStack();
-            iterating = true;
-
-            try (ByteBufferBuilder byteBuf = new ByteBufferBuilder(RenderType.BIG_BUFFER_SIZE)) {
-                for (Model3DViewerComponent c : components) {
-                    c.extractComponent(graphics, this, poseStack, byteBuf, mouseX, mouseY, a);
-                }
-            } finally {
-                iterating = false;
-            }
-
-            runPendingStructureChanges();
-
-            // Restore render state
-            modelViewStack.popMatrix();
-
-            RenderSystem.outputColorTextureOverride = savedColorOverride;
-            RenderSystem.outputDepthTextureOverride = savedDepthOverride;
-            RenderSystem.restoreProjectionMatrix();
+            renderScene(graphics, previewTarget, projectionMatrixBuffer, camera.getViewMode().projectionType(), _ -> true, mouseX, mouseY, a);
 
             // Blit previewTarget to the widget area (v-flipped: GL render targets have bottom-up Y)
             GpuSampler sampler = RenderSystem.getDevice().createSampler(
@@ -515,6 +534,62 @@ public final class Model3DViewer extends AbstractWidget
             }
 
             runPendingStructureChanges();
+
+            Transform eye = insetView == null ? null : insetView.eye().get();
+            int[] inset = insetBounds();
+
+            if (eye != null && inset != null) {
+                int insetX = inset[0], insetY = inset[1], insetW = inset[2], insetH = inset[3];
+                int guiScale = framebufferSizeMultiplier.get();
+                int physW = Math.max(8, insetW * guiScale);
+                int physH = Math.max(8, insetH * guiScale);
+
+                if (insetTarget == null || insetProjectionMatrixBuffer == null) {
+                    insetTarget = new MainTarget(physW, physH);
+                    insetProjectionMatrixBuffer = new ProjectionMatrixBuffer("model_previewer_inset");
+                } else if (insetTarget.width != physW || insetTarget.height != physH) {
+                    insetTarget.resize(physW, physH);
+                }
+
+                Matrix4f mainView = new Matrix4f(lastView);
+                Matrix4f mainProjection = new Matrix4f(lastProjection);
+                boolean zZeroToOne = RenderSystem.getDevice().getDeviceInfo().isZZeroToOne();
+
+                // Swapped near and far make the matrix reversed-Z, as [CameraComponent#buildProjection] does
+                lastProjection.setPerspective((float)Math.toRadians(insetView.fov()), (float)physW / physH, 100.0F, 0.05F, zZeroToOne);
+                lastView.translationRotate(
+                    (float)eye.loc().x, (float)eye.loc().y, (float)eye.loc().z, new Quaternionf(eye.rot())
+                ).invert();
+
+                // No time passes between the two views of one frame
+                renderScene(graphics, insetTarget, insetProjectionMatrixBuffer, ProjectionType.PERSPECTIVE, insetView.shows(), mouseX, mouseY, 0.0F);
+
+                lastView.set(mainView);
+                lastProjection.set(mainProjection);
+
+                BackgroundComponent background = getComponent(BackgroundComponent.class);
+                boolean insetHovered = insetDrag != null
+                    || mouseX >= insetX && mouseX < insetX + insetW && mouseY >= insetY && mouseY < insetY + insetH;
+
+                graphics.fill(insetX, insetY, insetX + insetW, insetY + insetH, background == null ? INSET_BACKGROUND_COLOR : background.color());
+                graphics.innerBlit(
+                    RenderPipelines.GUI_OPAQUE_TEXTURED_BACKGROUND,
+                    insetTarget.getColorTextureView(),
+                    sampler,
+                    insetX, insetY, insetX + insetW, insetY + insetH,
+                    0.0F, 1.0F, 1.0F, 0.0F,
+                    0xFFFFFFFF
+                );
+                graphics.outline(insetX - 1, insetY - 1, insetW + 2, insetH + 2, insetHovered ? INSET_BORDER_HOVER_COLOR : INSET_BORDER_COLOR);
+
+                Font font = Minecraft.getInstance().font;
+
+                graphics.text(
+                    font, insetView.title().getVisualOrderText(),
+                    insetX + insetW - INSET_TITLE_MARGIN - font.width(insetView.title()), insetY + insetH - INSET_TITLE_MARGIN - font.lineHeight,
+                    INSET_TITLE_COLOR, true
+                );
+            }
         }
 
         // Border drawn on top of blit
@@ -537,6 +612,99 @@ public final class Model3DViewer extends AbstractWidget
         for (AbstractWidget widget : overlayWidgets) {
             widget.extractRenderState(graphics, mouseX, mouseY, a);
         }
+    }
+
+    /// Draws the components `shows` accepts into `target`, seen through [#lastView] and [#lastProjection].
+    private void renderScene(
+        final GuiGraphicsExtractor graphics,
+        final RenderTarget target,
+        final ProjectionMatrixBuffer projectionBuffer,
+        final ProjectionType projectionType,
+        final Predicate<Model3DViewerComponent> shows,
+        final int mouseX,
+        final int mouseY,
+        final float a
+    ) {
+        // Depth clears to the far plane, which reversed-Z puts at 0.
+        RenderSystem.getDevice().createCommandEncoder().clearColorAndDepthTextures(
+            target.getColorTexture(), TRANSPARENT_CLEAR_COLOR,
+            target.getDepthTexture(), 0.0
+        );
+
+        RenderSystem.backupProjectionMatrix();
+        GpuTextureView savedColorOverride = RenderSystem.outputColorTextureOverride;
+        GpuTextureView savedDepthOverride = RenderSystem.outputDepthTextureOverride;
+
+        // Redirect all RenderType draws into the target
+        RenderSystem.outputColorTextureOverride = target.getColorTextureView();
+        RenderSystem.outputDepthTextureOverride = target.getDepthTextureView();
+        RenderSystem.setProjectionMatrix(projectionBuffer.getBuffer(lastProjection), projectionType);
+
+        Matrix4fStack modelViewStack = RenderSystem.getModelViewStack();
+        modelViewStack.pushMatrix();
+        modelViewStack.set(lastView);
+
+        // Per-frame shared render scratch — threaded through PreviewComponent#render.
+        PoseStack poseStack = new PoseStack();
+        iterating = true;
+
+        try (ByteBufferBuilder byteBuf = new ByteBufferBuilder(RenderType.BIG_BUFFER_SIZE)) {
+            for (Model3DViewerComponent c : components) {
+                if (shows.test(c)) c.extractComponent(graphics, this, poseStack, byteBuf, mouseX, mouseY, a);
+            }
+        } finally {
+            iterating = false;
+        }
+
+        runPendingStructureChanges();
+
+        modelViewStack.popMatrix();
+
+        RenderSystem.outputColorTextureOverride = savedColorOverride;
+        RenderSystem.outputDepthTextureOverride = savedDepthOverride;
+        RenderSystem.restoreProjectionMatrix();
+    }
+
+    /// Where the [#insetView] sits on screen, as `{x, y, width, height}` in GUI pixels, kept inside the view. Null
+    /// without an inset, or when the view is too small for one.
+    private int @Nullable [] insetBounds() {
+        if (insetView == null) return null;
+
+        int w = getWidth(), h = getHeight();
+        double maxWidth = Math.min(w - INSET_MARGIN * 2, (h - INSET_MARGIN * 2) * insetView.aspect());
+
+        if (maxWidth < INSET_MIN_WIDTH) return null;
+
+        if (Double.isNaN(insetWidth)) {
+            insetWidth = Math.min(w * INSET_WIDTH_RATIO, maxWidth);
+            insetLeft = w - INSET_MARGIN - insetWidth;
+            insetTop = h - INSET_MARGIN - insetWidth / insetView.aspect();
+        }
+
+        insetWidth = Mth.clamp(insetWidth, INSET_MIN_WIDTH, maxWidth);
+        double insetHeight = insetWidth / insetView.aspect();
+        insetLeft = Mth.clamp(insetLeft, INSET_MARGIN, w - INSET_MARGIN - insetWidth);
+        insetTop = Mth.clamp(insetTop, INSET_MARGIN, h - INSET_MARGIN - insetHeight);
+
+        return new int[] {
+            getX() + (int)Math.round(insetLeft), getY() + (int)Math.round(insetTop), (int)Math.round(insetWidth), (int)Math.round(insetHeight)
+        };
+    }
+
+    /// What the left press held on the [#insetView] does.
+    private enum InsetDrag {
+        MOVE, RESIZE
+    }
+
+    /// A second view drawn over the viewer, in its bottom right corner until it is moved. A left drag inside moves it,
+    /// a left drag on its border resizes it about the opposite corner.
+    ///
+    /// @param eye    where the view looks from, in the viewer's world space, looking along its -Z. Null hides the view
+    /// @param fov    the vertical field of view, in degrees
+    /// @param aspect the view's width over its height
+    /// @param shows  which components the view draws
+    /// @param title  drawn inside the view's bottom right corner
+    public record InsetView(Supplier<@Nullable Transform> eye, float fov, float aspect, Predicate<Model3DViewerComponent> shows, Component title) {
     }
 
     /// Accepts left, right and middle. The vanilla gate is button 0 only, which would swallow the
@@ -591,6 +759,24 @@ public final class Model3DViewer extends AbstractWidget
             return true;
         }
 
+        int[] inset = insetBounds();
+
+        if (inset != null && event.x() >= inset[0] && event.x() < inset[0] + inset[2] && event.y() >= inset[1] && event.y() < inset[1] + inset[3]) {
+            double left = event.x() - inset[0], top = event.y() - inset[1];
+
+            if (left < INSET_GRIP || top < INSET_GRIP || left >= inset[2] - INSET_GRIP || top >= inset[3] - INSET_GRIP) {
+                insetDrag = InsetDrag.RESIZE;
+                insetAnchorX = left < inset[2] * 0.5D ? insetLeft + insetWidth : insetLeft;
+                insetAnchorY = top < inset[3] * 0.5D ? insetTop + insetWidth / insetView.aspect() : insetTop;
+            } else {
+                insetDrag = InsetDrag.MOVE;
+                insetAnchorX = left;
+                insetAnchorY = top;
+            }
+
+            return true;
+        }
+
         // The focused component gets the press before anything is re-picked.
         if (focused != null && focused.onMouseDown(this, event)) {
             dragTarget = focused;
@@ -614,6 +800,21 @@ public final class Model3DViewer extends AbstractWidget
         if (event.button() == 1) optionsPending = false;
         if (dragCancelled) return true;
 
+        if (insetDrag != null && insetView != null && event.button() == 0) {
+            double mouseLeft = event.x() - getX(), mouseTop = event.y() - getY();
+
+            if (insetDrag == InsetDrag.MOVE) {
+                insetLeft = mouseLeft - insetAnchorX;
+                insetTop = mouseTop - insetAnchorY;
+            } else {
+                insetWidth = Math.max(INSET_MIN_WIDTH, Math.max(Math.abs(mouseLeft - insetAnchorX), Math.abs(mouseTop - insetAnchorY) * insetView.aspect()));
+                insetLeft = mouseLeft < insetAnchorX ? insetAnchorX - insetWidth : insetAnchorX;
+                insetTop = mouseTop < insetAnchorY ? insetAnchorY - insetWidth / insetView.aspect() : insetAnchorY;
+            }
+
+            return true;
+        }
+
         if (dragTarget != null && event.button() == 0) {
             dragTarget.onMouseDragged(this, event, dx, dy);
             runPendingStructureChanges();
@@ -631,7 +832,14 @@ public final class Model3DViewer extends AbstractWidget
 
     @Override
     public boolean mouseReleased(@NonNull MouseButtonEvent event) {
-        if (event.button() == 0) dragCancelled = false;
+        if (event.button() == 0) {
+            dragCancelled = false;
+
+            if (insetDrag != null) {
+                insetDrag = null;
+                return true;
+            }
+        }
 
         if (event.button() == 1 && optionsPending) {
             optionsPending = false;

@@ -5,6 +5,7 @@ import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.api.component.PatchComponent;
+import com.yesman.akythera.api.component.TickableComponent;
 import com.yesman.akythera.api.component.TransformComponent;
 import com.yesman.akythera.api.component.TransformInheritPolicy;
 import com.yesman.akythera.api.component.UniqueComponent;
@@ -29,7 +30,7 @@ import java.util.Map;
 /// builds that copy's own children against the copy, so two entities sharing an armature blueprint
 /// do not share a socket's placed children. The authored socket keeps a null armature and an empty
 /// component map.
-public final class TransformSocket implements TransformComponent, ComponentBlueprint<TransformSocket, ComponentAttachable>, ComponentAttachable {
+public final class TransformSocket implements TransformComponent, TickableComponent, ComponentBlueprint<TransformSocket, ComponentAttachable>, ComponentAttachable {
     public static final MapCodec<TransformSocket> CODEC =
         RecordCodecBuilder.mapCodec(
             instance ->
@@ -171,6 +172,17 @@ public final class TransformSocket implements TransformComponent, ComponentBluep
     @Override
     public MapCodec<? extends ComponentBlueprint<TransformSocket, ComponentAttachable>> mapCodec() {
         return CODEC;
+    }
+
+    // ***************************************************************
+    // TickableComponent
+    // ***************************************************************
+
+    @Override
+    public void tick() {
+        components.values().forEach(component -> {
+            if (component.isEnabled() && component instanceof TickableComponent tickable) tickable.tick();
+        });
     }
 
     // ***************************************************************

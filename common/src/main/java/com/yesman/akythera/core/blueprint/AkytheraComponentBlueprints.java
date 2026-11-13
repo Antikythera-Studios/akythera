@@ -2,6 +2,7 @@ package com.yesman.akythera.core.blueprint;
 
 import com.mojang.serialization.MapCodec;
 import com.yesman.akythera.api.component.impl.EquipmentSlotBinderBlueprint;
+import com.yesman.akythera.api.component.impl.SpringArmComponentBlueprint;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.api.world.patch.item.component.AttributeModifiersComponent;
 import com.yesman.akythera.api.world.patch.item.component.ReplaceAnimations;
@@ -85,6 +86,9 @@ public final class AkytheraComponentBlueprints {
 
     public static final Holder<MapCodec<? extends ComponentBlueprint<?, ?>>> CAMERA =
         ENTITY_PATCH_REGISTRAR.register("camera", () -> CameraComponentBlueprint.CODEC);
+
+    public static final Holder<MapCodec<? extends ComponentBlueprint<?, ?>>> SPRING_ARM =
+        ENTITY_PATCH_REGISTRAR.register("spring_arm", () -> SpringArmComponentBlueprint.CODEC);
 
     /// The same socket type as [#TRANSFORM_SOCKET]—an item patch places things too, it just has no
     /// bone to place them on. One codec, one entry per registry, as [Collider] already is.

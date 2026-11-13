@@ -19,6 +19,6 @@ public abstract class MixinLocalPlayer {
         LocalPlayer self = (LocalPlayer)(Object)this;
         CameraComponent camera = CameraComponent.holdingView();
 
-        if (camera != null && camera.getOwner().getOriginal() == self) camera.alignAvatar(self);
+        if (camera != null && camera.getPatch().getOriginal() == self) camera.alignAvatar(self);
     }
 }

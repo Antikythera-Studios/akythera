@@ -6,6 +6,7 @@ import com.yesman.akythera.api.component.TickableComponent;
 import com.yesman.akythera.api.component.TransformComponent;
 import com.yesman.akythera.api.component.TransformInheritPolicy;
 import com.yesman.akythera.api.component.UniqueComponent;
+import com.yesman.akythera.api.component.impl.SpringArmComponent;
 import com.yesman.akythera.api.world.patch.AkytheraPatches;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
@@ -33,31 +34,33 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.ApiStatus;
 import org.joml.Quaterniond;
-import org.joml.Quaternionf;
 import org.joml.Quaternionfc;
 import org.joml.Vector3d;
-import org.joml.Vector3f;
 import org.jspecify.annotations.Nullable;
+
+import java.util.Objects;
 
 /// The view of the local player in third person: a rotation of its own, apart from the player's, and a location
 /// set by [#localTransform].
 ///
-/// [#localTransform]'s location is in the patch's model space (origin at the feet, -Z forward, +X right) turned by the
-/// view rotation around the player's eyes, so at level pitch the camera sits where the editor shows it. Left at the
-/// origin, the camera sits where vanilla places it. The rotation turns the camera on top of the view rotation, in the
-/// same space; its roll is dropped. The scale is not read.
+/// Under a [SpringArmComponent], [#localTransform] is in the space of the arm's end, and the arm turns about its pivot
+/// with the pivot's rotation, then with the view's pitch, see [SpringArmComponent#pivotWorldTransform]. While the arm
+/// [SpringArmComponent#ridesArmature], the camera is the arm's end times [#localTransform], with no view pitch. Anywhere else it is in the patch's model space (origin at the feet, -Z forward, +X right) turned
+/// by the view rotation around the player's eyes. In third person the camera always takes this place over vanilla's,
+/// and at level pitch it sits where the editor shows it. With [#collideWithTerrain] the arm shrinks where blocks are in
+/// the way. The rotation turns the camera on top of the arm's rotation; its roll is dropped. The scale is not read.
 ///
 /// In first person the view is the player's own, and the component only follows the player's rotation. While the
 /// player's turn is locked the camera looks around on its own, and the player turns to it once the lock ends.
 @ClientOnly @ScriptType
-public final class CameraComponent implements UniqueComponent, TransformComponent, TickableComponent, DynamicPatchComponent<EntityPatch<?>> {
+public final class CameraComponent implements UniqueComponent, TransformComponent, TickableComponent, DynamicPatchComponent<ComponentAttachable> {
     /// Share of the remaining turn toward a lock target taken each tick.
     private static final double LOCK_SLERP_RATE = 0.4D;
 
     /// How far the crosshair ray reaches past the interaction ranges for aiming, in blocks.
     private static final double AIM_DISTANCE = 128.0D;
 
-    private EntityPatch<?> owner;
+    private ComponentAttachable owner;
 
     private boolean enabled = true;
 
@@ -65,6 +68,12 @@ public final class CameraComponent implements UniqueComponent, TransformComponen
 
     /// Whether the player turns with the camera. Off, the player takes the camera's rotation only while moving.
     private boolean matchPlayerYawToCamera;
+
+    /// Whether the camera's arm shrinks where blocks are in the way.
+    private boolean collideWithTerrain;
+
+    /// How far the camera keeps off blocks, in blocks.
+    private double probeRadius;
 
     /// The camera's rotation, in degrees, with the values of the last tick for interpolation.
     private float xRot;
@@ -84,13 +93,21 @@ public final class CameraComponent implements UniqueComponent, TransformComponen
     /// Added to the lock target to give the location the camera looks at, in world space.
     private Vec3 lockOffset = Vec3.ZERO;
 
-    public CameraComponent(final EntityPatch<?> owner, final Transform localTransform, final boolean matchPlayerYawToCamera) {
+    public CameraComponent(
+        final ComponentAttachable owner,
+        final Transform localTransform,
+        final boolean matchPlayerYawToCamera,
+        final boolean collideWithTerrain,
+        final double probeRadius
+    ) {
         this.owner = owner;
         this.localTransform = localTransform;
         this.matchPlayerYawToCamera = matchPlayerYawToCamera;
+        this.collideWithTerrain = collideWithTerrain;
+        this.probeRadius = probeRadius;
     }
 
-    /// The camera component of the local player while it is the camera entity, or null.
+    /// The camera component anywhere under the local player's patch while the player is the camera entity, or null.
     public static @Nullable CameraComponent ofLocalPlayer() {
         Minecraft minecraft = Minecraft.getInstance();
 
@@ -98,7 +115,12 @@ public final class CameraComponent implements UniqueComponent, TransformComponen
 
         EntityPatch<?> patch = AkytheraPatches.getEntityPatch(minecraft.player);
 
-        return patch == null ? null : patch.getComponent(CameraComponent.class);
+        return patch == null ? null : patch.findComponentBelow(CameraComponent.class, _ -> true);
+    }
+
+    /// The patch this camera views from.
+    public EntityPatch<?> getPatch() {
+        return Objects.requireNonNull(TransformComponent.entityOf(owner), "A camera component is attached under no entity patch");
     }
 
     /// [#ofLocalPlayer] while it holds the view.
@@ -114,11 +136,6 @@ public final class CameraComponent implements UniqueComponent, TransformComponen
         return !Minecraft.getInstance().options.getCameraType().isFirstPerson() || isPlayerRotationBlocked();
     }
 
-    /// Whether [#localTransform] moves the camera off the place vanilla puts it.
-    public boolean hasCustomLocation() {
-        return !localTransform.loc().equals(Vec3.ZERO);
-    }
-
     public boolean isMatchPlayerYawToCamera() {
         return matchPlayerYawToCamera;
     }
@@ -127,9 +144,25 @@ public final class CameraComponent implements UniqueComponent, TransformComponen
         this.matchPlayerYawToCamera = matchPlayerYawToCamera;
     }
 
+    public boolean isCollideWithTerrain() {
+        return collideWithTerrain;
+    }
+
+    public void setCollideWithTerrain(final boolean collideWithTerrain) {
+        this.collideWithTerrain = collideWithTerrain;
+    }
+
+    public double getProbeRadius() {
+        return probeRadius;
+    }
+
+    public void setProbeRadius(final double probeRadius) {
+        this.probeRadius = probeRadius;
+    }
+
     /// Whether the player's rotation can't follow the mouse, see [LivingEntityPatch#isTurnLocked].
     public boolean isPlayerRotationBlocked() {
-        return owner instanceof LivingEntityPatch<?> living && living.isTurnLocked();
+        return getPatch() instanceof LivingEntityPatch<?> living && living.isTurnLocked();
     }
 
     public float getXRot() {
@@ -196,13 +229,13 @@ public final class CameraComponent implements UniqueComponent, TransformComponen
 
     /// The rotation, in degrees, that looks from the view at the lock target. Null while unlocked.
     ///
-    /// With a [#hasCustomLocation] the camera sits off the player's look axis, and turning the camera moves it around
+    /// In third person the camera sits off the player's look axis, and turning the camera moves it around
     /// the player. Aiming from the camera at a near target then keeps moving the target off center, turning the camera
     /// forever. The aim ray starts nearer the eyes, and ends nearer the target's center, the closer the target is.
     private float @Nullable [] lockRotation(final float rotX, final float rotY) {
-        Entity avatar = owner.getOriginal();
+        Entity avatar = getPatch().getOriginal();
         Vec3 eye = avatar.getEyePosition();
-        boolean offAxis = !Minecraft.getInstance().options.getCameraType().isFirstPerson() && hasCustomLocation();
+        boolean offAxis = !Minecraft.getInstance().options.getCameraType().isFirstPerson();
         Vec3 end;
         double distanceSqr;
 
@@ -244,7 +277,7 @@ public final class CameraComponent implements UniqueComponent, TransformComponen
 
     /// Turns the player to the camera's rotation.
     public void setAvatarRotationToCameraRotation() {
-        Entity avatar = owner.getOriginal();
+        Entity avatar = getPatch().getOriginal();
 
         avatar.setXRot(xRot);
         avatar.setYRot(yRot);
@@ -257,7 +290,7 @@ public final class CameraComponent implements UniqueComponent, TransformComponen
 
         if (crosshair == null) return;
 
-        Entity avatar = owner.getOriginal();
+        Entity avatar = getPatch().getOriginal();
         Vec3 toTarget = crosshair.getLocation().subtract(avatar.getEyePosition());
 
         if (toTarget.lengthSqr() < 1.0E-6D) return;
@@ -289,7 +322,7 @@ public final class CameraComponent implements UniqueComponent, TransformComponen
         xRotO = Mth.clamp(xRotO + xDelta, -90.0F, 90.0F);
         yRotO += yDelta;
 
-        if (matchPlayerYawToCamera && !isPlayerRotationBlocked()) owner.getOriginal().turn(xo, yo);
+        if (matchPlayerYawToCamera && !isPlayerRotationBlocked()) getPatch().getOriginal().turn(xo, yo);
 
         return true;
     }
@@ -313,47 +346,46 @@ public final class CameraComponent implements UniqueComponent, TransformComponen
     // Camera transform
     // ***************************************************************
 
-    /// Where the camera sits for `pivot`, the player's eyes `eyeHeight` above its feet, and `rotation`, the camera's
-    /// orientation: the [#localTransform] location, pulled in toward `pivot` where blocks are in the way.
+    /// The camera's place in world space `partialTick` after the last tick for `rotation`, the view rotation: its
+    /// location and the rotation it looks with (along -Z). Under a [SpringArmComponent] the arm runs from the arm's
+    /// pivot, and from `eyes`, the player's eyes `eyeHeight` above its feet, anywhere else.
     @ApiStatus.Internal
-    public Vec3 locate(final Level level, final Vec3 pivot, final float eyeHeight, final Quaternionfc rotation) {
+    public Transform place(final Level level, final Vec3 eyes, final float eyeHeight, final float partialTick, final Quaternionfc rotation) {
         Vec3 loc = localTransform.loc();
+        SpringArmComponent arm = owner instanceof SpringArmComponent springArm ? springArm : null;
+        Transform armPivot = arm == null ? null : arm.pivotWorldTransform(partialTick, getViewYRot(partialTick));
+        Vec3 pivot = armPivot == null ? eyes : armPivot.loc();
         // The model space and the camera's own space share their axes: +X right, -Z forward
-        Vector3f offset = new Vector3f((float)loc.x, (float)loc.y - eyeHeight, (float)loc.z).rotate(rotation);
-        Vec3 target = pivot.add(offset.x, offset.y, offset.z);
-        double reach = 1.0D;
+        Quaterniond armRotation = armPivot == null ? new Quaterniond(rotation) : new Quaterniond(armPivot.rot());
 
-        // Eight rays a little apart, as vanilla's camera zoom casts them
-        for (int i = 0; i < 8; i++) {
-            Vec3 jitter = new Vec3(((i & 1) * 2 - 1) * 0.1D, ((i >> 1 & 1) * 2 - 1) * 0.1D, ((i >> 2 & 1) * 2 - 1) * 0.1D);
-            Vec3 from = pivot.add(jitter);
-            HitResult hit = level.clip(new ClipContext(from, target.add(jitter), ClipContext.Block.VISUAL, ClipContext.Fluid.NONE, owner.getOriginal()));
-
-            if (hit.getType() != HitResult.Type.MISS) reach = Math.min(reach, hit.getLocation().distanceTo(from) / from.distanceTo(target.add(jitter)));
+        if (armPivot != null && !arm.ridesArmature()) {
+            armRotation.mul(new Quaterniond().rotationAxis(-getViewXRot(partialTick) * Mth.DEG_TO_RAD, 1.0D, 0.0D, 0.0D));
         }
 
-        return pivot.add(offset.x * reach, offset.y * reach, offset.z * reach);
-    }
+        Vector3d offset = armRotation.transform(armPivot == null
+            ? new Vector3d(loc.x, loc.y - eyeHeight, loc.z)
+            : new Vector3d(loc.x, loc.y, loc.z + arm.getLength()));
+        Vec3 end = pivot.add(offset.x, offset.y, offset.z);
+        double reach = 1.0D;
 
-    /// The camera's look direction in world space, `rotation` turned by the [#localTransform] rotation. Null while that
-    /// rotation is the identity.
-    @ApiStatus.Internal
-    public @Nullable Vec3 lookDirection(final Quaternionfc rotation) {
-        Quaterniond local = localTransform.rot();
+        // Eight rays to a little around the end, as vanilla's camera zoom casts them. They all start at the pivot, which
+        // may lie on a block's face, where a ray starting a little off it would start inside the block
+        for (int i = 0; collideWithTerrain && i < 8; i++) {
+            Vec3 jitter = new Vec3(((i & 1) * 2 - 1) * probeRadius, ((i >> 1 & 1) * 2 - 1) * probeRadius, ((i >> 2 & 1) * 2 - 1) * probeRadius);
+            Vec3 to = end.add(jitter);
+            HitResult hit = level.clip(new ClipContext(pivot, to, ClipContext.Block.VISUAL, ClipContext.Fluid.NONE, getPatch().getOriginal()));
 
-        if (local.equals(new Quaterniond(), 1.0E-6D)) return null;
+            if (hit.getType() != HitResult.Type.MISS) reach = Math.min(reach, hit.getLocation().distanceTo(pivot) / pivot.distanceTo(to));
+        }
 
-        // Both spaces look along -Z
-        Vector3f forward = new Vector3f(0.0F, 0.0F, -1.0F).rotate(new Quaternionf(local)).rotate(rotation);
-
-        return new Vec3(forward.x, forward.y, forward.z);
+        return new Transform(pivot.add(offset.x * reach, offset.y * reach, offset.z * reach), armRotation.mul(localTransform.rot()), Transform.IDENTITY.sca());
     }
 
     /// Picks what the crosshair points at from the camera, within the player's interaction ranges counted from its
     /// eyes. A miss lies where the ray hits a block, or [#AIM_DISTANCE] blocks ahead, so the player can aim at it.
     public HitResult pickCrosshair(final float partialTick) {
         Camera camera = Minecraft.getInstance().gameRenderer.mainCamera();
-        LocalPlayer player = (LocalPlayer)owner.getOriginal();
+        LocalPlayer player = (LocalPlayer)getPatch().getOriginal();
         Vec3 eye = player.getEyePosition(partialTick);
         Vec3 direction = new Vec3(camera.forwardVector());
         // Starts abreast of the eyes, so nothing between the camera and the player is picked
@@ -387,7 +419,7 @@ public final class CameraComponent implements UniqueComponent, TransformComponen
         if (lockEntity != null && lockEntity.isRemoved()) unlockCamera();
         if (ofLocalPlayer() != this) return;
 
-        Entity avatar = owner.getOriginal();
+        Entity avatar = getPatch().getOriginal();
 
         if (!holdsView()) {
             // Back in first person, or out of a turn lock, the player looks where the camera did
@@ -448,12 +480,12 @@ public final class CameraComponent implements UniqueComponent, TransformComponen
     // ***************************************************************
 
     @Override
-    public EntityPatch<?> getOwner() {
+    public ComponentAttachable getOwner() {
         return owner;
     }
 
     @Override
-    public CameraComponent getRenewed(final EntityPatch<?> newOwner) {
+    public CameraComponent getRenewed(final ComponentAttachable newOwner) {
         owner = newOwner;
         return this;
     }
