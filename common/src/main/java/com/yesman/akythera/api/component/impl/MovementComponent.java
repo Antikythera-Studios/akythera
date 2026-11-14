@@ -13,6 +13,12 @@ import net.minecraft.world.phys.Vec3;
 /// [ComponentAttachable#getComponent] answers by the exact implementation type, so look one up with
 /// [ComponentAttachable#findComponent].
 public interface MovementComponent extends UniqueComponent {
+    /// Where the owner is, in world space.
+    Vec3 position();
+
+    /// Where the owner faces, in Minecraft's yaw degrees.
+    float yRot();
+
     /// Places the owner at `position`, in world space.
     void moveTo(final Vec3 position);
 

@@ -1,6 +1,8 @@
 package com.yesman.akythera.client.core.networking;
 
 import com.yesman.akythera.api.component.impl.ArmatureComponent;
+import com.yesman.akythera.api.cinema.CinemaScenePlayer;
+import com.yesman.akythera.api.cinema.CinemaSceneRoot;
 import com.yesman.akythera.api.world.patch.AkytheraPatches;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.networking.PayloadContext;
@@ -17,6 +19,7 @@ import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.api.lifecycle.ComponentsFactory;
 import com.yesman.akythera.core.blueprint.AbilityCueBlueprint;
 import com.yesman.akythera.core.blueprint.particle.ParticleAttachment;
+import com.yesman.akythera.core.cinema.CinemaScene;
 import com.yesman.akythera.core.math.Transform;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityEffectSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityEquipmentSync;
@@ -25,6 +28,7 @@ import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilit
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityTagSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundClearWidgetHuds;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundDataBlockSync;
+import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundJoinCinemaScene;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundOpenWidget;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayAbilityCue;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayAnimMontage;
@@ -362,6 +366,24 @@ public interface AkytheraClientBoundPayloadHandler {
 
             entityPatch.getArmatureComponent().getAnimator().stopPlayingMontage(payload.montage().orElse(null));
         });
+    }
+
+    /// Starts the actor's part of the scene the server plays. A scene or a role this client does not know is dropped, and
+    /// a root entity it does not track is replaced by a fixed root where the entity was.
+    static void handleJoinCinemaScene(final ClientBoundJoinCinemaScene payload, final PayloadContext context) {
+        CinemaScene scene = context.receiver().registryAccess().lookupOrThrow(AkytheraRegistries.DataPack.CINEMA_SCENE_KEY).getValue(payload.scene());
+        CinemaScene.Actor actor = scene == null ? null : scene.actors().get(payload.role());
+
+        if (actor == null) return;
+
+        Entity rootEntity = payload.rootEntityId().map(AkytheraClientBoundPayloadHandler::entityOf).orElse(null);
+        CinemaSceneRoot root = rootEntity == null
+            ? new CinemaSceneRoot.At(payload.rootPosition(), payload.rootYRot())
+            : new CinemaSceneRoot.On(rootEntity);
+
+        AkytheraPatches.getEntityPatchOptional(entityOf(payload.entityId())).ifPresent(
+            entityPatch -> CinemaScenePlayer.join(entityPatch, scene, actor, root)
+        );
     }
 
     static void handleStartRagdoll(final ClientBoundStartRagdoll payload, final PayloadContext context) {

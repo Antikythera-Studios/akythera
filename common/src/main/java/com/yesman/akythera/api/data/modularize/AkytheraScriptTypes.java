@@ -30,6 +30,7 @@ import com.yesman.akythera.core.blueprint.AbilityBlueprint;
 import com.yesman.akythera.core.blueprint.particle.ParticleBlueprint;
 import com.yesman.akythera.core.blueprint.particle.ParticleSystemBlueprint;
 import com.yesman.akythera.core.blueprint.widget.WidgetBlueprint;
+import com.yesman.akythera.core.cinema.CinemaScene;
 import com.yesman.akythera.core.math.Transform;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.helper.ParseUtils;
@@ -162,6 +163,8 @@ public final class AkytheraScriptTypes {
         () -> new ScriptType(AnimationInterfaceKey.class, AnimationInterfaceKey.ENUM_MANAGER.getNameCodec()));
     public static final Holder<ScriptType> ANIM_MONTAGE = AKYTHERA_REGISTRAR.register("anim_montage",
         () -> ScriptType.registryEntry(AnimationMontage.class, AkytheraRegistries.DataPack.ANIM_MONTAGE_KEY));
+    public static final Holder<ScriptType> CINEMA_SCENE = AKYTHERA_REGISTRAR.register("cinema_scene",
+        () -> ScriptType.registryEntry(CinemaScene.class, AkytheraRegistries.DataPack.CINEMA_SCENE_KEY));
 
     // Entity Patch
 

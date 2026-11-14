@@ -7,6 +7,7 @@ import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.api.component.TickableDynamicComponent;
 import com.yesman.akythera.api.component.UniqueComponent;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.core.cinema.CinemaScene;
 import com.yesman.akythera.core.blueprint.RootMotionComponentBlueprint;
 import com.yesman.akythera.core.math.Transform;
 import com.yesman.akythera.core.util.ClientOnly;
@@ -25,7 +26,8 @@ import java.util.function.Supplier;
 /// Module for animation based movements for the objects that implements [AnimatableObject]. Attached under the
 /// [ArmatureComponent] whose montages it follows, and moves that armature's owner through the owner's
 /// [MovementComponent], moving nothing while the owner has none. The root's yaw turns the owner, and its location
-/// moves the owner in the root's own facing.
+/// moves the owner in the root's own facing. While an [Anchor] is set, the owner is placed where the root is from the
+/// anchor's placement instead, and faces where the root faces from it, with no warp.
 ///
 /// Built by [RootMotionComponentBlueprint]. The armature ticks it.
 public final class RootMotionComponent implements UniqueComponent, TickableDynamicComponent<ArmatureComponent> {
@@ -42,8 +44,11 @@ public final class RootMotionComponent implements UniqueComponent, TickableDynam
     /// Whether the root's vertical movement moves the owner.
     private boolean moveVertical = true;
 
-    /// The root's yaw where the source started playing, in radians.
-    private double startYaw;
+    /// The root where the source started playing.
+    private Transform startRoot = Transform.IDENTITY;
+
+    /// Where the owner stands at [#startRoot], or null while the root's steps move the owner.
+    private @Nullable Anchor anchor;
 
     private boolean enabled = true;
 
@@ -63,13 +68,25 @@ public final class RootMotionComponent implements UniqueComponent, TickableDynam
         this.playbackTimeSupplier = playbackTimeSupplier;
         this.playRate = playRate;
         this.moveVertical = moveVertical;
-        this.startYaw = yawOf(rootMotionTransformProvider.apply(playbackTimeSupplier.get()));
+        this.startRoot = rootMotionTransformProvider.apply(playbackTimeSupplier.get());
+        this.anchor = null;
     }
 
     public void finishRootMotion() {
         rootMotionTransformProvider = null;
         playbackTimeSupplier = null;
         warp = null;
+        anchor = null;
+    }
+
+    public @Nullable Anchor getAnchor() {
+        return anchor;
+    }
+
+    /// Pins the playing source to `anchor`. Null gives the owner back to the root's steps. A new source, and the end of
+    /// this one, drop the anchor.
+    public void setAnchor(final @Nullable Anchor anchor) {
+        this.anchor = anchor;
     }
 
     /// Whether a root motion source is being played.
@@ -101,6 +118,25 @@ public final class RootMotionComponent implements UniqueComponent, TickableDynam
         float previousTime = Math.max(currentTime - deltaTime * playRate, 0);
         Transform previousTransform = rootMotionTransformProvider.apply(previousTime);
         Transform currentTransform = rootMotionTransformProvider.apply(currentTime);
+
+        if (anchor != null) {
+            Transform placement = anchor.placement();
+            Vec3 position = placement.loc().add(placement.mulDirection(armature.modelTransform().mulDirection(currentTransform.loc().subtract(startRoot.loc()))));
+            Vec3 current = movement.position();
+            Vec3 target = moveVertical ? position : new Vec3(position.x, current.y, position.z);
+            float yRot = 180.0F - (float)Math.toDegrees(yawOf(placement) + yawOf(currentTransform) - yawOf(startRoot));
+
+            if (anchor.ignoresBlockCollision()) {
+                movement.moveTo(target);
+            } else {
+                movement.move(target.subtract(current));
+            }
+
+            movement.turn(Mth.wrapDegrees(yRot - movement.yRot()));
+
+            return;
+        }
+
         Vec3 rootDelta = facingDelta(previousTransform, currentTransform);
 
         if (warp != null) rootDelta = rootDelta.multiply(warp.settings.modifyX() ? warp.stretch : 1.0F, warp.verticalStretch, warp.stretch);
@@ -119,11 +155,13 @@ public final class RootMotionComponent implements UniqueComponent, TickableDynam
     /// The root's movement from `from` to `to` in the owner's facing space (+Z forward), seen from the root's facing
     /// at `from`.
     private Vec3 facingDelta(final Transform from, final Transform to) {
-        Quaterniond unturn = new Quaterniond().rotationY(startYaw - yawOf(from));
+        Quaterniond unturn = new Quaterniond().rotationY(yawOf(startRoot) - yawOf(from));
 
-        // Subtraction is inversed since Minecraft's coord system uses positive Z as forward. The armature's own
-        // transform turns and scales it into the model space.
-        return armature.modelTransform().mulDirection(VectorUtils.rotateByQuaternion(unturn, from.loc().subtract(to.loc())));
+        // X and Z are inversed since the facing space is the model space turned by 180 degrees around Y (+Z forward,
+        // +X left). Y stays up. The armature's own transform turns and scales it into the model space.
+        Vec3 delta = new Vec3(from.loc().x - to.loc().x, to.loc().y - from.loc().y, from.loc().z - to.loc().z);
+
+        return armature.modelTransform().mulDirection(VectorUtils.rotateByQuaternion(unturn, delta));
     }
 
     /// The twist of `root` around Y, in radians.
@@ -191,6 +229,16 @@ public final class RootMotionComponent implements UniqueComponent, TickableDynam
     @Override
     public void setEnabled(final boolean enabled) {
         this.enabled = enabled;
+    }
+
+    /// Where the owner stands at the source's start, which a [CinemaScene] pins its actors to. It may move while the
+    /// source plays.
+    public interface Anchor {
+        /// The owner's place at the source's start, in world space: origin at the feet, -Z forward, +X right.
+        Transform placement();
+
+        /// Whether the owner is placed exactly, through blocks. Off, the owner moves to its place with its collision.
+        boolean ignoresBlockCollision();
     }
 
     /// One motion warping window: where it warps to, and how far it stretches the root's movement.

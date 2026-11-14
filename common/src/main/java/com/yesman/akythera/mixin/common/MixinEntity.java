@@ -1,5 +1,8 @@
 package com.yesman.akythera.mixin.common;
 
+import com.yesman.akythera.api.animation.notify.impl.NoGravityNotifyState;
+import com.yesman.akythera.api.cinema.CinemaScenePlayback;
+import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.event.BuiltInEventHooks;
 import com.yesman.akythera.api.event.entity.TickEvent;
 import com.yesman.akythera.api.lifecycle.ComponentsFactory;
@@ -7,6 +10,8 @@ import com.yesman.akythera.api.world.behavior.BehaviorTreeInstance;
 import com.yesman.akythera.api.world.behavior.BrainComponent;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.Akythera;
+import com.yesman.akythera.core.animation.driver.AnimationMontagePlayer;
+import com.yesman.akythera.core.cinema.CinemaScene;
 import com.yesman.akythera.mixinaccessor.common.EntityAccessor;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -17,6 +22,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(value = Entity.class)
 public abstract class MixinEntity implements EntityAccessor {
@@ -84,6 +90,29 @@ public abstract class MixinEntity implements EntityAccessor {
             : BrainComponent.treeOf((Entity)(Object)this);
 
         if (tree != null) tree.feelPush(pusher);
+    }
+
+    /// Takes gravity off the entity while a montage holds a [NoGravityNotifyState].
+    @Inject(at = @At(value = "HEAD"), method = "getGravity()D", cancellable = true)
+    private void akythera$noGravityInNotifyState(final CallbackInfoReturnable<Double> callbackInfo) {
+        ArmatureComponent armatureComponent = akythera$entityPatch == null ? null : akythera$entityPatch.getArmatureComponent();
+
+        if (armatureComponent == null) return;
+
+        for (AnimationMontagePlayer montagePlayer : armatureComponent.getAnimator().getMontagePlayers()) {
+            if (montagePlayer.getActiveNotifyState(NoGravityNotifyState.class) != null) {
+                callbackInfo.setReturnValue(0.0D);
+                return;
+            }
+        }
+    }
+
+    /// Keeps a [CinemaScene.Actor#ignoreBlockCollision] actor inside the blocks the scene places it in.
+    @Inject(at = @At(value = "HEAD"), method = "moveTowardsClosestSpace(DDD)V", cancellable = true)
+    private void akythera$stayInBlocksInCinemaScene(final double x, final double y, final double z, final CallbackInfo callbackInfo) {
+        CinemaScenePlayback playback = akythera$entityPatch == null ? null : akythera$entityPatch.getCinemaScenePlayback();
+
+        if (playback != null && playback.getActor().ignoreBlockCollision()) callbackInfo.cancel();
     }
 
     @Override

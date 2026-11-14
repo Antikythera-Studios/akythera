@@ -11,6 +11,7 @@ import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilit
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityTagSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundClearWidgetHuds;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundDataBlockSync;
+import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundJoinCinemaScene;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundOpenWidget;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayParticleSystem;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayAbilityCue;
@@ -40,6 +41,7 @@ public final class AkytheraPayloadTypes {
 		// client bound packets
 		CLIENT_BOUND.add(new PayloadChannel<>(ClientBoundPlayAnimMontage.TYPE, ClientBoundPlayAnimMontage.STREAM_CODEC, () -> AkytheraClientBoundPayloadHandler::handlePlayMontage));
 		CLIENT_BOUND.add(new PayloadChannel<>(ClientBoundStopAnimMontage.TYPE, ClientBoundStopAnimMontage.STREAM_CODEC, () -> AkytheraClientBoundPayloadHandler::handleStopMontage));
+		CLIENT_BOUND.add(new PayloadChannel<>(ClientBoundJoinCinemaScene.TYPE, ClientBoundJoinCinemaScene.STREAM_CODEC, () -> AkytheraClientBoundPayloadHandler::handleJoinCinemaScene));
 		CLIENT_BOUND.add(new PayloadChannel<>(ClientBoundStartRagdoll.TYPE, ClientBoundStartRagdoll.STREAM_CODEC, () -> AkytheraClientBoundPayloadHandler::handleStartRagdoll));
 		CLIENT_BOUND.add(new PayloadChannel<>(ClientBoundStopRagdoll.TYPE, ClientBoundStopRagdoll.STREAM_CODEC, () -> AkytheraClientBoundPayloadHandler::handleStopRagdoll));
 		CLIENT_BOUND.add(new PayloadChannel<>(ClientBoundRagdollImpulse.TYPE, ClientBoundRagdollImpulse.STREAM_CODEC, () -> AkytheraClientBoundPayloadHandler::handleRagdollImpulse));

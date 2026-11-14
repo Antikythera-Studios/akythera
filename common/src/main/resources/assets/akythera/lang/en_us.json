@@ -27,6 +27,8 @@
   "commands.akythera.widget.clear_huds.success": "Cleared the widget HUDs of %s player(s)",
   "commands.akythera.particle.unknown_system": "Unknown particle system: %s",
   "commands.akythera.particle.play.success": "Played particle system %s for %s player(s)",
+  "commands.akythera.cinema.unknown_scene": "Unknown cinema scene: %s",
+  "commands.akythera.cinema.play.success": "Played cinema scene %s with %s actor(s)",
   "gui.akythera.combo_box.none": "(none)",
   "gui.akythera.combo_box.search": "Search..."
 }

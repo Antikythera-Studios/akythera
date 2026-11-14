@@ -32,6 +32,7 @@ import com.yesman.akythera.core.blueprint.particle.ParticleSystemBlueprint;
 import com.yesman.akythera.core.blueprint.warping.MotionWarpTargetBlueprint;
 import com.yesman.akythera.core.blueprint.warping.MotionWarpTargetScriptBlueprint;
 import com.yesman.akythera.core.blueprint.widget.WidgetBlueprint;
+import com.yesman.akythera.core.cinema.CinemaScene;
 import com.yesman.akythera.platform.ModPlatformProvider;
 import net.minecraft.core.Registry;
 import com.yesman.akythera.api.world.ability.AbilityEffect;
@@ -79,6 +80,7 @@ public final class AkytheraRegistries {
         public static final ResourceKey<Registry<BehaviorConditionBlueprint>> BEHAVIOR_CONDITION_KEY = createRegistryKey("mob_behaviors/condition");
         public static final ResourceKey<Registry<BehaviorSubtaskBlueprint>> BEHAVIOR_SUBTASK_KEY = createRegistryKey("mob_behaviors/subtask");
         public static final ResourceKey<Registry<MotionWarpTargetScriptBlueprint>> MOTION_WARP_TARGET_KEY = createRegistryKey("motion_warp_target");
+        public static final ResourceKey<Registry<CinemaScene>> CINEMA_SCENE_KEY = createRegistryKey("cinema_scene");
 
         /// Checks across a registry's entries, run once it loads. An error fails the load the way a codec error does.
         private static final Map<ResourceKey<? extends Registry<?>>, RegistryValidator<?>> VALIDATORS = Map.of(
@@ -106,7 +108,8 @@ public final class AkytheraRegistries {
             new Registration<>(BEHAVIOR_CONDITION_KEY, BehaviorConditionBlueprint.CODEC),
             new Registration<>(BEHAVIOR_SUBTASK_KEY, BehaviorSubtaskBlueprint.CODEC),
             new Registration<>(BEHAVIOR_TREE_KEY, BehaviorTreeBlueprint.CODEC),
-            new Registration<>(MOTION_WARP_TARGET_KEY, MotionWarpTargetScriptBlueprint.CODEC)
+            new Registration<>(MOTION_WARP_TARGET_KEY, MotionWarpTargetScriptBlueprint.CODEC),
+            new Registration<>(CINEMA_SCENE_KEY, CinemaScene.CODEC)
         );
 
         static {

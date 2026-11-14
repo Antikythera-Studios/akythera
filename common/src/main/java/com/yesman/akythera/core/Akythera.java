@@ -34,6 +34,7 @@ import com.yesman.akythera.api.world.behavior.script.DataDrivenBehaviorTask;
 import com.yesman.akythera.api.world.behavior.MobBehaviorState;
 import com.yesman.akythera.commands.AbilityControlCommand;
 import com.yesman.akythera.commands.AnimatorControlCommand;
+import com.yesman.akythera.commands.CinemaControlCommand;
 import com.yesman.akythera.commands.BrainControlCommand;
 import com.yesman.akythera.commands.ParticleControlCommand;
 import com.yesman.akythera.commands.WidgetControlCommand;
@@ -233,5 +234,6 @@ public final class Akythera {
         BrainControlCommand.register(dispatcher);
         WidgetControlCommand.register(dispatcher);
         ParticleControlCommand.register(dispatcher);
+        CinemaControlCommand.register(dispatcher);
     }
 }

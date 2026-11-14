@@ -38,6 +38,7 @@
     "common.MixinPlayer",
     "common.MixinRegistryDataLoader",
     "common.MixinRegistryLoadTask",
+    "common.MixinServerGamePacketListenerImpl",
     "common.MixinServerLevel"
   ],
   "injectors": {

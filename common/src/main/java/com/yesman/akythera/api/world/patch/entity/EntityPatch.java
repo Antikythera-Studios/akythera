@@ -2,8 +2,10 @@ package com.yesman.akythera.api.world.patch.entity;
 
 import com.mojang.datafixers.util.Pair;
 import com.yesman.akythera.api.asset.AnimatableObject;
+import com.yesman.akythera.api.cinema.CinemaScenePlayback;
 import com.yesman.akythera.api.component.*;
 import com.yesman.akythera.api.component.impl.ArmatureComponent;
+import com.yesman.akythera.api.component.impl.RootMotionComponent;
 import com.yesman.akythera.api.event.BuiltInEventHooks;
 import com.yesman.akythera.api.event.entity.EntityConstructEvent;
 import com.yesman.akythera.api.event.entity.HandlePersistentDataEvent;
@@ -12,6 +14,7 @@ import com.yesman.akythera.api.world.patch.entity.component.EntityEventListener;
 import com.yesman.akythera.core.blueprint.ComponentBlueprint;
 import com.yesman.akythera.core.blueprint.EntityPatchBlueprint;
 import com.yesman.akythera.core.blueprint.script.EntityPatchScript;
+import com.yesman.akythera.core.cinema.CinemaScene;
 import com.yesman.akythera.core.networking.NetworkingHelper;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundStartRagdoll;
 import com.yesman.akythera.core.reflection.ScriptFunction;
@@ -74,6 +77,9 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
 
     /// Whether the entity's own vanilla model and its layers are skipped while this patch renders.
     private boolean blockVanillaRender;
+
+    /// This entity's part in a playing [CinemaScene], or null.
+    private @Nullable CinemaScenePlayback cinemaScenePlayback;
 
     // Constructor for hardcoded entity patches. Register components manually using
     // `BuiltInEventHooks.Entity.CONSTRUCTED` event in subclasses.
@@ -262,6 +268,8 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
             }
         });
 
+        if (cinemaScenePlayback != null && cinemaScenePlayback.tick(this)) setCinemaScenePlayback(null);
+
         if (script != null) script.update();
 	}
 
@@ -339,6 +347,23 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
     """)
     public void setBlockVanillaRender(final boolean blockVanillaRender) {
         this.blockVanillaRender = blockVanillaRender;
+    }
+
+    public @Nullable CinemaScenePlayback getCinemaScenePlayback() {
+        return cinemaScenePlayback;
+    }
+
+    /// Takes a part in a [CinemaScene], replacing the one it had. Null leaves the scene, which gives the armature's
+    /// root motion back to its own steps.
+    public void setCinemaScenePlayback(final @Nullable CinemaScenePlayback playback) {
+        cinemaScenePlayback = playback;
+
+        if (playback != null) return;
+
+        ArmatureComponent armatureComponent = getArmatureComponent();
+        RootMotionComponent rootMotion = armatureComponent == null ? null : armatureComponent.getComponent(RootMotionComponent.class);
+
+        if (rootMotion != null) rootMotion.setAnchor(null);
     }
 
     /// Returns a dynamic event listener manager

@@ -1,6 +1,7 @@
 package com.yesman.akythera.client.api.camera;
 
 import com.yesman.akythera.api.component.ComponentAttachable;
+import com.yesman.akythera.api.cinema.CinemaScenePlayback;
 import com.yesman.akythera.api.component.DynamicPatchComponent;
 import com.yesman.akythera.api.component.TickableComponent;
 import com.yesman.akythera.api.component.TransformComponent;
@@ -10,6 +11,7 @@ import com.yesman.akythera.api.component.impl.SpringArmComponent;
 import com.yesman.akythera.api.world.patch.AkytheraPatches;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
+import com.yesman.akythera.core.cinema.CinemaScene;
 import com.yesman.akythera.core.math.Transform;
 import com.yesman.akythera.core.reflection.ScriptFunction;
 import com.yesman.akythera.core.reflection.ScriptType;
@@ -17,7 +19,9 @@ import com.yesman.akythera.core.util.ClientOnly;
 import com.yesman.akythera.core.util.helper.MathUtils;
 import com.yesman.akythera.core.util.helper.VectorUtils;
 import net.minecraft.client.Camera;
+import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.Options;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -52,6 +56,10 @@ import java.util.Objects;
 ///
 /// In first person the view is the player's own, and the component only follows the player's rotation. While the
 /// player's turn is locked the camera looks around on its own, and the player turns to it once the lock ends.
+///
+/// While the patch plays a [CinemaScene] whose actor has camera keys, the third person camera sits where the keys put
+/// it, looking along its -Z, whatever the view rotation and the arm are. A [CinemaScene.Camera#forceThirdPerson] track
+/// switches the view to third person while the scene plays, and back once it ends.
 @ClientOnly @ScriptType
 public final class CameraComponent implements UniqueComponent, TransformComponent, TickableComponent, DynamicPatchComponent<ComponentAttachable> {
     /// Share of the remaining turn toward a lock target taken each tick.
@@ -83,6 +91,9 @@ public final class CameraComponent implements UniqueComponent, TransformComponen
 
     /// Whether the camera held the view in the last tick.
     private boolean heldView;
+
+    /// The view before a [CinemaScene] forced third person, or null while none does.
+    private @Nullable CameraType cameraTypeBeforeScene;
 
     /// The location the camera is locked to look at, in world space. Null while unlocked or locked to an entity.
     private @Nullable Vec3 lockLocation;
@@ -351,6 +362,11 @@ public final class CameraComponent implements UniqueComponent, TransformComponen
     /// pivot, and from `eyes`, the player's eyes `eyeHeight` above its feet, anywhere else.
     @ApiStatus.Internal
     public Transform place(final Level level, final Vec3 eyes, final float eyeHeight, final float partialTick, final Quaternionfc rotation) {
+        CinemaScenePlayback cinemaScene = getPatch().getCinemaScenePlayback();
+        Transform directed = cinemaScene == null ? null : cinemaScene.cameraTransform(getPatch(), partialTick);
+
+        if (directed != null) return directed;
+
         Vec3 loc = localTransform.loc();
         SpringArmComponent arm = owner instanceof SpringArmComponent springArm ? springArm : null;
         Transform armPivot = arm == null ? null : arm.pivotWorldTransform(partialTick, getViewYRot(partialTick));
@@ -420,6 +436,16 @@ public final class CameraComponent implements UniqueComponent, TransformComponen
         if (ofLocalPlayer() != this) return;
 
         Entity avatar = getPatch().getOriginal();
+        Options options = Minecraft.getInstance().options;
+        CinemaScenePlayback cinemaScene = getPatch().getCinemaScenePlayback();
+
+        if (cinemaScene != null && cinemaScene.getActor().camera().forceThirdPerson()) {
+            if (cameraTypeBeforeScene == null) cameraTypeBeforeScene = options.getCameraType();
+            if (options.getCameraType().isFirstPerson()) options.setCameraType(CameraType.THIRD_PERSON_BACK);
+        } else if (cameraTypeBeforeScene != null) {
+            options.setCameraType(cameraTypeBeforeScene);
+            cameraTypeBeforeScene = null;
+        }
 
         if (!holdsView()) {
             // Back in first person, or out of a turn lock, the player looks where the camera did

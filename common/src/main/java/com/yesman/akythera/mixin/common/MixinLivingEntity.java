@@ -4,6 +4,7 @@ import com.yesman.akythera.api.animation.animator.Animator;
 import com.yesman.akythera.api.animation.notify.impl.CancelOnMoveNotifyState;
 import com.yesman.akythera.api.animation.notify.impl.ExtendDeathTimeNotifyState;
 import com.yesman.akythera.api.animation.notify.impl.LockMovementNotifyState;
+import com.yesman.akythera.api.cinema.CinemaScenePlayback;
 import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.component.impl.RootMotionComponent;
 import com.yesman.akythera.api.event.BuiltInEventHooks;
@@ -14,6 +15,7 @@ import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
 import com.yesman.akythera.api.world.patch.entity.component.EntityMovementComponent;
 import com.yesman.akythera.core.animation.driver.AnimationMontagePlayer;
+import com.yesman.akythera.core.cinema.CinemaScene;
 import com.yesman.akythera.mixinaccessor.common.EntityAccessor;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -167,6 +169,26 @@ public abstract class MixinLivingEntity {
     @Inject(at = @At(value = "HEAD"), method = "isPushable()Z", cancellable = true)
     private void akythera$unpushableInRagdoll(final CallbackInfoReturnable<Boolean> callbackInfo) {
         if (akythera$isRagdollRunning()) callbackInfo.setReturnValue(false);
+    }
+
+    /// Stops other entities from pushing a [CinemaScene.Actor#ignoreEntityCollision] actor.
+    @Inject(at = @At(value = "HEAD"), method = "isPushable()Z", cancellable = true)
+    private void akythera$unpushableInCinemaScene(final CallbackInfoReturnable<Boolean> callbackInfo) {
+        if (akythera$ignoresEntityCollision()) callbackInfo.setReturnValue(false);
+    }
+
+    /// Stops a [CinemaScene.Actor#ignoreEntityCollision] actor from pushing other entities.
+    @Inject(at = @At(value = "HEAD"), method = "pushEntities()V", cancellable = true)
+    private void akythera$pushNothingInCinemaScene(final CallbackInfo callbackInfo) {
+        if (akythera$ignoresEntityCollision()) callbackInfo.cancel();
+    }
+
+    /// Whether the entity plays a [CinemaScene.Actor#ignoreEntityCollision] actor.
+    @Unique
+    private boolean akythera$ignoresEntityCollision() {
+        CinemaScenePlayback playback = ((EntityAccessor)this).akythera$getEntityPatch() instanceof EntityPatch<?> patch ? patch.getCinemaScenePlayback() : null;
+
+        return playback != null && playback.getActor().ignoreEntityCollision();
     }
 
     /// Posts [BuiltInEventHooks.Entity#DEATH] on the first death tick.

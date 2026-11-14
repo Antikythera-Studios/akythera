@@ -1,8 +1,10 @@
 package com.yesman.akythera.client.api.particle;
 
 import com.yesman.akythera.api.component.impl.MovementComponent;
+import com.yesman.akythera.core.util.helper.QuaternionUtils;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Quaterniond;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
@@ -20,6 +22,16 @@ public final class ParticleMovementComponent implements MovementComponent {
     // ***************************************************************
     // MovementComponent
     // ***************************************************************
+
+    @Override
+    public Vec3 position() {
+        return particle.getPosition();
+    }
+
+    @Override
+    public float yRot() {
+        return -(float)Math.toDegrees(QuaternionUtils.toSwingTwist(new Quaterniond(particle.getRotation())).y);
+    }
 
     @Override
     public void moveTo(final Vec3 position) {

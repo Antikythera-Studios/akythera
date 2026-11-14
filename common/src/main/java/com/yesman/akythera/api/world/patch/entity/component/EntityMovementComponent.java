@@ -47,6 +47,16 @@ public final class EntityMovementComponent implements MovementComponent, Dynamic
     // ***************************************************************
 
     @Override
+    public Vec3 position() {
+        return owner.getOriginal().position();
+    }
+
+    @Override
+    public float yRot() {
+        return owner.getOriginal().getYRot();
+    }
+
+    @Override
     public void moveTo(final Vec3 position) {
         owner.getOriginal().setPos(position);
     }
