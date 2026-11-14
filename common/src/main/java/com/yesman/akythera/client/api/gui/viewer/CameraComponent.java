@@ -208,8 +208,32 @@ public final class CameraComponent implements Model3DViewerComponent {
         return yRot;
     }
 
+    /// The distance from the camera to the focus the camera eases toward, in blocks.
+    public double getTargetDistance() {
+        return -targetZoom;
+    }
+
+    /// The pitch the camera eases toward, in degrees. Positive looks down.
+    public float getTargetXRot() {
+        return targetXRot;
+    }
+
+    /// The yaw the camera eases toward, in degrees. 180 looks at the front of a model facing -Z.
+    public float getTargetYRot() {
+        return targetYRot;
+    }
+
+    /// The point the camera eases toward orbiting, in world space.
+    public Vector3f getTargetFocus() {
+        return new Vector3f(targetFocus);
+    }
+
     public ViewMode getViewMode() {
         return viewMode;
+    }
+
+    public void setViewMode(final ViewMode viewMode) {
+        this.viewMode = viewMode;
     }
 
     /// Whether the right mouse button is held, which is what lets the movement keys fly the camera.
