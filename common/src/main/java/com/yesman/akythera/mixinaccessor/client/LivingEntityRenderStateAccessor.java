@@ -1,6 +1,7 @@
 package com.yesman.akythera.mixinaccessor.client;
 
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.client.api.component.impl.OverlayRendererComponent;
 import com.yesman.akythera.client.core.renderer.PatchModelRenderer;
 import com.yesman.akythera.client.core.renderer.collider.ColliderDebugRenderer;
 import net.minecraft.client.renderer.item.ItemStackRenderState;
@@ -22,6 +23,11 @@ public interface LivingEntityRenderStateAccessor {
     void akythera$setModelDraw(PatchModelRenderer.@Nullable ModelDraw modelDraw);
 
     PatchModelRenderer.@Nullable ModelDraw akythera$getModelDraw();
+
+    /// The patch's overlay particles, or null when it keeps none this frame.
+    @Nullable OverlayRendererComponent akythera$getOverlayRenderer();
+
+    void akythera$setOverlayRenderer(@Nullable OverlayRendererComponent overlayRenderer);
 
     /// Whether the entity's own vanilla model and its layers are skipped this frame, see
     /// [EntityPatch#isBlockingVanillaRender].

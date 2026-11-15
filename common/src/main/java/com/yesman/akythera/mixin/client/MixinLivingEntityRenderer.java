@@ -4,12 +4,15 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.world.patch.AkytheraPatches;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.client.api.component.impl.OverlayRendererComponent;
+import com.yesman.akythera.client.api.particle.AkytheraOverlayParticle;
 import com.yesman.akythera.client.core.renderer.PatchModelRenderer;
 import com.yesman.akythera.client.core.renderer.collider.ColliderDebugRenderer;
 import com.yesman.akythera.mixinaccessor.client.LivingEntityRenderStateAccessor;
 import com.mojang.math.Axis;
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.model.Model;
+import net.minecraft.client.renderer.OrderedSubmitNodeCollector;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.layers.ItemInHandLayer;
@@ -19,6 +22,7 @@ import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.client.renderer.feature.ModelFeatureRenderer;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.world.entity.LivingEntity;
 import org.jspecify.annotations.Nullable;
@@ -53,12 +57,14 @@ public abstract class MixinLivingEntityRenderer<T extends LivingEntity, S extend
         renderables.clear();
         colliders.clear();
         stateAccessor.akythera$setModelDraw(null);
+        stateAccessor.akythera$setOverlayRenderer(null);
         stateAccessor.akythera$setVanillaModelHidden(false);
         stateAccessor.akythera$setArmaturePlaced(false);
 
         AkytheraPatches.getEntityPatchOptional(entity).ifPresent(entityPatch -> {
             PatchModelRenderer.collect(entityPatch, null, renderables);
             PatchModelRenderer.extract(renderables, entityPatch, state, partialTick);
+            stateAccessor.akythera$setOverlayRenderer(entityPatch.getComponent(OverlayRendererComponent.class));
             stateAccessor.akythera$setVanillaModelHidden(entityPatch.isBlockingVanillaRender());
             stateAccessor.akythera$setArmaturePlaced(entityPatch.getArmatureComponent() != null);
 
@@ -126,7 +132,8 @@ public abstract class MixinLivingEntityRenderer<T extends LivingEntity, S extend
     }
 
     /// Hands the entity's own model draw to the patch's renderables, and submits the rest of them
-    /// alongside it. The vanilla submit is skipped while [EntityPatch#isBlockingVanillaRender] holds.
+    /// alongside it. The vanilla submit is skipped while [EntityPatch#isBlockingVanillaRender] holds, and is
+    /// followed by one more for each live overlay of the patch's [OverlayRendererComponent].
     @Redirect(
         method = "submit(Lnet/minecraft/client/renderer/entity/state/LivingEntityRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;Lnet/minecraft/client/renderer/state/level/CameraRenderState;)V",
         at = @At(
@@ -147,32 +154,44 @@ public abstract class MixinLivingEntityRenderer<T extends LivingEntity, S extend
         final int outlineColor,
         final ModelFeatureRenderer.@Nullable CrumblingOverlay crumblingOverlay
     ) {
-        if (renderState instanceof LivingEntityRenderState livingState) {
-            LivingEntityRenderStateAccessor stateAccessor = (LivingEntityRenderStateAccessor) livingState;
-            List<PatchModelRenderer.RenderableSubmit> renderables = stateAccessor.akythera$getRenderables();
-            boolean vanillaModelHidden = stateAccessor.akythera$isVanillaModelHidden();
+        if (!(renderState instanceof LivingEntityRenderState livingState)) {
+            collector.submitModel(
+                model, renderState, poseStack, renderType, lightCoords, overlayCoords, tintedColor, sprite, outlineColor, crumblingOverlay
+            );
 
-            if (!renderables.isEmpty() || vanillaModelHidden) {
-                stateAccessor.akythera$setModelDraw(
-                    new PatchModelRenderer.ModelDraw(renderType, overlayCoords, tintedColor)
-                );
+            return;
+        }
 
-                if (!vanillaModelHidden) {
-                    collector.submitModel(
-                        model, renderState, poseStack, renderType, lightCoords, overlayCoords, tintedColor, sprite, outlineColor, crumblingOverlay
+        LivingEntityRenderStateAccessor stateAccessor = (LivingEntityRenderStateAccessor) livingState;
+        List<PatchModelRenderer.RenderableSubmit> renderables = stateAccessor.akythera$getRenderables();
+        boolean vanillaModelHidden = stateAccessor.akythera$isVanillaModelHidden();
+
+        if (!vanillaModelHidden) {
+            collector.submitModel(
+                model, renderState, poseStack, renderType, lightCoords, overlayCoords, tintedColor, sprite, outlineColor, crumblingOverlay
+            );
+
+            OverlayRendererComponent overlayRenderer = stateAccessor.akythera$getOverlayRenderer();
+
+            if (overlayRenderer != null) {
+                OrderedSubmitNodeCollector afterModel = collector.order(1);
+
+                for (AkytheraOverlayParticle overlay : overlayRenderer.getOverlays()) {
+                    afterModel.submitModel(
+                        model, renderState, poseStack, overlay.renderType(), overlay.lightCoords(lightCoords), OverlayTexture.NO_OVERLAY, overlay.color(), null, 0, null
                     );
                 }
-
-                PatchModelRenderer.submit(renderables, poseStack, collector, lightCoords, livingState);
-                ColliderDebugRenderer.submit(stateAccessor.akythera$getColliders(), poseStack, collector);
-
-                return;
             }
         }
 
-        collector.submitModel(
-            model, renderState, poseStack, renderType, lightCoords, overlayCoords, tintedColor, sprite, outlineColor, crumblingOverlay
-        );
+        if (!renderables.isEmpty() || vanillaModelHidden) {
+            stateAccessor.akythera$setModelDraw(
+                new PatchModelRenderer.ModelDraw(renderType, overlayCoords, tintedColor)
+            );
+
+            PatchModelRenderer.submit(renderables, poseStack, collector, lightCoords, livingState);
+            ColliderDebugRenderer.submit(stateAccessor.akythera$getColliders(), poseStack, collector);
+        }
     }
 
     /// Drops the vanilla layers a patched entity never wants: every layer of one whose vanilla model is

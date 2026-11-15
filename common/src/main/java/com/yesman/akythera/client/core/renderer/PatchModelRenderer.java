@@ -4,6 +4,8 @@ import com.mojang.blaze3d.IndexType;
 import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
+import com.mojang.blaze3d.pipeline.DepthStencilState;
+import com.mojang.blaze3d.platform.CompareOp;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.yesman.akythera.api.asset.AssetAccessor;
@@ -149,6 +151,9 @@ public final class PatchModelRenderer {
     private final Map<RenderType, List<SkinnedSubmit>> solidSubmits = new LinkedHashMap<>();
     private final Map<RenderType, List<SkinnedSubmit>> translucentSubmits = new LinkedHashMap<>();
 
+    /// The draws that color only what an earlier draw left in the depth buffer, drawn after the rest.
+    private final Map<RenderType, List<SkinnedSubmit>> overlaySubmits = new LinkedHashMap<>();
+
     /// Scratch the bound skeleton is resolved into. Consumed within [#buildContext] before the next
     /// call, so one array serves every entity.
     private Matrix4f[] boundTransforms = Matrix4fUtils.allocateMatrixArray(0);
@@ -183,8 +188,7 @@ public final class PatchModelRenderer {
         SkinnedDrawContext context = buildContext(mesh, armature, animationPose, pose, packedLight, packedOverlay, color, outlineColor);
         SkinnedSubmit submit = new SkinnedSubmit(setup, () -> setup.skin(context), outlineColor);
 
-        Map<RenderType, List<SkinnedSubmit>> bucket = renderType.hasBlending() ? translucentSubmits : solidSubmits;
-        bucket.computeIfAbsent(renderType, _ -> new ArrayList<>()).add(submit);
+        bucketOf(renderType).computeIfAbsent(renderType, _ -> new ArrayList<>()).add(submit);
     }
 
     /// Queues a simulated cloth draw for `owner`, creating or replacing its instance when `setup`
@@ -219,8 +223,7 @@ public final class PatchModelRenderer {
             outlineColor
         );
 
-        Map<RenderType, List<SkinnedSubmit>> bucket = renderType.hasBlending() ? translucentSubmits : solidSubmits;
-        bucket.computeIfAbsent(renderType, _ -> new ArrayList<>()).add(submit);
+        bucketOf(renderType).computeIfAbsent(renderType, _ -> new ArrayList<>()).add(submit);
     }
 
     /// Skins `mesh` and draws it on the spot instead of queueing it, for callers outside the
@@ -273,11 +276,13 @@ public final class PatchModelRenderer {
 
     public void renderTranslucent() {
         render(translucentSubmits);
+        render(overlaySubmits);
     }
 
     public void clear() {
         solidSubmits.values().forEach(List::clear);
         translucentSubmits.values().forEach(List::clear);
+        overlaySubmits.values().forEach(List::clear);
     }
 
     public void endFrame() {
@@ -300,6 +305,15 @@ public final class PatchModelRenderer {
     public void releaseClothInstances() {
         clothInstances.values().forEach(ClothSimulationInstance::close);
         clothInstances.clear();
+    }
+
+    /// The queue a draw through `renderType` waits in: [#overlaySubmits] for one that tests depth for equality.
+    private Map<RenderType, List<SkinnedSubmit>> bucketOf(final RenderType renderType) {
+        DepthStencilState depthStencil = renderType.pipeline().getDepthStencilState();
+
+        if (depthStencil != null && depthStencil.depthTest() == CompareOp.EQUAL) return overlaySubmits;
+
+        return renderType.hasBlending() ? translucentSubmits : solidSubmits;
     }
 
     private DynamicStorageBuffer frameStorage() {

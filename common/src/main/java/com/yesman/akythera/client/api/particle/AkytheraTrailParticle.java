@@ -121,7 +121,7 @@ public class AkytheraTrailParticle extends Particle implements AkytheraParticle 
 
         if (sampling) {
             AkytheraParticleSystem system = getEmitter().getSystem();
-            Transform head = attachment == null ? system.getTransform() : attachment.worldTransform(level, partialTick);
+            Transform head = attachment == null || !attachment.follow() ? system.getTransform() : attachment.worldTransform(level, partialTick);
             float end = Math.min(now, endTick);
 
             if (head == null) {

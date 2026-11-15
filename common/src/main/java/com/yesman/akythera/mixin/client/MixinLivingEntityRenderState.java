@@ -1,5 +1,6 @@
 package com.yesman.akythera.mixin.client;
 
+import com.yesman.akythera.client.api.component.impl.OverlayRendererComponent;
 import com.yesman.akythera.client.core.renderer.PatchModelRenderer;
 import com.yesman.akythera.client.core.renderer.collider.ColliderDebugRenderer;
 import com.yesman.akythera.mixinaccessor.client.LivingEntityRenderStateAccessor;
@@ -26,6 +27,9 @@ public abstract class MixinLivingEntityRenderState implements LivingEntityRender
 
     @Unique
     private PatchModelRenderer.@Nullable ModelDraw epicfight$modelDraw;
+
+    @Unique
+    private @Nullable OverlayRendererComponent akythera$overlayRenderer;
 
     @Unique
     private boolean akythera$vanillaModelHidden;
@@ -55,6 +59,16 @@ public abstract class MixinLivingEntityRenderState implements LivingEntityRender
     @Unique @Override
     public PatchModelRenderer.@Nullable ModelDraw akythera$getModelDraw() {
         return epicfight$modelDraw;
+    }
+
+    @Unique @Override
+    public @Nullable OverlayRendererComponent akythera$getOverlayRenderer() {
+        return akythera$overlayRenderer;
+    }
+
+    @Unique @Override
+    public void akythera$setOverlayRenderer(@Nullable OverlayRendererComponent overlayRenderer) {
+        akythera$overlayRenderer = overlayRenderer;
     }
 
     @Unique @Override

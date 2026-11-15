@@ -17,7 +17,9 @@ import java.util.stream.Stream;
 /// @param particle               a particle piece, or a vanilla particle type spawned as
 ///                               [SpriteParticleBlueprint#ofVanilla]
 /// @param start                  when the emitter starts, in seconds since the system started
-/// @param hideParticlesOnFinish  whether the emitter removes the particles it spawned when it finishes
+/// @param hideParticlesOnFinish  whether the emitter removes the particles it spawned when it finishes. An emitter
+///                               whose spawn rule has no time span then runs until its particles are gone or its
+///                               system stops
 /// @param pivot                  the space the emitter's transform is in, in its system's space, while `pivotKeys` is
 ///                               empty. Turning it swings the emitter around it
 /// @param transform              the emitter's transform in the pivot's space, while `transformKeys` is empty

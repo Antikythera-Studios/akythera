@@ -17,8 +17,8 @@ import org.jspecify.annotations.NullMarked;
 import java.util.Optional;
 
 /// Plays a [ParticleSystemBlueprint] at `position`, with `parameters` decoded by the types the blueprint declares.
-/// With an `attachment`, the system starts on that socket instead and follows it; `position` is where it plays when
-/// the client can't find the socket.
+/// With an `attachment` to follow, the system starts on that socket instead and follows it; `position` is where it
+/// plays when the client can't find the socket. With one not to follow, the system plays at `position`.
 @NullMarked
 public record ClientBoundPlayParticleSystem(
     ResourceKey<ParticleSystemBlueprint> system,

@@ -22,6 +22,7 @@ import com.yesman.akythera.client.api.particle.module.TrailLengthUpdater;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.blueprint.particle.EmitterSpawnRule;
 import com.yesman.akythera.core.blueprint.particle.InstantSpawnRule;
+import com.yesman.akythera.core.blueprint.particle.OverlayParticleBlueprint;
 import com.yesman.akythera.core.blueprint.particle.ParticleBlueprint;
 import com.yesman.akythera.core.blueprint.particle.ParticleInitializerBlueprint;
 import com.yesman.akythera.core.blueprint.particle.ParticleUpdaterBlueprint;
@@ -59,7 +60,9 @@ public final class AkytheraParticleTypes {
 
     public static final Holder<MapCodec<? extends ParticleBlueprint>> TRAIL = REGISTRAR.register("trail", () -> TrailParticleBlueprint.MAP_CODEC);
 
-    public static final Holder<MapCodec<? extends EmitterSpawnRule>> INSTANT = SPAWN_RULE_REGISTRAR.register("instant", () -> InstantSpawnRule.MAP_CODEC);
+    public static final Holder<MapCodec<? extends ParticleBlueprint>> OVERLAY = REGISTRAR.register("overlay", () -> OverlayParticleBlueprint.MAP_CODEC);
+
+    public static final Holder<MapCodec<? extends EmitterSpawnRule>> INSTANT =SPAWN_RULE_REGISTRAR.register("instant", () -> InstantSpawnRule.MAP_CODEC);
 
     public static final Holder<MapCodec<? extends EmitterSpawnRule>> SPAWN_RATE = SPAWN_RULE_REGISTRAR.register("spawn_rate", () -> SpawnRateRule.MAP_CODEC);
 

@@ -21,14 +21,23 @@ import org.jspecify.annotations.Nullable;
 ///                   `<slot>/<path>` for a component of the item in that [EquipmentSlot] (`mainhand/blade_tip`, see
 ///                   [LivingEntityPatch#getComponentAt]), where `<path>` is under the item patch, or empty for the entity's root
 ///                   ([EntityPatch#getModelTransform])
-public record ParticleAttachment(int entityId, String socketPath) {
+/// @param follow     whether the system moves with the component. A system that does not stays where it was played,
+///                   and only its overlay particles are tied to the entity
+public record ParticleAttachment(int entityId, String socketPath, boolean follow) {
     public static final StreamCodec<ByteBuf, ParticleAttachment> STREAM_CODEC = StreamCodec.composite(
         ByteBufCodecs.VAR_INT,
         ParticleAttachment::entityId,
         ByteBufCodecs.STRING_UTF8,
         ParticleAttachment::socketPath,
+        ByteBufCodecs.BOOL,
+        ParticleAttachment::follow,
         ParticleAttachment::new
     );
+
+    /// An attachment the system follows.
+    public ParticleAttachment(final int entityId, final String socketPath) {
+        this(entityId, socketPath, true);
+    }
 
     /// The component's transform in world space with the entity placed as it is drawn `partialTick` after its last tick,
     /// or null when the entity, its patch or the component is gone. An item patch's component is the one the slot's

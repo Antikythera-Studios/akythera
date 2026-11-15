@@ -23,8 +23,8 @@ import java.util.function.Function;
 public class AkytheraParticleSystem extends NoRenderParticle {
     private final ParticleSystemBlueprint blueprint;
 
-    /// The socket the system follows, or null for a system that stays where it was played. The system stops once the
-    /// socket is gone.
+    /// The socket the system is attached to, or null for a system attached to nothing. A system that follows it
+    /// ([ParticleAttachment#follow]) stops once the socket is gone.
     private final @Nullable ParticleAttachment attachment;
 
     /// The system's transform in world space.
@@ -86,12 +86,12 @@ public class AkytheraParticleSystem extends NoRenderParticle {
         this.emitters = blueprint.emitters().stream().map(emitter -> new AkytheraParticleEmitter(this, emitter)).toList();
     }
 
-    /// Follows the attachment, stopping once its socket is gone, then ticks the emitters.
+    /// Follows the attachment when it asks to, stopping once its socket is gone, then ticks the emitters.
     @Override
     public void tick() {
         previousTransform = transform;
 
-        if (attachment != null) {
+        if (attachment != null && attachment.follow()) {
             Transform socketTransform = attachment.worldTransform(level, 1.0F);
 
             if (socketTransform == null) {

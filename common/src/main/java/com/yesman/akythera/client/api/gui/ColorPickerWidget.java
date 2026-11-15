@@ -29,7 +29,9 @@ public class ColorPickerWidget extends AbstractWidget implements AnchoredWidget,
     private static final int CHECKER = 4;
 
     protected final Font font;
-    private RGBA value = new RGBA(1.0F, 1.0F, 1.0F);
+    private static final RGBA UNSET = new RGBA(1.0F, 1.0F, 1.0F); // white
+
+    private RGBA value = UNSET;
 
     /// Called when a selector that changed the color closes, with the color it opened on and the one it closed on.
     /// Null calls nothing.
@@ -69,10 +71,10 @@ public class ColorPickerWidget extends AbstractWidget implements AnchoredWidget,
         return value;
     }
 
-    /// Sets the color without calling the change callback.
+    /// Sets the color without calling the change callback. Null, a color not picked yet, shows as [#UNSET].
     @ScriptFunction
-    public void setValue(final RGBA value) {
-        this.value = value;
+    public void setValue(final @Nullable RGBA value) {
+        this.value = value == null ? UNSET : value;
     }
 
     /// Sets [#onCommitted].

@@ -12,6 +12,7 @@ import com.yesman.akythera.core.blueprint.particle.ParticleSystemBlueprint;
 import com.yesman.akythera.core.networking.NetworkingHelper;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayParticleSystem;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
+import com.yesman.akythera.core.util.helper.ParseUtils;
 import com.yesman.akythera.generated.LangKeys;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -51,9 +52,11 @@ public class ParticleControlCommand {
                         )
                         .then(Commands.literal("attach")
                             .then(Commands.argument("entity", EntityArgument.entity())
+                                .executes(context -> play(context, attachedTarget(context, null), new CompoundTag(), null))
+                                .then(paramsAndViewers(context -> attachedTarget(context, null)))
                                 .then(Commands.argument("socket", StringArgumentType.string())
-                                    .executes(context -> play(context, attachedTarget(context), new CompoundTag(), null))
-                                    .then(paramsAndViewers(ParticleControlCommand::attachedTarget))
+                                    .executes(context -> play(context, attachedTarget(context, StringArgumentType.getString(context, "socket")), new CompoundTag(), null))
+                                    .then(paramsAndViewers(context -> attachedTarget(context, StringArgumentType.getString(context, "socket"))))
                                 )
                             )
                         )
@@ -73,11 +76,12 @@ public class ParticleControlCommand {
             );
     }
 
-    /// The `attach <entity> <socket>` target: the entity's position, and its socket to follow.
-    private static Target attachedTarget(final CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+    /// The `attach <entity> [<socket>]` target: the entity's position, and its socket to follow. With a null
+    /// `socketPath` the play stays at that position, attached to the entity for its overlay particles alone.
+    private static Target attachedTarget(final CommandContext<CommandSourceStack> context, final @Nullable String socketPath) throws CommandSyntaxException {
         Entity entity = EntityArgument.getEntity(context, "entity");
 
-        return new Target(entity.position(), new ParticleAttachment(entity.getId(), StringArgumentType.getString(context, "socket")));
+        return new Target(entity.position(), new ParticleAttachment(entity.getId(), ParseUtils.nvl(socketPath, ""), socketPath != null));
     }
 
     /// Plays the system at `target` for `viewers`, or for the players whose clients track the chunk the target's
@@ -107,7 +111,7 @@ public class ParticleControlCommand {
         return receivers.size();
     }
 
-    /// Where a play starts, and the socket it follows, or null for a play that stays put.
+    /// Where a play starts, and what it is attached to, or null for a play attached to nothing.
     private record Target(Vec3 pos, @Nullable ParticleAttachment attachment) {
     }
 

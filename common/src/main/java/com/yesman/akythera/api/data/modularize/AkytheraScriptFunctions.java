@@ -160,6 +160,7 @@ public final class AkytheraScriptFunctions {
             ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.particle.AkytheraMeshParticle", "Particle/Mesh", ScriptFunction.Usage.SCRIPT);
             ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.particle.AkytheraStaticMeshParticle", "Particle/Mesh", ScriptFunction.Usage.SCRIPT);
             ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.particle.AkytheraSkeletalMeshParticle", "Particle/Mesh", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.component.impl.OverlayRendererComponent", "Particle/Overlay", ScriptFunction.Usage.SCRIPT);
             ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.particle.module.ParticleInitializerModule", "Particle", ScriptFunction.Usage.SCRIPT);
             ScriptModularizeHelper.scanClientScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, "com.yesman.akythera.client.api.particle.module.ParticleUpdateModule", "Particle", ScriptFunction.Usage.SCRIPT);
 

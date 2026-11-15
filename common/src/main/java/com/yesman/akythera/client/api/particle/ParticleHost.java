@@ -1,5 +1,9 @@
 package com.yesman.akythera.client.api.particle;
 
+import com.yesman.akythera.api.world.patch.AkytheraPatches;
+import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.client.api.component.impl.OverlayRendererComponent;
+import com.yesman.akythera.core.blueprint.particle.ParticleAttachment;
 import com.yesman.akythera.core.blueprint.particle.ParticleBlueprint;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
@@ -25,12 +29,26 @@ public interface ParticleHost {
         public @Nullable ParticleBlueprint piece(final ResourceKey<ParticleBlueprint> key) {
             return StaticRegistryAccess.getRegistryAccess().lookupOrThrow(AkytheraRegistries.DataPack.PARTICLE_PIECE_KEY).getValue(key);
         }
+
+        @Override
+        public @Nullable OverlayRendererComponent overlayRenderer(final AkytheraParticleSystem system) {
+            ParticleAttachment attachment = system.getAttachment();
+            EntityPatch<?> patch = attachment == null ? null : AkytheraPatches.getEntityPatch(system.getLevel().getEntity(attachment.entityId()));
+
+            return patch == null ? null : patch.getComponent(OverlayRendererComponent.class);
+        }
     };
 
     void add(AkytheraParticle particle);
 
     /// The piece `key` names, or null when there is none.
     @Nullable ParticleBlueprint piece(ResourceKey<ParticleBlueprint> key);
+
+    /// Where the overlay particles of `system` are kept, or null when the system has nothing to draw over, which is
+    /// the default.
+    default @Nullable OverlayRendererComponent overlayRenderer(final AkytheraParticleSystem system) {
+        return null;
+    }
 
     /// The part of `motion` a particle with physics, whose bounding box is `box`, moves before it hits something. Only
     /// asked for a system with no level. Nothing blocks by default.

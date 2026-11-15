@@ -13,6 +13,7 @@ import com.yesman.akythera.api.data.modularize.node.ScriptRecorder;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.client.api.component.RenderableComponent;
 import com.yesman.akythera.client.api.lifecycle.ClientComponentsFactory;
+import com.yesman.akythera.client.api.particle.AkytheraOverlayParticle;
 import com.yesman.akythera.client.core.asset.mesh.Mesh;
 import com.yesman.akythera.client.core.asset.mesh.SkeletalMesh;
 import com.yesman.akythera.client.core.asset.physics.ClothPhysicsData;
@@ -28,6 +29,7 @@ import com.yesman.akythera.core.math.Transform;
 import com.yesman.akythera.core.util.helper.Matrix4fUtils;
 import com.yesman.akythera.mixinaccessor.client.LivingEntityRenderStateAccessor;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.OrderedSubmitNodeCollector;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.layers.RenderLayer;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
@@ -46,6 +48,8 @@ import org.jspecify.annotations.Nullable;
 /// A [SkeletalMesh] is skinned by [#armature]—the armature this component hangs off, not the patch's
 /// first—and sits in that armature's space, not its host's; one carrying [ClothPhysicsData] is
 /// simulated on top of that. [PatchModelRenderer] places either kind at its [#modelTransform].
+///
+/// The live overlays of its owner's [OverlayRendererComponent] draw it again, after its own draw.
 ///
 /// Instantiated per host by [MeshComponentBlueprint], so a mesh can grow per-instance state its
 /// blueprint does not carry—a cloth's simulation is keyed by this instance, and so is its switch.
@@ -180,10 +184,42 @@ public final class MeshComponent implements RenderableComponent<LivingEntityRend
 
         if (resolved == null) return;
 
-        RenderType renderType = resolveRenderType(modelDraw);
         int color = resolveColor();
-        int tintedColor = ARGB.multiply(modelDraw.tintedColor(), color);
 
+        draw(
+            poseStack, submitNodeCollector, resolved, resolveRenderType(modelDraw), lightCoords, modelDraw.overlayCoords(),
+            color, ARGB.multiply(modelDraw.tintedColor(), color), state.outlineColor
+        );
+
+        OverlayRendererComponent overlayRenderer = ((LivingEntityRenderStateAccessor) state).akythera$getOverlayRenderer();
+
+        if (overlayRenderer == null) return;
+
+        OrderedSubmitNodeCollector afterModel = submitNodeCollector.order(1);
+
+        for (AkytheraOverlayParticle overlay : overlayRenderer.getOverlays()) {
+            draw(
+                poseStack, afterModel, resolved, overlay.renderType(), overlay.lightCoords(lightCoords), OverlayTexture.NO_OVERLAY,
+                overlay.color(), overlay.color(), 0
+            );
+        }
+    }
+
+    /// Draws `resolved` once through `renderType`, under `poseStack`.
+    ///
+    /// @param color       ARGB, what a mesh drawn off the skinning dispatch is tinted by
+    /// @param tintedColor ARGB, what a mesh drawn by the skinning dispatch is tinted by
+    private void draw(
+        final PoseStack poseStack,
+        final OrderedSubmitNodeCollector submitNodeCollector,
+        final Mesh<?> resolved,
+        final RenderType renderType,
+        final int lightCoords,
+        final int overlayCoords,
+        final int color,
+        final int tintedColor,
+        final int outlineColor
+    ) {
         if (!(resolved instanceof SkeletalMesh skeletalMesh)) {
             submitNodeCollector.submitCustomGeometry(
                 poseStack,
@@ -229,22 +265,22 @@ public final class MeshComponent implements RenderableComponent<LivingEntityRend
                 poseStack.last(),
                 Minecraft.getInstance().gameRenderer.mainCamera().position(),
                 lightCoords,
-                modelDraw.overlayCoords(),
+                overlayCoords,
                 tintedColor,
-                state.outlineColor
+                outlineColor
             );
         } else if (cloth != null) {
             // TODO: simulate under Iris once an Iris cloth transformer exists
             if (computeSkinning && ClientComponentsFactory.getImpl().getShaderBackend() == ClientComponentsFactory.ShaderBackend.IRIS) {
                 PatchModelRenderer.getInstance().submitSkinnedMesh(
                     skeletalMesh, armatureAsset, animationPose, renderType, poseStack.last(),
-                    lightCoords, modelDraw.overlayCoords(), tintedColor, state.outlineColor
+                    lightCoords, overlayCoords, tintedColor, outlineColor
                 );
             }
         } else if (computeSkinning) {
             PatchModelRenderer.getInstance().submitSkinnedMesh(
                 skeletalMesh, armatureAsset, animationPose, renderType, poseStack.last(),
-                lightCoords, modelDraw.overlayCoords(), tintedColor, state.outlineColor
+                lightCoords, overlayCoords, tintedColor, outlineColor
             );
         } else {
             Armature resolvedArmature = armatureAsset.get();
@@ -272,7 +308,7 @@ public final class MeshComponent implements RenderableComponent<LivingEntityRend
                         ARGB.greenFloat(color),
                         ARGB.blueFloat(color),
                         ARGB.alphaFloat(color),
-                        modelDraw.overlayCoords(),
+                        overlayCoords,
                         boundTransforms
                     );
                 }

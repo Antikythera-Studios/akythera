@@ -4,6 +4,7 @@ import com.yesman.akythera.client.api.particle.module.ParticleInitializerModule;
 import com.yesman.akythera.client.api.particle.module.ParticleUpdateModule;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.blueprint.particle.EmitterSpawnRule;
+import com.yesman.akythera.core.blueprint.particle.OverlayParticleBlueprint;
 import com.yesman.akythera.core.blueprint.particle.ParticleBlueprint;
 import com.yesman.akythera.core.blueprint.particle.ParticleEmitterBlueprint;
 import com.yesman.akythera.core.blueprint.particle.ParticleInitializerBlueprint;
@@ -24,8 +25,9 @@ public class AkytheraParticleEmitter {
     private final AkytheraParticleSystem system;
     private final ParticleEmitterBlueprint blueprint;
 
-    /// Null when the blueprint names a particle the system's host lacks, or a trail spawned by a rule other than
-    /// [TrailSpawnRule], which finishes the emitter at once.
+    /// Null when the blueprint names a particle the system's host lacks, a trail spawned by a rule other than
+    /// [TrailSpawnRule], or an overlay while the system has nothing to draw over
+    /// ([ParticleHost#overlayRenderer]), which finishes the emitter at once.
     private final @Nullable ParticleBlueprint particle;
 
     /// The live particles this emitter spawned, kept only when [ParticleEmitterBlueprint#hideParticlesOnFinish].
@@ -77,6 +79,8 @@ public class AkytheraParticleEmitter {
         } else if (named instanceof TrailParticleBlueprint && !(blueprint.spawn() instanceof TrailSpawnRule)) {
             Akythera.LOGGER.warn("Emitter {} spawns a trail by a spawn rule other than trail", blueprint.name());
             named = null;
+        } else if (named instanceof OverlayParticleBlueprint && system.getHost().overlayRenderer(system) == null) {
+            named = null;
         }
 
         this.particle = named;
@@ -103,7 +107,8 @@ public class AkytheraParticleEmitter {
     }
 
     /// Spawns what the spawn rule owes at `seconds` since the system started, and finishes the emitter once the rule
-    /// is over.
+    /// is over. An emitter whose rule has no time span, and that hides its particles on finish, finishes once they
+    /// are all gone instead.
     public void tick(final float seconds) {
         if (finished) return;
 
@@ -112,7 +117,10 @@ public class AkytheraParticleEmitter {
         if (local < 0.0F) return;
 
         if (spawner.isOver(local)) {
-            finish();
+            spawned.removeIf(live -> !live.isAlive());
+
+            // With no time span, the particles it hides keep it running
+            if (blueprint.spawn().duration() > 0.0F || spawned.isEmpty()) finish();
 
             return;
         }

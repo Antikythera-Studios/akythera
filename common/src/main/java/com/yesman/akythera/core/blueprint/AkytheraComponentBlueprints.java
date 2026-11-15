@@ -9,6 +9,7 @@ import com.yesman.akythera.api.world.patch.item.component.ReplaceAnimations;
 import com.yesman.akythera.api.world.patch.item.component.WeaponStanceVariationAdapter;
 import com.yesman.akythera.client.api.camera.CameraComponentBlueprint;
 import com.yesman.akythera.client.api.component.impl.MeshComponentBlueprint;
+import com.yesman.akythera.client.api.component.impl.OverlayRendererBlueprint;
 import com.yesman.akythera.client.api.component.impl.PALPoseBinder;
 import com.yesman.akythera.client.api.component.impl.SkinnedArmorRendererBlueprint;
 import com.yesman.akythera.core.Akythera;
@@ -83,6 +84,9 @@ public final class AkytheraComponentBlueprints {
 
     public static final Holder<MapCodec<? extends ComponentBlueprint<?, ?>>> SKINNED_ARMOR =
         ENTITY_PATCH_REGISTRAR.register("skinned_armor", () -> SkinnedArmorRendererBlueprint.CODEC);
+
+    public static final Holder<MapCodec<? extends ComponentBlueprint<?, ?>>> OVERLAY_RENDERER =
+        ENTITY_PATCH_REGISTRAR.register("overlay_renderer", () -> OverlayRendererBlueprint.CODEC);
 
     public static final Holder<MapCodec<? extends ComponentBlueprint<?, ?>>> CAMERA =
         ENTITY_PATCH_REGISTRAR.register("camera", () -> CameraComponentBlueprint.CODEC);

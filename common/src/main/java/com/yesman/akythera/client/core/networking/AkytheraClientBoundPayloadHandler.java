@@ -324,13 +324,13 @@ public interface AkytheraClientBoundPayloadHandler {
         HudManager.getInstance().clear();
     }
 
-    /// Plays the particle system the server sent, on its attachment's socket when the client finds one. A system this
-    /// client does not know is dropped.
+    /// Plays the particle system the server sent, on its attachment's socket when the system follows it and the
+    /// client finds one. A system this client does not know is dropped.
     static void handlePlayParticleSystem(final ClientBoundPlayParticleSystem payload, final PayloadContext context) {
         context.receiver().registryAccess().lookupOrThrow(AkytheraRegistries.DataPack.PARTICLE_SYSTEM_KEY).getOptional(payload.system()).ifPresentOrElse(
             blueprint -> {
                 ParticleAttachment attachment = payload.attachment().orElse(null);
-                Transform socketTransform = attachment == null ? null : attachment.worldTransform(context.receiver().level(), 1.0F);
+                Transform socketTransform = attachment == null || !attachment.follow() ? null : attachment.worldTransform(context.receiver().level(), 1.0F);
                 AkytheraParticleSystem system = AkytheraParticles.play(
                     blueprint, socketTransform == null ? Transform.fromTranslation(payload.position()) : socketTransform, attachment, 0.0F
                 );

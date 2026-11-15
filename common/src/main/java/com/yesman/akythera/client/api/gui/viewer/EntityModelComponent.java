@@ -8,11 +8,13 @@ import com.yesman.akythera.api.component.PatchComponent;
 import com.yesman.akythera.api.component.TransformInheritPolicy;
 import com.yesman.akythera.api.component.UniqueComponent;
 import com.yesman.akythera.api.component.impl.ArmatureComponent;
+import com.yesman.akythera.client.api.component.impl.OverlayRendererComponent;
 import com.yesman.akythera.client.api.component.impl.PALPoseBinder;
 import com.yesman.akythera.api.animation.animator.Animator;
 import com.yesman.akythera.api.asset.AnimatableObject;
 import com.yesman.akythera.api.asset.AssetAccessor;
 import com.yesman.akythera.api.lifecycle.ComponentsFactory;
+import com.yesman.akythera.client.api.particle.AkytheraOverlayParticle;
 import com.yesman.akythera.client.compat.playeranimlibrary.AkytheraAnimationLayer;
 import com.yesman.akythera.client.compat.playeranimlibrary.PlayerAnimationLibraryPlugin;
 import com.yesman.akythera.client.core.asset.loader.MeshLoader;
@@ -38,11 +40,13 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.state.*;
+import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.texture.MissingTextureAtlasSprite;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.util.ARGB;
 import net.minecraft.util.StringRepresentable;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntityTypes;
@@ -107,6 +111,9 @@ public final class EntityModelComponent implements Model3DViewerComponent, Anima
 
     /// The armature's transform, read every frame into [#armatureComponent]. Null leaves the transform as last set.
     private @Nullable Supplier<Transform> transformSource;
+
+    /// The overlay particles drawn over the model.
+    private final OverlayRendererComponent overlayRenderer = new OverlayRendererComponent();
 
     /// Scratch the bound skeleton is resolved into for the [SkeletalMesh#drawPosed] fallback.
     private Matrix4f[] boundTransforms = Matrix4fUtils.allocateMatrixArray(0);
@@ -282,17 +289,17 @@ public final class EntityModelComponent implements Model3DViewerComponent, Anima
         }
 
         if (skMesh.getAnimationComputeShader() != null) {
-            PatchModelRenderer.getInstance().drawSkinnedMeshImmediate(
+            drawWithOverlays(drawTexture, (renderType, color) -> PatchModelRenderer.getInstance().drawSkinnedMeshImmediate(
                 skMesh,
                 armatureAccessor,
                 pose,
-                RenderTypes.entityTranslucent(drawTexture),
+                renderType,
                 poseStack.last(),
                 Model3DViewer.FULL_BRIGHT,
                 OverlayTexture.NO_OVERLAY,
-                NO_TINT,
+                color,
                 eye
-            );
+            ));
 
             return;
         }
@@ -304,40 +311,53 @@ public final class EntityModelComponent implements Model3DViewerComponent, Anima
         pose.getForwardBoundTransforms(armatureAccessor, boundTransforms);
         arm.boundBackwardTransform(boundTransforms);
 
-        BufferBuilder builder = new BufferBuilder(byteBuffer, PrimitiveTopology.TRIANGLES, DefaultVertexFormat.ENTITY);
+        drawWithOverlays(drawTexture, (renderType, color) -> {
+            BufferBuilder builder = new BufferBuilder(byteBuffer, PrimitiveTopology.TRIANGLES, DefaultVertexFormat.ENTITY);
 
-        skMesh.drawPosed(
-            poseStack, builder,
-            Mesh.DrawingFunction.NEW_ENTITY,
-            Model3DViewer.FULL_BRIGHT,
-            1.0F, 1.0F, 1.0F, 1.0F,
-            OverlayTexture.NO_OVERLAY,
-            boundTransforms
-        );
+            skMesh.drawPosed(
+                poseStack, builder,
+                Mesh.DrawingFunction.NEW_ENTITY,
+                Model3DViewer.FULL_BRIGHT,
+                ARGB.redFloat(color), ARGB.greenFloat(color), ARGB.blueFloat(color), ARGB.alphaFloat(color),
+                OverlayTexture.NO_OVERLAY,
+                boundTransforms
+            );
 
-        MeshData meshData = builder.build();
+            MeshData meshData = builder.build();
 
-        if (meshData != null) {
-            RenderUtils.drawImmediate(RenderTypes.entityTranslucent(drawTexture), meshData, true);
-        }
+            if (meshData != null) {
+                RenderUtils.drawImmediate(renderType, meshData, renderType.sortOnUpload());
+            }
+        });
     }
 
     /// The mesh as authored, no bone read. What a mesh with no armature or no animator shows.
     private void drawBindPose(SkeletalMesh skMesh, Identifier drawTexture, PoseStack poseStack, ByteBufferBuilder byteBuffer) {
-        BufferBuilder builder = new BufferBuilder(byteBuffer, PrimitiveTopology.TRIANGLES, DefaultVertexFormat.ENTITY);
+        drawWithOverlays(drawTexture, (renderType, color) -> {
+            BufferBuilder builder = new BufferBuilder(byteBuffer, PrimitiveTopology.TRIANGLES, DefaultVertexFormat.ENTITY);
 
-        skMesh.draw(
-            poseStack.last(), builder,
-            Mesh.DrawingFunction.NEW_ENTITY,
-            Model3DViewer.FULL_BRIGHT,
-            1.0F, 1.0F, 1.0F, 1.0F,
-            OverlayTexture.NO_OVERLAY
-        );
+            skMesh.draw(
+                poseStack.last(), builder,
+                Mesh.DrawingFunction.NEW_ENTITY,
+                Model3DViewer.FULL_BRIGHT,
+                ARGB.redFloat(color), ARGB.greenFloat(color), ARGB.blueFloat(color), ARGB.alphaFloat(color),
+                OverlayTexture.NO_OVERLAY
+            );
 
-        MeshData meshData = builder.build();
+            MeshData meshData = builder.build();
 
-        if (meshData != null) {
-            RenderUtils.drawImmediate(RenderTypes.entityTranslucent(drawTexture), meshData, true);
+            if (meshData != null) {
+                RenderUtils.drawImmediate(renderType, meshData, renderType.sortOnUpload());
+            }
+        });
+    }
+
+    /// Draws the model through `pass` with `texture`, then once more for each live overlay of [#overlayRenderer].
+    private void drawWithOverlays(final Identifier texture, final ModelPass pass) {
+        pass.draw(RenderTypes.entityTranslucent(texture), NO_TINT);
+
+        for (AkytheraOverlayParticle overlay : overlayRenderer.getOverlays()) {
+            pass.draw(overlay.renderType(), overlay.color());
         }
     }
 
@@ -362,15 +382,17 @@ public final class EntityModelComponent implements Model3DViewerComponent, Anima
             vanillaRenderInfo.entityModel.resetPose();
         }
 
-        BufferBuilder builder = new BufferBuilder(byteBuffer, PrimitiveTopology.QUADS, DefaultVertexFormat.ENTITY);
+        drawWithOverlays(texture, (renderType, color) -> {
+            BufferBuilder builder = new BufferBuilder(byteBuffer, PrimitiveTopology.QUADS, DefaultVertexFormat.ENTITY);
 
-        vanillaRenderInfo.entityModel.renderToBuffer(poseStack, builder, Model3DViewer.FULL_BRIGHT, OverlayTexture.NO_OVERLAY, NO_TINT);
+            vanillaRenderInfo.entityModel.renderToBuffer(poseStack, builder, Model3DViewer.FULL_BRIGHT, OverlayTexture.NO_OVERLAY, color);
 
-        MeshData meshData = builder.build();
+            MeshData meshData = builder.build();
 
-        if (meshData != null) {
-            RenderUtils.drawImmediate(RenderTypes.entityTranslucent(texture), meshData);
-        }
+            if (meshData != null) {
+                RenderUtils.drawImmediate(renderType, meshData);
+            }
+        });
 
         poseStack.popPose();
     }
@@ -424,6 +446,10 @@ public final class EntityModelComponent implements Model3DViewerComponent, Anima
     @Override
     public ArmatureComponent getArmatureComponent() {
         return armatureComponent;
+    }
+
+    public OverlayRendererComponent getOverlayRenderer() {
+        return overlayRenderer;
     }
 
     // ***************************************************************
@@ -615,6 +641,12 @@ public final class EntityModelComponent implements Model3DViewerComponent, Anima
         public @NonNull String getSerializedName() {
             return serializedName;
         }
+    }
+
+    /// One draw of the model through a render type, tinted by an ARGB color.
+    @FunctionalInterface
+    private interface ModelPass {
+        void draw(RenderType renderType, int color);
     }
 
     /// The vanilla model and the render state it is posed through, held together because a draw
