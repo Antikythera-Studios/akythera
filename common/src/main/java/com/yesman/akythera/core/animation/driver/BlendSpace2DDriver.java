@@ -1,6 +1,7 @@
 package com.yesman.akythera.core.animation.driver;
 
 import com.mojang.datafixers.util.Pair;
+import com.yesman.akythera.api.animation.notify.AnimationNotifyState;
 import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.api.component.impl.RootMotionComponent;
 import com.yesman.akythera.core.Akythera;
@@ -13,11 +14,15 @@ import com.yesman.akythera.core.math.algorithm.DelaunayTriangulation.Triangle;
 import com.yesman.akythera.core.util.helper.MathUtils;
 import com.yesman.akythera.core.util.helper.PoseOperators;
 import net.minecraft.core.Holder;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 import java.util.function.Supplier;
 
 /// Instantiated version of [BlendSpace2D]. To keep the design intention of
@@ -30,8 +35,8 @@ import java.util.function.Supplier;
 /// walk (`findContainingTriangle`) is reserved for actual transitions.
 ///
 /// Notify dispatch: [#tick] forwards the (prevElapsed, currentElapsed) pair
-/// to the *winner* node — the corner of the cached triangle with the highest
-/// barycentric weight. Mirrors UE5's blend-space behaviour where notifies
+/// to the *winner* — the blended animation with the highest weight.
+/// Mirrors UE5's blend-space behaviour where notifies
 /// fire from the dominant input animation, not blended across all corners
 /// (which would multi-fire identical notifies near edges).
 public final class BlendSpace2DDriver implements AnimationDriver {
@@ -70,27 +75,24 @@ public final class BlendSpace2DDriver implements AnimationDriver {
     /// Cached enclosing triangle. -1 until the first update finds one.
     private int cachedTriangleIndex = NO_TRIANGLE;
 
-    /// Cached node refs + weights for the cached triangle. Populated by [#refreshCachedTriangle].
-    private PlayableAnimation cachedAnim1;
-    private PlayableAnimation cachedAnim2;
-    private PlayableAnimation cachedAnim3;
-    private float cachedWeight1;
-    private float cachedWeight2;
-    private float cachedWeight3;
+    /// The animations the pose blends, one per animation the nodes name. Their weights ease toward the cached
+    /// triangle's at [BlendSpace2D#weightSpeed].
+    private final List<Sample> samples = new ArrayList<>();
 
-    /// The triangle `cachedAnimN` were resolved for, or null before the first resolve.
+    /// Sum of the [#samples] weights.
+    private float weightSum;
+
+    /// The triangle the [#samples]' animations were last resolved for, or null before the first resolve.
     private @Nullable Triangle resolvedTriangle;
 
     /// Whether this driver logged a node naming a missing animation. It logs only the first.
     private boolean warnedMissingAnimation;
 
-    /// Weighted loop length of the cached corner mix, in seconds. Recomputed every [#update].
+    /// Weighted loop length of the [#samples] mix, in seconds. Recomputed every [#update].
     private float cachedCycleTime;
 
-    /// Index *within the cached triangle* (0,1,2) of the winner. Set when the
-    /// cached weights are refreshed; consumed by [#tick] to address the
-    /// matching `cachedAnimN` field.
-    private int winnerDot;
+    /// The sample with the highest weight, or null before the first [#start].
+    private @Nullable Sample winner;
 
     public BlendSpace2DDriver(
         final Holder<BlendSpace2D> holder,
@@ -100,26 +102,15 @@ public final class BlendSpace2DDriver implements AnimationDriver {
         this.blendSpace2D = holder;
         this.xUpdater = xUpdater;
         this.yUpdater = yUpdater;
-
-        // Equal-weight fallback so getPose() before the first update doesn't NPE.
-        // Re-uses the blend-space value itself as a benign placeholder; overwritten
-        // on the first successful update.
-        cachedAnim1 = blendSpace2D.value();
-        cachedAnim2 = cachedAnim1;
-        cachedAnim3 = cachedAnim1;
-        cachedWeight1 = 1.0F / 3.0F;
-        cachedWeight2 = 1.0F / 3.0F;
-        cachedWeight3 = 1.0F / 3.0F;
-        winnerDot = 0;
     }
 
     @Override
     public Pose getPose() {
-        return PoseOperators.blendPoses(
-            Pair.of(cachedAnim1.getPose(timeOf(cachedAnim1, phase)), cachedWeight1),
-            Pair.of(cachedAnim2.getPose(timeOf(cachedAnim2, phase)), cachedWeight2),
-            Pair.of(cachedAnim3.getPose(timeOf(cachedAnim3, phase)), cachedWeight3)
-        );
+        List<Pair<Pose, Float>> poses = new ArrayList<>(samples.size());
+
+        for (Sample sample : samples) poses.add(Pair.of(sample.animation.getPose(timeOf(sample.animation, phase)), sample.weight));
+
+        return PoseOperators.blendPoses(poses);
     }
 
     @Override
@@ -127,17 +118,19 @@ public final class BlendSpace2DDriver implements AnimationDriver {
         return blendSpace2D.value();
     }
 
-    /// Blended root motion at `time`: a barycentric mix of the cached triangle corners' root motions,
-    /// using the same weights as [#getPose]. This is the value [RootMotionComponent]
-    /// would consume for a blend space (translation only, matching how root motion is applied).
+    /// Blended root motion at `time`: a mix of the [#samples]' root motions, using the same weights as
+    /// [#getPose]. This is the value [RootMotionComponent] would consume for a blend space (translation only,
+    /// matching how root motion is applied).
     ///
     /// Experimental and TODO: test blend space root motion
     public Transform getBlendedRootMotion(final float time) {
         float timePhase = MathUtils.safeDivision(time, cachedCycleTime, 0.0F);
+        Vec3 loc = Vec3.ZERO;
 
-        Vec3 loc = cachedAnim1.getRootMotionTransform(timeOf(cachedAnim1, timePhase)).loc().scale(cachedWeight1)
-            .add(cachedAnim2.getRootMotionTransform(timeOf(cachedAnim2, timePhase)).loc().scale(cachedWeight2))
-            .add(cachedAnim3.getRootMotionTransform(timeOf(cachedAnim3, timePhase)).loc().scale(cachedWeight3));
+        for (Sample sample : samples) {
+            float weight = MathUtils.safeDivision(sample.weight, weightSum, 0.0F);
+            loc = loc.add(sample.animation.getRootMotionTransform(timeOf(sample.animation, timePhase)).loc().scale(weight));
+        }
 
         return Transform.fromTranslation(loc);
     }
@@ -162,23 +155,38 @@ public final class BlendSpace2DDriver implements AnimationDriver {
             fadeTime = Math.clamp(fadeTime - frameTime, 0.0F, blendSpace2D.value().fadeOutTime());
         }
 
+        resolveWeights(frameTime);
+
+        phase += MathUtils.safeDivision(frameTime, cachedCycleTime, 0.0F);
+
+        if (phase >= 1.0F) {
+            if (blendSpace2D.value().loops()) {
+                phase = Mth.frac(phase);
+            } else {
+                phase = 1.0F;
+                isFinished = true;
+            }
+        }
+    }
+
+    /// Moves the inputs, the cached triangle and the [#samples]' weights to this frame, snapping to the inputs right after
+    /// [#start]. Picks the [#winner] and the weighted loop length.
+    private void resolveWeights(final float frameTime) {
         BlendSpace2D blendSpace = blendSpace2D.value();
         DelaunayTriangulation<BlendSpace2D.AnimationNode> nodeSpace = blendSpace.getNodeSpace();
-        float smoothX = blendSpace.smoothX() <= 0.0F ? Float.MAX_VALUE : blendSpace.smoothX();
-        float smoothY = blendSpace.smoothY() <= 0.0F ? Float.MAX_VALUE : blendSpace.smoothY();
+        boolean snap = snapToInputs;
+        float stepX = snap || blendSpace.smoothX() <= 0.0F ? Float.MAX_VALUE : blendSpace.smoothX() * frameTime;
+        float stepY = snap || blendSpace.smoothY() <= 0.0F ? Float.MAX_VALUE : blendSpace.smoothY() * frameTime;
+        float weightStep = snap || blendSpace.weightSpeed() <= 0.0F ? Float.MAX_VALUE : blendSpace.weightSpeed() * frameTime;
 
-        if (snapToInputs) {
-            smoothX = Float.MAX_VALUE;
-            smoothY = Float.MAX_VALUE;
-            snapToInputs = false;
-        }
+        snapToInputs = false;
 
         targetX = blendSpace.wrapX()
-            ? MathUtils.approachWrapped(targetX, xUpdater.get(), smoothX * frameTime, nodeSpace.minX(), nodeSpace.maxX())
-            : Math.clamp(targetX + MathUtils.absoluteClamp(xUpdater.get() - targetX, smoothX * frameTime), nodeSpace.minX(), nodeSpace.maxX());
+            ? MathUtils.approachWrapped(targetX, xUpdater.get(), stepX, nodeSpace.minX(), nodeSpace.maxX())
+            : Math.clamp(targetX + MathUtils.absoluteClamp(xUpdater.get() - targetX, stepX), nodeSpace.minX(), nodeSpace.maxX());
         targetY = blendSpace.wrapY()
-            ? MathUtils.approachWrapped(targetY, yUpdater.get(), smoothY * frameTime, nodeSpace.minY(), nodeSpace.maxY())
-            : Math.clamp(targetY + MathUtils.absoluteClamp(yUpdater.get() - targetY, smoothY * frameTime), nodeSpace.minY(), nodeSpace.maxY());
+            ? MathUtils.approachWrapped(targetY, yUpdater.get(), stepY, nodeSpace.minY(), nodeSpace.maxY())
+            : Math.clamp(targetY + MathUtils.absoluteClamp(yUpdater.get() - targetY, stepY), nodeSpace.minY(), nodeSpace.maxY());
 
         // Fast path: the cached triangle still contains the control point.
         // Common case — control inputs drift smoothly between ticks.
@@ -200,21 +208,23 @@ public final class BlendSpace2DDriver implements AnimationDriver {
             }
         }
 
-        cachedCycleTime =
-            cachedAnim1.getTotalFrameTime() / cachedAnim1.playRate() * cachedWeight1 +
-            cachedAnim2.getTotalFrameTime() / cachedAnim2.playRate() * cachedWeight2 +
-            cachedAnim3.getTotalFrameTime() / cachedAnim3.playRate() * cachedWeight3;
+        float cycleTime = 0.0F;
+        weightSum = 0.0F;
+        winner = null;
 
-        phase += MathUtils.safeDivision(frameTime, cachedCycleTime, 0.0F);
+        for (Sample sample : samples) {
+            sample.weight += MathUtils.absoluteClamp(sample.target - sample.weight, weightStep);
 
-        if (phase >= 1.0F) {
-            if (blendSpace.loops()) {
-                phase = Mth.frac(phase);
-            } else {
-                phase = 1.0F;
-                isFinished = true;
+            if (sample.weight > 0.0F) {
+                if (winner == null || sample.weight > winner.weight) winner = sample;
+
+                weightSum += sample.weight;
+                cycleTime += sample.animation.getTotalFrameTime() / sample.animation.playRate() * sample.weight;
             }
         }
+
+        samples.removeIf(sample -> sample.weight <= 0.0F && sample.target <= 0.0F);
+        cachedCycleTime = MathUtils.safeDivision(cycleTime, weightSum, 0.0F);
     }
 
     private float timeOf(final PlayableAnimation animation, final float atPhase) {
@@ -223,9 +233,8 @@ public final class BlendSpace2DDriver implements AnimationDriver {
         return (blendSpace2D.value().loops() ? Mth.frac(shifted) : Math.min(shifted, 1.0F)) * animation.getTotalFrameTime();
     }
 
-    /// Recomputes barycentric weights for `triangleIndex` and writes them
-    /// into the `cachedAnimN` / `cachedWeightN` slots, plus picks the
-    /// `winnerCorner`. Returns `true` if (x, y) is inside the triangle
+    /// Recomputes barycentric weights for `triangleIndex` and makes them the
+    /// [#samples]' targets. Returns `true` if (x, y) is inside the triangle
     /// (within EPSILON tolerance), `false` otherwise.
     private boolean refreshCachedTriangle(
         final DelaunayTriangulation<BlendSpace2D.AnimationNode> nodeSpace,
@@ -247,23 +256,32 @@ public final class BlendSpace2DDriver implements AnimationDriver {
             return false;
         }
 
-        if (t != resolvedTriangle) {
-            cachedAnim1 = resolveAnimation(p1);
-            cachedAnim2 = resolveAnimation(p2);
-            cachedAnim3 = resolveAnimation(p3);
-            resolvedTriangle = t;
-        }
+        boolean resolve = t != resolvedTriangle;
 
-        cachedWeight1 = w[0];
-        cachedWeight2 = w[1];
-        cachedWeight3 = w[2];
+        for (Sample sample : samples) sample.target = 0.0F;
 
-        // Winner = the corner with the largest weight.
-        if (w[0] >= w[1] && w[0] >= w[2]) winnerDot = 0;
-        else if (w[1] >= w[2]) winnerDot = 1;
-        else winnerDot = 2;
+        addTarget(p1, w[0], resolve);
+        addTarget(p2, w[1], resolve);
+        addTarget(p3, w[2], resolve);
+        resolvedTriangle = t;
 
         return true;
+    }
+
+    /// Adds `weight` to the target of the sample `node` plays, re-resolving its animation when `resolve`.
+    private void addTarget(final BlendSpace2D.AnimationNode node, final float weight, final boolean resolve) {
+        for (Sample sample : samples) {
+            if (sample.mirrored == node.mirrored() && Objects.equals(sample.key, node.animation())) {
+                if (resolve) sample.animation = resolveAnimation(node);
+
+                sample.target += weight;
+                return;
+            }
+        }
+
+        Sample sample = new Sample(node.animation(), node.mirrored(), resolveAnimation(node));
+        sample.target = weight;
+        samples.add(sample);
     }
 
     /// The animation `node` plays, or the empty animation when its key names no entry.
@@ -300,14 +318,10 @@ public final class BlendSpace2DDriver implements AnimationDriver {
     }
 
     private PlayableAnimation winner() {
-        return switch (winnerDot) {
-            case 0 -> cachedAnim1;
-            case 1 -> cachedAnim2;
-            default -> cachedAnim3;
-        };
+        return winner == null ? blendSpace2D.value() : winner.animation;
     }
 
-    /// Runs on the blended clock: the phase times the weighted loop length of the cached corner mix.
+    /// Runs on the blended clock: the phase times the weighted loop length of the [#samples] mix.
     @Override
     public float getTime() {
         return phase * cachedCycleTime;
@@ -316,6 +330,12 @@ public final class BlendSpace2DDriver implements AnimationDriver {
     @Override
     public float getPhase() {
         return phase;
+    }
+
+    /// Reads the winner's notify track, as [#tick] drives it.
+    @Override
+    public <T extends AnimationNotifyState<?>> @Nullable T getActiveNotifyState(final Class<T> type) {
+        return terminated || winner == null ? null : winner.animation.getNotifyStateAt(type, timeOf(winner.animation, phase));
     }
 
     /// Restarting a play that still runs interrupts it.
@@ -331,6 +351,7 @@ public final class BlendSpace2DDriver implements AnimationDriver {
         cachedTriangleIndex = NO_TRIANGLE;
         resolvedTriangle = null;
         snapToInputs = true;
+        resolveWeights(0.0F);
     }
 
     @Override
@@ -370,5 +391,24 @@ public final class BlendSpace2DDriver implements AnimationDriver {
         lastUpdatedPhase = phase;
         lastFramePhase = phase;
         isFinished = source.isFinished();
+    }
+
+    /// One animation the pose blends, shared by the nodes that name it.
+    private static final class Sample {
+        private final @Nullable ResourceKey<? extends @NonNull PlayableAnimation> key;
+        private final boolean mirrored;
+        private PlayableAnimation animation;
+
+        /// The weight the control point gives this animation, summed over the cached triangle's corners.
+        private float target;
+
+        /// The weight the pose blends this animation at, easing toward [#target].
+        private float weight;
+
+        private Sample(final @Nullable ResourceKey<? extends @NonNull PlayableAnimation> key, final boolean mirrored, final PlayableAnimation animation) {
+            this.key = key;
+            this.mirrored = mirrored;
+            this.animation = animation;
+        }
     }
 }

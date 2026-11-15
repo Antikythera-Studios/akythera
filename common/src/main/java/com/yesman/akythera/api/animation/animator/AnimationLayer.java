@@ -1,5 +1,6 @@
 package com.yesman.akythera.api.animation.animator;
 
+import com.yesman.akythera.api.animation.notify.AnimationNotifyState;
 import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.animation.driver.AnimationDriver;
 import com.yesman.akythera.core.animation.driver.AnimationMontagePlayer;
@@ -7,6 +8,7 @@ import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.reflection.ScriptFunction;
 import com.yesman.akythera.core.reflection.ScriptType;
 import com.yesman.akythera.core.util.helper.PoseOperators;
+import org.jspecify.annotations.Nullable;
 
 /// Each animation layer has independent playing sequence and
 /// total pose in determined by blending each layer in [Animator]
@@ -46,6 +48,13 @@ public final class AnimationLayer {
 
     public AnimationMontagePlayer montagePlayer() {
         return montagePlayer;
+    }
+
+    /// The notify state of `type` the playing montage holds, otherwise the base driver's.
+    public <T extends AnimationNotifyState<?>> @Nullable T getActiveNotifyState(final Class<T> type) {
+        T state = montagePlayer.getActiveNotifyState(type);
+
+        return state != null ? state : animDriver.getActiveNotifyState(type);
     }
 
     @ScriptFunction(label = "Get Pose", desc = "Get the animation layer's current pose")

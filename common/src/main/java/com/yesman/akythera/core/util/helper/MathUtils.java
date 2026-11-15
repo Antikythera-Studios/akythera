@@ -251,7 +251,7 @@ public final class MathUtils {
 
     /// Returns a clamped value in both positive and negative
     public static float absoluteClamp(final float value, final float max) {
-        return Math.clamp(value, -max, max);
+        return Mth.clamp(value, -max, max);
     }
 
     /// Returns counterweight of given fraction

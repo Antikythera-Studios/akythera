@@ -8,6 +8,8 @@ import com.yesman.akythera.api.component.PatchComponent;
 import com.yesman.akythera.api.component.UniqueComponent;
 import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.component.impl.EquipmentSlotBinder;
+import com.yesman.akythera.api.world.ability.AbilitySystemComponent;
+import com.yesman.akythera.api.world.ability.AbilityTag;
 import com.yesman.akythera.api.world.behavior.BrainComponent;
 import com.yesman.akythera.api.world.patch.AkytheraPatches;
 import com.yesman.akythera.api.world.patch.entity.component.EquipmentHolder;
@@ -218,6 +220,11 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
     @Override
     public ItemStack getItemInSlot(final EquipmentSlot equipmentSlot) {
         return getOriginal().getItemBySlot(equipmentSlot);
+    }
+
+    @ScriptFunction(pure = true, label = "Is Slot Empty", desc = "Returns whether the slot holds no item.")
+    public boolean isSlotEmpty(final EquipmentSlot equipmentSlot) {
+        return getOriginal().getItemBySlot(equipmentSlot).isEmpty();
     }
 
     @ScriptFunction(pure = true, label = "Get Item Patch In Slot", desc = "Returns the item patch of the item in the slot. Null when the item has none.")
@@ -446,6 +453,15 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
         }
 
         return null;
+    }
+
+    @ScriptFunction(pure = true, label = "Has Ability Tag", category = "Ability/Tag", desc = """
+        True while the entity's ability system carries the tag or any tag below it. False without an ability system
+    """)
+    public boolean hasAbilityTag(final AbilityTag tag) {
+        AbilitySystemComponent abilitySystem = getComponent(AbilitySystemComponent.class);
+
+        return abilitySystem != null && abilitySystem.hasAbilityTag(tag);
     }
 
     @ScriptFunction(pure = true, label = "Is Baby")

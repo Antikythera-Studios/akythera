@@ -286,7 +286,7 @@ public class ArmatureComponent
             if (inverseKinematics == null) inverseKinematics = new InverseKinematicsSimulation();
 
             pose = inverseKinematics.apply(
-                pose, accessor, physics, armatureToWorld(lastPartialTick), Terrain.of(entity.getLevel()),
+                pose, accessor, physics, armatureToWorld(lastPartialTick), Terrain.of(entity.getLevel()), entity.onGround(),
                 (clientTicks + lastPartialTick) * SERVER_FRAME_TIME
             );
         }
@@ -519,6 +519,11 @@ public class ArmatureComponent
 
     public Animator getAnimator() {
         return animator;
+    }
+
+    /// The partial tick of the last frame update, 1 where frames never run.
+    public float getPartialTick() {
+        return lastPartialTick;
     }
 
     public AssetAccessor<? extends Armature> getArmature() {

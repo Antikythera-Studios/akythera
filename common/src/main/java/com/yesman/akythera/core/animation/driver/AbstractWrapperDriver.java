@@ -1,5 +1,6 @@
 package com.yesman.akythera.core.animation.driver;
 
+import com.yesman.akythera.api.animation.notify.AnimationNotifyState;
 import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
@@ -31,6 +32,11 @@ public abstract class AbstractWrapperDriver implements AnimationDriver {
     @Override
     public void tick(final ComponentAttachable owner) {
         base.tick(owner);
+    }
+
+    @Override
+    public <T extends AnimationNotifyState<?>> @Nullable T getActiveNotifyState(final Class<T> type) {
+        return base.getActiveNotifyState(type);
     }
 
     @Override

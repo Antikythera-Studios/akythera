@@ -1,5 +1,6 @@
 package com.yesman.akythera.core.animation.driver;
 
+import com.yesman.akythera.api.animation.notify.AnimationNotifyState;
 import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.animation.animator.BlendingAnimator;
 import com.yesman.akythera.core.animation.keyframe.Pose;
@@ -23,6 +24,13 @@ public interface AnimationDriver {
 
     /// Returns a currently loaded animation
     @Nullable PlayableAnimation getPlayingAnimation();
+
+    /// The notify state of `type` whose time window holds the playhead of the animation this driver plays, or null.
+    default <T extends AnimationNotifyState<?>> @Nullable T getActiveNotifyState(final Class<T> type) {
+        PlayableAnimation animation = getPlayingAnimation();
+
+        return animation == null ? null : animation.getNotifyStateAt(type, getTime());
+    }
 
     /// Updates the driver
     ///

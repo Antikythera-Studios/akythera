@@ -45,6 +45,7 @@ public final class BuiltInEventHooks {
         public static final EventHook<SendUpdateDataEvent> SEND_SYNC_DATA = EventHook.createSidedEventHook(LogicalSide.SERVER);
         public static final EventHook<HandlePersistentDataEvent.Serialize> SERIALIZE = EventHook.createSidedEventHook(LogicalSide.SERVER);
         public static final EventHook<HandlePersistentDataEvent.Deserialize> DESERIALIZE = EventHook.createSidedEventHook(LogicalSide.SERVER);
+        public static final EventHook<LivingHurtEvent> HURT = EventHook.createSidedEventHook(LogicalSide.SERVER);
         public static final EventHook<LivingDeathEvent> DEATH = EventHook.createSidedEventHook(LogicalSide.SERVER);
         public static final EventHook<EntityPossessionEvent.Possessed> POSSESSED = EventHook.createSidedEventHook(LogicalSide.CLIENT);
         public static final EventHook<EntityPossessionEvent.Unpossessed> UNPOSSESSED = EventHook.createSidedEventHook(LogicalSide.CLIENT);

@@ -1,23 +1,32 @@
 package com.yesman.akythera.core.animation.driver;
 
 import com.yesman.akythera.api.animation.notify.AnimationNotifyState;
+import com.yesman.akythera.api.animation.notify.impl.AimNotifyState;
 import com.yesman.akythera.api.component.ComponentAttachable;
+import com.yesman.akythera.api.component.impl.ArmatureComponent;
+import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.notify.AnimationNotifyTrack;
 import com.yesman.akythera.core.animation.playable.AnimationMontage;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.animation.playable.SectionInfo;
+import com.yesman.akythera.core.asset.armature.Armature;
 import com.yesman.akythera.core.math.TimeWindow;
 import com.yesman.akythera.core.util.helper.MathUtils;
+import com.yesman.akythera.core.util.helper.PoseOperators;
 import net.minecraft.core.Holder;
+import net.minecraft.util.Mth;
 import net.minecraft.util.StringUtil;
 import org.jetbrains.annotations.ApiStatus;
+import org.joml.Quaterniond;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /// An animation player dedicated to playing [AnimationMontage]
 ///
@@ -34,6 +43,9 @@ import java.util.List;
 /// A montage played over another one fades in from the replaced montage, which keeps playing
 /// in [#outgoing] until the fade-in ends.
 public final class AnimationMontagePlayer implements AnimationDriver {
+    /// Seconds one tick lasts.
+    private static final float TICK_SECONDS = 0.05F;
+
     /// Cached last pose before call [#terminate]
     @NonNull
     private Pose cachedLastMontagePose = Pose.EMPTY_POSE;
@@ -83,6 +95,14 @@ public final class AnimationMontagePlayer implements AnimationDriver {
     /// The owner of the last [#tick], which a stopped montage's notify states are ended for.
     private @Nullable ComponentAttachable owner;
 
+    /// The entity whose view pitch the [AimNotifyState]s follow, the owner of the last [#tick]. A replaced montage
+    /// keeps it.
+    private @Nullable EntityPatch<?> aimer;
+
+    /// The eased turn of every bone an [AimNotifyState] aimed lately, by bone name. It carries over to the next
+    /// montage, and a bone leaves once it eased back to 0.
+    private final Map<String, AimTurn> aimTurns = new HashMap<>();
+
     /// Plays an animation montage starting in a specific section
     public MontageCallbackHandle playAnimation(final Holder.@NonNull Reference<@NonNull AnimationMontage> animMontage, @Nullable final String sectionName) {
         if (currentPlaying != null) {
@@ -103,6 +123,12 @@ public final class AnimationMontagePlayer implements AnimationDriver {
                 replaced.isFinished = isFinished;
                 replaced.fadingInOrOut = fadingInOrOut;
                 replaced.currentPlaying = currentPlaying;
+                replaced.aimer = aimer;
+
+                for (Map.Entry<String, AimTurn> entry : aimTurns.entrySet()) {
+                    replaced.aimTurns.put(entry.getKey(), entry.getValue().copy());
+                }
+
                 replaced.montageCallbackHandle = new MontageCallbackHandle(currentPlaying);
                 replaced.montageCallbackHandle.invalidate();
                 replaced.setOutgoing(outgoing);
@@ -200,6 +226,28 @@ public final class AnimationMontagePlayer implements AnimationDriver {
     @Override
     public void tick(final ComponentAttachable owner) {
         this.owner = owner;
+        this.aimer = owner instanceof EntityPatch<?> entity ? entity : null;
+
+        List<AimNotifyState> aims = getActiveNotifyStates(AimNotifyState.class);
+        float pitch = aimer == null ? 0.0F : aimer.getXRot(1.0F);
+
+        for (AimNotifyState aim : aims) {
+            aimTurns.computeIfAbsent(aim.bone(), _ -> new AimTurn()).blendTime = aim.blendTime();
+        }
+
+        aimTurns.entrySet().removeIf(entry -> {
+            AimTurn turn = entry.getValue();
+            float target = 0.0F;
+
+            for (AimNotifyState aim : aims) {
+                if (aim.bone().equals(entry.getKey())) target += aim.turn(pitch);
+            }
+
+            turn.last = turn.current;
+            turn.current += (target - turn.current) * (turn.blendTime <= 0.0F ? 1.0F : 1.0F - (float)Math.exp(-3.0F * TICK_SECONDS / turn.blendTime));
+
+            return target == 0.0F && Math.abs(turn.last) < AimTurn.REST && Math.abs(turn.current) < AimTurn.REST;
+        });
 
         if (currentPlaying != null && !Float.isNaN(leftSectionEnd)) {
             currentPlaying.value().tick(owner, lastUpdatedTime, leftSectionEnd);
@@ -327,6 +375,7 @@ public final class AnimationMontagePlayer implements AnimationDriver {
 
     /// Returns the notify state of `type` whose time window holds the playhead. Null once the montage
     /// started fading out.
+    @Override
     public <T extends AnimationNotifyState<?>> @Nullable T getActiveNotifyState(final Class<T> type) {
         return currentPlaying == null || isFinished ? null : currentPlaying.value().notifyTrack().getNotifyStateAt(type, elapsedTime);
     }
@@ -409,9 +458,25 @@ public final class AnimationMontagePlayer implements AnimationDriver {
 
     /// Read-only view of the current montage's pose at [#elapsedTime]. Playback control stays on the player.
     private final class PlayingPose implements AnimationDriver {
+        /// The montage's pose with the eased [#aimTurns] laid on.
         @Override
         public Pose getPose() {
-            return currentPlaying == null ? cachedLastMontagePose : currentPlaying.value().getPose(elapsedTime);
+            if (currentPlaying == null) return cachedLastMontagePose;
+
+            Pose pose = currentPlaying.value().getPose(elapsedTime);
+            ArmatureComponent armatureComponent = aimer == null ? null : aimer.getArmatureComponent();
+            Armature armature = armatureComponent == null || armatureComponent.getArmature() == null ? null : armatureComponent.getArmature().get();
+
+            if (aimTurns.isEmpty() || armature == null) return pose;
+
+            float partialTick = armatureComponent.getPartialTick();
+            Pose aimed = new Pose(pose);
+
+            aimTurns.forEach((bone, turn) -> PoseOperators.rotateInModelSpace(
+                armature, aimed, bone, new Quaterniond().rotateX(Math.toRadians(-Mth.lerp(partialTick, turn.last, turn.current)))
+            ));
+
+            return aimed;
         }
 
         @Override
@@ -517,5 +582,29 @@ public final class AnimationMontagePlayer implements AnimationDriver {
         /// @param interrupted  whether the montage is force finished while playback. `override` still can be null if
         ///                     the montage is finished by [#terminate(Holder.Reference)].
         void onCompleted(Holder<AnimationMontage> animMontage, @Nullable Holder<AnimationMontage> override, boolean interrupted);
+    }
+
+    /// One bone's eased aim turn, in degrees.
+    private static final class AimTurn {
+        /// A turn this close to 0 counts as resting, in degrees.
+        private static final float REST = 0.01F;
+
+        /// The turn the last tick ended on.
+        private float last;
+
+        /// The turn this tick ended on.
+        private float current;
+
+        /// The blend time of the [AimNotifyState] that aimed the bone last, in seconds.
+        private float blendTime;
+
+        private AimTurn copy() {
+            AimTurn copy = new AimTurn();
+            copy.last = last;
+            copy.current = current;
+            copy.blendTime = blendTime;
+
+            return copy;
+        }
     }
 }

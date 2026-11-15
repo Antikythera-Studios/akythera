@@ -38,6 +38,7 @@ import com.yesman.akythera.core.animation.driver.AnimationDriver;
 import com.yesman.akythera.core.animation.driver.EmptyAnimationDriver;
 import com.yesman.akythera.core.animation.driver.LayeredBlendPerBoneDriver;
 import com.yesman.akythera.core.animation.driver.ModifyBoneDriver;
+import com.yesman.akythera.core.animation.driver.OrientBodyDriver;
 import com.yesman.akythera.core.animation.driver.PlayRateDriver;
 import com.yesman.akythera.core.animation.driver.PoseBlendDriver;
 import com.yesman.akythera.core.animation.keyframe.Pose;
@@ -781,6 +782,32 @@ public final class AkytheraScriptFunctions {
             "Orientation Warp",
             "Animation/Pose",
             "Turns the hips by an angle in degrees and keeps the spine facing forward",
+            true,
+            ScriptFunction.Usage.ANIM_GRAPH
+        )
+    );
+
+    public static final Holder<ScriptFunction> ORIENT_BODY_VIEW = AKYTHERA_REGISTRAR.register("orient_body_view", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (ScriptFunction.QuintFunction<BlendingAnimator, AnimationDriver, String, Supplier, Supplier, AnimationDriver>) (animator, base, pivotBoneName, limits, weight) ->
+                new OrientBodyDriver(animator, base, pivotBoneName, OrientBodyDriver.PitchSource.VIEW, (Supplier<Vec3>)limits, (Supplier<Float>)weight),
+            FunctionSignature.create(AnimationDriver.class, List.of("animator", "base", "pivotBoneName", "limits", "weight"), BlendingAnimator.class, AnimationDriver.class, String.class, Supplier.class, Supplier.class),
+            "Orient Body (View)",
+            "Animation/Pose",
+            "Turns the whole pose about a pivot bone to pitch with the owner's view and bank into its turns, up to a pitch and roll in degrees",
+            true,
+            ScriptFunction.Usage.ANIM_GRAPH
+        )
+    );
+
+    public static final Holder<ScriptFunction> ORIENT_BODY_MOTION = AKYTHERA_REGISTRAR.register("orient_body_motion", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (ScriptFunction.QuintFunction<BlendingAnimator, AnimationDriver, String, Supplier, Supplier, AnimationDriver>) (animator, base, pivotBoneName, limits, weight) ->
+                new OrientBodyDriver(animator, base, pivotBoneName, OrientBodyDriver.PitchSource.MOTION, (Supplier<Vec3>)limits, (Supplier<Float>)weight),
+            FunctionSignature.create(AnimationDriver.class, List.of("animator", "base", "pivotBoneName", "limits", "weight"), BlendingAnimator.class, AnimationDriver.class, String.class, Supplier.class, Supplier.class),
+            "Orient Body (Motion)",
+            "Animation/Pose",
+            "Turns the whole pose about a pivot bone to pitch along the owner's motion and bank into its turns, up to a pitch and roll in degrees",
             true,
             ScriptFunction.Usage.ANIM_GRAPH
         )

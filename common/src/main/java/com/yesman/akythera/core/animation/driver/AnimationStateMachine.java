@@ -1,6 +1,7 @@
 package com.yesman.akythera.core.animation.driver;
 
 import com.yesman.akythera.api.animation.impl.AkytheraAnimationState;
+import com.yesman.akythera.api.animation.notify.AnimationNotifyState;
 import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.animation.FSMAnimationState;
 import com.yesman.akythera.core.animation.keyframe.Pose;
@@ -105,12 +106,20 @@ public final class AnimationStateMachine<O extends ComponentAttachable>
         return getCurrentStateDriver().getPhase();
     }
 
-    /// Starts the state machine only when it's not running.
+    /// The current state's, read from the state the machine moves to while a transition still blends.
+    @Override
+    public <T extends AnimationNotifyState<?>> @Nullable T getActiveNotifyState(final Class<T> type) {
+        return getCurrentStateDriver().getActiveNotifyState(type);
+    }
+
+    /// Starts the state machine when it's not running, from its entry pose, taking an entry transition at once.
     @Override
     public void start() {
-        if (getState() == AkytheraAnimationState.EXIT) {
+        if (getState() == AkytheraAnimationState.EXIT || getState() == AkytheraAnimationState.ENTRY) {
             setState(AkytheraAnimationState.ENTRY);
-            getStateModel().getStateInstance(getState()).animDriver.start();
+            currentDriver = getCurrentStateDriver();
+            currentDriver.start();
+            checkAndTransitToNextState();
         }
     }
 

@@ -11,7 +11,9 @@ import org.joml.Quaterniond;
 import org.joml.Quaterniondc;
 import org.jspecify.annotations.Nullable;
 
+import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 public final class PoseOperators {
@@ -63,6 +65,11 @@ public final class PoseOperators {
     /// @param posesToBlend each pose's bone entry should be matching, otherwise unmatching bones will be mixed with T-Pose
     @SafeVarargs
     public static Pose blendPoses(final Pair<Pose, Float>... posesToBlend) {
+        return blendPoses(Arrays.asList(posesToBlend));
+    }
+
+    /// [#blendPoses(Pair...)] over a list.
+    public static Pose blendPoses(final List<Pair<Pose, Float>> posesToBlend) {
         Pose pose = new Pose();
         float weightSum = 0.0F;
         float blendedWeight = 0.0F;

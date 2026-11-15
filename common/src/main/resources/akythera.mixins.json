@@ -17,6 +17,7 @@
     "client.MixinLevelExtractor",
     "client.MixinLivingEntityRenderer",
     "client.MixinLivingEntityRenderState",
+    "client.MixinLocalPlayer",
     "client.MixinMinecraft",
     "client.MixinParticle",
     "client.MixinParticleEngine",

@@ -19,8 +19,8 @@ import java.util.stream.Stream;
 
 /// The hand-curated [AbilityResource] registry.
 ///
-/// Entries are registered during mod initialization and the registry is frozen once every plugin
-/// has had its turn. Registering after the freeze throws.
+/// Entries are registered during mod construction or initialization, and the registry is frozen when the first
+/// registry access loads. Registering after the freeze throws.
 public final class AbilityResources {
     private static final Map<Identifier, AbilityResource> REGISTRY = new LinkedHashMap<>();
     private static final Map<AbilityResource, Identifier> IDENTIFIERS = new HashMap<>();
@@ -57,6 +57,7 @@ public final class AbilityResources {
         }
 
         REGISTRY.put(identifier, resource);
+        IDENTIFIERS.put(resource, identifier);
     }
 
     public static @Nullable AbilityResource get(final Identifier identifier) {
@@ -91,17 +92,15 @@ public final class AbilityResources {
         return REGISTRY.entrySet().stream();
     }
 
-    /// Registers the entries Akythera owns. Runs before third-party plugins register theirs.
+    /// Registers the entries Akythera owns.
     @ApiStatus.Internal
     public static void bootStrap() {
         register(Akythera.identifier("health"), new Health());
     }
 
-    /// Builds the reverse lookup and closes the registry to further entries.
+    /// Closes the registry to further entries.
     @ApiStatus.Internal
     public static void freeze() {
-        IDENTIFIERS.clear();
-        REGISTRY.forEach((identifier, resource) -> IDENTIFIERS.put(resource, identifier));
         frozen = true;
     }
 

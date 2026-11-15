@@ -8,6 +8,7 @@ import com.yesman.akythera.api.asset.animation.AnimationManager;
 import com.yesman.akythera.api.asset.armature.ArmatureManager;
 import com.yesman.akythera.api.data.modularize.AkytheraScriptFunctions;
 import com.yesman.akythera.api.data.modularize.AkytheraScriptTypes;
+import com.yesman.akythera.api.event.BuiltInEventHooks;
 import com.yesman.akythera.api.lifecycle.ComponentsFactory;
 import com.yesman.akythera.api.lifecycle.ServerComponentsFactory;
 import com.yesman.akythera.api.world.patch.AkytheraPatches;
@@ -180,7 +181,7 @@ public final class Akythera {
             .filter(Objects::nonNull)
             .forEach(IModPlugin::onInitialize);
 
-        AbilityResources.freeze();
+        BuiltInEventHooks.Registry.REGISTRY_ACCESS_LOAD.registerEvent(_ -> AbilityResources.freeze());
 
         AnimationInterfaceKey.ENUM_MANAGER.loadEnum();
         FSMAnimationState.ENUM_MANAGER.loadEnum();

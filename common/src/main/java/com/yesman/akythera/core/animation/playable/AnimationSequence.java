@@ -3,6 +3,7 @@ package com.yesman.akythera.core.animation.playable;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import com.yesman.akythera.api.animation.notify.AnimationNotifyState;
 import com.yesman.akythera.api.asset.AssetAccessor;
 import com.yesman.akythera.api.asset.animation.AnimationManager;
 import com.yesman.akythera.api.component.ComponentAttachable;
@@ -19,6 +20,7 @@ import com.yesman.akythera.core.util.StaticRegistryAccess;
 import net.minecraft.util.ExtraCodecs;
 import net.minecraft.world.entity.Entity;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 /// A simple playable animation with fundamental metadata defined in [PlayableAnimation]
 ///
@@ -93,6 +95,11 @@ public record AnimationSequence(
             notifyTrack, AnimationManager.getMirrorAnimation(animClip), fadeInTime, fadeOutTime, loops, rootMotion, moveVertical, playRate, phaseOffset,
             ikType
         );
+    }
+
+    @Override
+    public <T extends AnimationNotifyState<?>> @Nullable T getNotifyStateAt(final Class<T> type, final float time) {
+        return notifyTrack.getNotifyStateAt(type, time);
     }
 
     @Override

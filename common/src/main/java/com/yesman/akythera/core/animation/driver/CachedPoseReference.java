@@ -1,5 +1,6 @@
 package com.yesman.akythera.core.animation.driver;
 
+import com.yesman.akythera.api.animation.notify.AnimationNotifyState;
 import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.animation.animator.BlendingAnimator;
 import com.yesman.akythera.core.animation.keyframe.Pose;
@@ -35,9 +36,7 @@ public final class CachedPoseReference implements AnimationDriver {
 
         // pose == null; the pose hasn't evaluated in this frame yet
         if (pose == null) {
-            // Important: update the referencing drive only if the cached pose is empty.
-            // This prevents double-stepping in a frame.
-            ref().update(recordedAdvanceTime);
+            blendingAnimator.advanceCachedPoseDriver(cacheName, recordedAdvanceTime);
             pose = ref().getPose();
             blendingAnimator.cachePose(cacheName, pose);
         }
@@ -58,7 +57,12 @@ public final class CachedPoseReference implements AnimationDriver {
     @Override
     public void update(final float frameTime) {
         recordedAdvanceTime = frameTime;
-        // In this stage, we only record the time advances and update the referencing driver when pose got referenced.
+        blendingAnimator.advanceCachedPoseDriver(cacheName, frameTime);
+    }
+
+    @Override
+    public <T extends AnimationNotifyState<?>> @Nullable T getActiveNotifyState(final Class<T> type) {
+        return ref().getActiveNotifyState(type);
     }
 
     @Override

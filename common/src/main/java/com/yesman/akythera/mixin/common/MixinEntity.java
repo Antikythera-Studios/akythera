@@ -6,6 +6,7 @@ import com.yesman.akythera.api.lifecycle.ComponentsFactory;
 import com.yesman.akythera.api.world.behavior.BehaviorTreeInstance;
 import com.yesman.akythera.api.world.behavior.BrainComponent;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.api.world.patch.entity.component.EntityMovementComponent;
 import com.yesman.akythera.core.Akythera;
 import com.yesman.akythera.mixinaccessor.common.EntityAccessor;
 import net.minecraft.world.entity.Entity;
@@ -84,6 +85,19 @@ public abstract class MixinEntity implements EntityAccessor {
             : BrainComponent.treeOf((Entity)(Object)this);
 
         if (tree != null) tree.feelPush(pusher);
+    }
+
+    /// Lets a sprinting entity start swimming while it floats at the surface under its
+    /// [EntityMovementComponent#surfaceFloat], with its eyes above the water.
+    ///
+    /// Hooks the return because NeoForge's `updateSwimming` asks `canStartSwimming` where vanilla asks `isUnderWater`.
+    @Inject(at = @At(value = "RETURN"), method = "updateSwimming()V")
+    private void akythera$startSwimmingAtSurface(final CallbackInfo callbackInfo) {
+        Entity self = (Entity)(Object)this;
+
+        if (!self.isSwimming() && self.isSprinting() && self.isInWater() && !self.isPassenger() && EntityMovementComponent.floatsInWater(self)) {
+            self.setSwimming(true);
+        }
     }
 
     @Override

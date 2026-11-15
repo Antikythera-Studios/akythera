@@ -8,6 +8,7 @@ import com.yesman.akythera.api.world.ability.AbilityEffect;
 import com.yesman.akythera.api.world.ability.AbilityInstance;
 import com.yesman.akythera.api.world.ability.AbilityState;
 import com.yesman.akythera.api.world.ability.AbilitySystemComponent;
+import com.yesman.akythera.api.world.ability.StoredAbilityResource;
 import com.yesman.akythera.api.world.ability.SystematicAbility;
 import com.yesman.akythera.client.api.gui.BlueprintWidgets;
 import com.yesman.akythera.client.api.gui.HudManager;
@@ -21,6 +22,7 @@ import com.yesman.akythera.core.math.Transform;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityEffectSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityEquipmentSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityLifecycle;
+import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityResourceSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityStateSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityTagSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundClearWidgetHuds;
@@ -84,6 +86,21 @@ public interface AkytheraClientBoundPayloadHandler {
             } else {
                 component.clearAbilityTag(payload.tag());
             }
+        });
+    }
+
+    /// Mirrors a stored resource onto the client's copy of the component.
+    static void handleAbilityResourceSync(final ClientBoundAbilityResourceSync payload, final PayloadContext context) {
+        if (Minecraft.getInstance().level == null || !(payload.resource() instanceof StoredAbilityResource resource)) return;
+
+        Entity entity = Minecraft.getInstance().level.getEntity(payload.entityId());
+
+        if (entity == null) return;
+
+        AkytheraPatches.getEntityPatchOptional(entity).ifPresent(entityPatch -> {
+            AbilitySystemComponent component = entityPatch.getComponent(AbilitySystemComponent.class);
+
+            if (component != null) component.mirrorStoredResource(resource, payload.value(), payload.regenCooldown());
         });
     }
 
