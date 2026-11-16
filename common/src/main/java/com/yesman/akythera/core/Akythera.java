@@ -12,6 +12,7 @@ import com.yesman.akythera.api.lifecycle.ComponentsFactory;
 import com.yesman.akythera.api.lifecycle.ServerComponentsFactory;
 import com.yesman.akythera.api.world.patch.AkytheraPatches;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
+import com.yesman.akythera.api.world.patch.item.ItemPatch;
 import com.yesman.akythera.api.world.ability.Ability;
 import com.yesman.akythera.api.world.ability.AbilityCue;
 import com.yesman.akythera.api.world.ability.AbilityCueScript;
@@ -47,6 +48,7 @@ import com.yesman.akythera.api.animation.impl.AkytheraAnimationState;
 import com.yesman.akythera.core.blueprint.AkytheraComponentBlueprints;
 import com.yesman.akythera.core.blueprint.script.AnimatorScript;
 import com.yesman.akythera.core.blueprint.script.EntityPatchScript;
+import com.yesman.akythera.core.blueprint.script.ItemPatchScript;
 import com.yesman.akythera.core.animation.ik.AkytheraIKSolverType;
 import com.yesman.akythera.core.animation.ik.AkytheraIKType;
 import com.yesman.akythera.core.animation.ik.IKSolverType;
@@ -145,6 +147,7 @@ public final class Akythera {
         BrainComponent.registerEvents();
 
         ScriptModularizeHelper.registerBlueprintLayout(EntityPatch.class, EntityPatchScript.class);
+        ScriptModularizeHelper.registerBlueprintLayout(ItemPatch.class, ItemPatchScript.class);
         ScriptModularizeHelper.registerBlueprintLayout(Animator.class, AnimatorScript.class);
         ScriptModularizeHelper.registerBlueprintLayout(Ability.class);
         ScriptModularizeHelper.registerBlueprintLayout(AbilityCue.class, AbilityCueScript.class);

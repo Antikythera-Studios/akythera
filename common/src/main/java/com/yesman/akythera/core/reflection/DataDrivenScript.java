@@ -17,7 +17,7 @@ import org.jspecify.annotations.Nullable;
 /// implement* are determined by driven classes.
 ///
 /// @param <T> Script owner. All unconnected pure node's owner.
-public interface DataDrivenScript<T, B extends Blueprint<?, T>> {
+public interface DataDrivenScript<T, B extends Blueprint<?, ?>> {
     /// Returns script owner
     T getScriptOwner();
 

@@ -33,6 +33,7 @@ public final class BuiltInEventHooks {
     public static final class Entity {
         public static final EventHook<EntityConstructEvent> CONSTRUCTED = EventHook.createEventHook();
         public static final EventHook<EntitySpawnEvent> SPAWNED = EventHook.createEventHook();
+        public static final EventHook<EntityRemoveEvent> REMOVED = EventHook.createEventHook();
         public static final EventHook<EntityTrackingEvent.Start> TRACKING_START = EventHook.createSidedEventHook(LogicalSide.SERVER);
         public static final EventHook<EntityTrackingEvent.Stop> TRACKING_END = EventHook.createSidedEventHook(LogicalSide.SERVER);
         public static final EventHook<TickEvent.CommonPre> TICK_PRE = EventHook.createEventHook();

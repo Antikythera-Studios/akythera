@@ -4,6 +4,7 @@ import com.yesman.akythera.api.animation.notify.impl.NoGravityNotifyState;
 import com.yesman.akythera.api.cinema.CinemaScenePlayback;
 import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.event.BuiltInEventHooks;
+import com.yesman.akythera.api.event.entity.EntityRemoveEvent;
 import com.yesman.akythera.api.event.entity.TickEvent;
 import com.yesman.akythera.api.lifecycle.ComponentsFactory;
 import com.yesman.akythera.api.world.behavior.BehaviorTreeInstance;
@@ -80,6 +81,16 @@ public abstract class MixinEntity implements EntityAccessor {
                 );
             }
         }
+    }
+
+    /// Posts [BuiltInEventHooks.Entity#REMOVED] the first time the entity is marked removed.
+    @Inject(at = @At(value = "HEAD"), method = "setRemoved(Lnet/minecraft/world/entity/Entity$RemovalReason;)V")
+    private void akythera$postRemoved(final Entity.RemovalReason reason, final CallbackInfo callbackInfo) {
+        if (akythera$entityPatch == null || ((Entity)(Object)this).isRemoved()) return;
+
+        BuiltInEventHooks.Entity.REMOVED.postWithListener(
+            new EntityRemoveEvent(akythera$entityPatch, reason), akythera$entityPatch.getEntityEventListener()
+        );
     }
 
     /// Lets the brain of this entity feel `pusher` pushing it.

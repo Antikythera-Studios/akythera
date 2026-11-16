@@ -22,6 +22,7 @@ import com.yesman.akythera.core.animation.animator.BlendingAnimator;
 import com.yesman.akythera.core.animation.driver.AnimationMontagePlayer;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import com.yesman.akythera.core.blueprint.EntityPatchBlueprint;
+import com.yesman.akythera.core.blueprint.script.ItemPatchScript;
 import com.yesman.akythera.core.networking.NetworkingHelper;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundSetTarget;
 import com.yesman.akythera.core.reflection.ScriptFunction;
@@ -83,6 +84,9 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
 
     /// The [EquipmentSlotBinder] of each slot in the component tree, collected on first use. Null until then.
     private @Nullable Map<EquipmentSlot, EquipmentSlotBinder> slotBinders;
+
+    /// The item patch each slot held at the last [#postTick]. A slot whose item has no patch is absent.
+    private final Map<EquipmentSlot, ItemPatch> equippedItemPatches = new EnumMap<>(EquipmentSlot.class);
 
     /// Whether [#animationReplacements] were written through their mirrored twins.
     private boolean replacementsMirrored;
@@ -186,12 +190,42 @@ public class LivingEntityPatch<T extends LivingEntity> extends EntityPatch<T> im
     }
 
     /// Refreshes the slot binders before the components tick, so an item changed during this tick has its sockets
-    /// in place when the animator fires its notifies.
+    /// in place when the animator fires its notifies. Then runs the [ItemPatchScript] events of every slot.
     @Override
     public void postTick() {
         slotBinders().values().forEach(EquipmentSlotBinder::refresh);
 
+        for (EquipmentSlot slot : EquipmentSlot.VALUES) {
+            ItemPatch itemPatch = getItemPatchInSlot(slot);
+            ItemPatch equipped = equippedItemPatches.get(slot);
+
+            if (equipped != itemPatch) {
+                if (equipped != null && equipped.getScript() != null) equipped.getScript().onUnequipped(this, slot);
+
+                if (itemPatch == null) {
+                    equippedItemPatches.remove(slot);
+                } else {
+                    equippedItemPatches.put(slot, itemPatch);
+                }
+
+                if (itemPatch != null && itemPatch.getScript() != null) itemPatch.getScript().onEquipped(this, slot);
+            }
+
+            if (itemPatch != null && itemPatch.getScript() != null) itemPatch.getScript().onBeingHeld(this, slot);
+        }
+
         super.postTick();
+    }
+
+    /// Runs [ItemPatchScript#onUnequipped] for every slot still holding a patched item.
+    @Override
+    public void onRemoved(final Entity.RemovalReason reason) {
+        super.onRemoved(reason);
+
+        equippedItemPatches.forEach((slot, itemPatch) -> {
+            if (itemPatch.getScript() != null) itemPatch.getScript().onUnequipped(this, slot);
+        });
+        equippedItemPatches.clear();
     }
 
     /// The adapter that established the current stance, the item patch declaring it and the slot that

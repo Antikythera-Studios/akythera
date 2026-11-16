@@ -195,6 +195,7 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
         entityEventListener.registerEvent(BuiltInEventHooks.Entity.POSSESSED, _ -> onPossessed());
         entityEventListener.registerEvent(BuiltInEventHooks.Entity.UNPOSSESSED, _ -> onUnpossessed());
         entityEventListener.registerEvent(BuiltInEventHooks.Entity.DEATH, _ -> onDeath());
+        entityEventListener.registerEvent(BuiltInEventHooks.Entity.REMOVED, event -> onRemoved(event.getReason()));
     }
 
     @Override
@@ -246,6 +247,10 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
     /// Called on the server on the first tick this entity is dead
     public void onDeath() {
         if (script != null) script.onDeath();
+    }
+
+    /// Called on both sides when this entity is removed from its level
+    public void onRemoved(final Entity.RemovalReason reason) {
     }
 
     /// Ticks before [Entity#tick]

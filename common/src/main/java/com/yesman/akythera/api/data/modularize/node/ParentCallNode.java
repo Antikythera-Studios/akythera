@@ -10,7 +10,7 @@ import org.jspecify.annotations.Nullable;
 import java.util.function.Supplier;
 
 /// Calls the implementation the running function overrides, with the arguments the function was called with.
-/// As a statement, its value is dropped.
+/// As a statement, its value is dropped. Does nothing and answers null in a run with no parent.
 public record ParentCallNode(int nodeId) implements FlowNode, PureNode {
     public static final Codec<ParentCallNode> CODEC = RecordCodecBuilder.create(
         instance ->
@@ -25,7 +25,7 @@ public record ParentCallNode(int nodeId) implements FlowNode, PureNode {
 
         Supplier<?> parent = context.locals().getValue(BlueprintExecutor.PARENT_LOCAL);
 
-        return context.returnVal(parent.get());
+        return context.returnVal(parent == null ? null : parent.get());
     }
 
     @Override

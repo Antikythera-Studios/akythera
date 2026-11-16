@@ -11,6 +11,7 @@ import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
 import com.yesman.akythera.api.world.patch.entity.component.EquipmentHolder;
 import com.yesman.akythera.api.world.patch.item.component.WeaponStanceVariationAdapter;
 import com.yesman.akythera.core.blueprint.ItemPatchBlueprint;
+import com.yesman.akythera.core.blueprint.script.ItemPatchScript;
 import com.yesman.akythera.core.reflection.ScriptType;
 import com.yesman.akythera.core.util.LogicalSide;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -34,8 +35,9 @@ import java.util.Map;
 /// access is loaded. Check details in [AkytheraPatches#getItemPatch].
 ///
 /// The patch [AkytheraPatches#getItemPatch] answers is static and shared through all [ItemStack], so no
-/// [DynamicPatchComponent] is allowed to be here. Its [TransformComponent]s are built again beside each
-/// [EquipmentSlotBinder] holding the item, see [EquipmentHolder#getSlotBinder].
+/// [DynamicPatchComponent] is allowed to be here, and its [ItemPatchScript] keeps no state. Its
+/// [TransformComponent]s are built again beside each [EquipmentSlotBinder] holding the item, see
+/// [EquipmentHolder#getSlotBinder].
 @ScriptType
 public final class ItemPatch implements ComponentAttachable {
     private final Item original;
@@ -47,6 +49,9 @@ public final class ItemPatch implements ComponentAttachable {
     /// Components by type. Each component is unique in the patch
     private final Map<Class<? extends UniqueComponent>, ? extends UniqueComponent> uniqueComponents;
 
+    /// The script of the nearest blueprint of the hierarchy authoring an event. Null when none authors any.
+    private final @Nullable ItemPatchScript script;
+
     /// Instantiated only by [ItemPatchBlueprint#instantiate]
     @ApiStatus.Internal
     public ItemPatch(final Item original, final ItemPatchBlueprint blueprint) {
@@ -54,6 +59,12 @@ public final class ItemPatch implements ComponentAttachable {
         this.blueprint = blueprint;
         this.components = Collections.unmodifiableMap(ItemPatchBlueprint.assembleComponents(blueprint, this));
         this.uniqueComponents = ComponentAttachable.indexUnique(components);
+        this.script = blueprint.instantiateScript(this);
+    }
+
+    /// The script whose events run for an entity holding the item. Null when the patch authors none.
+    public @Nullable ItemPatchScript getScript() {
+        return script;
     }
 
     /// The patch's components, in the order the blueprint hierarchy declared them. A consumer that
