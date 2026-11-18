@@ -5,15 +5,29 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.data.modularize.node.FlowNode;
+import com.yesman.akythera.api.data.modularize.node.ParentCallNode;
+import com.yesman.akythera.core.blueprint.Blueprint;
 import com.yesman.akythera.core.reflection.BlueprintFunction;
 import com.yesman.akythera.core.reflection.BlueprintLayout;
 import com.yesman.akythera.core.reflection.ScriptModularizeHelper;
+import com.yesman.akythera.core.util.StaticRegistryAccess;
+import net.minecraft.core.Holder;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.ExtraCodecs;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /// What a data-driven blueprint authors on top of its parent class.
+///
+/// The body of a blueprint naming a [Blueprint#dataParent] is laid over that entry's body: it inherits the
+/// methods, functions, properties and variables it leaves out, and a [ParentCallNode] in one of its methods or
+/// functions runs the parent's graph. A variable declared again under a parent's name replaces the parent's
+/// default value.
 ///
 /// @param methods    the graphs implementing the parent's [BlueprintFunction] methods, every event and each
 ///                   overridden function, by [BlueprintLayout.Signature#key]
@@ -51,6 +65,58 @@ public record BlueprintBody(
         variables = List.copyOf(variables);
     }
 
+    /// The body of `blueprint`, then the body of each [Blueprint#dataParent] up to the root. Requires a loaded
+    /// registry access.
+    ///
+    /// @throws IllegalStateException when a data parent is missing from the registry, or the parents form a loop
+    public static <B extends Blueprint<?, ?>> List<Link<B>> chain(final Holder.Reference<B> blueprint) {
+        List<Link<B>> chain = new ArrayList<>();
+        Set<ResourceKey<B>> visited = new HashSet<>();
+        Holder.Reference<B> current = blueprint;
+
+        chain.add(new Link<>(current, current.value().body()));
+        visited.add(current.key());
+
+        while (current.value().dataParent().isPresent()) {
+            ResourceKey<B> parentKey = ResourceKey.create(blueprint.key().registryKey(), current.value().dataParent().get());
+
+            if (!visited.add(parentKey)) {
+                throw new IllegalStateException("Circular blueprint hierarchy: " + parentKey.identifier());
+            }
+
+            current = StaticRegistryAccess.getRegistryAccess().getOrThrow(parentKey);
+            chain.add(new Link<>(current, current.value().body()));
+        }
+
+        return chain;
+    }
+
+    /// `bodies`, a body then the body of each of its data parents up to the root, as one body: each method,
+    /// function, property and variable is the one of the nearest body declaring it. The variables keep the root's
+    /// order.
+    public static BlueprintBody fold(final List<BlueprintBody> bodies) {
+        if (bodies.size() == 1) return bodies.getFirst();
+
+        Map<String, FlowNode> methods = new LinkedHashMap<>();
+        Map<String, FunctionGraph> functions = new LinkedHashMap<>();
+        Map<String, JsonElement> properties = new LinkedHashMap<>();
+        Map<String, ScriptVariables.VariableInfo> variables = new LinkedHashMap<>();
+
+        for (BlueprintBody body : bodies.reversed()) {
+            methods.putAll(body.methods);
+            functions.putAll(body.functions);
+            properties.putAll(body.properties);
+            body.variables.forEach(variable -> variables.put(variable.name(), variable));
+        }
+
+        return new BlueprintBody(methods, functions, properties, List.copyOf(variables.values()));
+    }
+
+    /// The body of `blueprint` laid over its data parents, see [#chain] and [#fold].
+    public static <B extends Blueprint<?, ?>> BlueprintBody inherited(final Holder.Reference<B> blueprint) {
+        return fold(chain(blueprint).stream().map(Link::body).toList());
+    }
+
     /// The value this body sets for the property `name` of `layoutProvider`, decoded through the property's
     /// type, or `fallback` when the body leaves it unset.
     ///
@@ -66,5 +132,11 @@ public record BlueprintBody(
         JsonElement value = properties.get(property.key());
 
         return value == null || property.type().codec() == null ? fallback : property.type().parse(value);
+    }
+
+    /// One body of a [#chain].
+    ///
+    /// @param blueprint the entry holding `body`
+    public record Link<B extends Blueprint<?, ?>>(Holder.Reference<B> blueprint, BlueprintBody body) {
     }
 }

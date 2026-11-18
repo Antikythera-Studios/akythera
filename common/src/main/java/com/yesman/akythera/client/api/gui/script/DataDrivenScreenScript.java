@@ -12,11 +12,19 @@ public final class DataDrivenScreenScript extends DataDrivenWidgetScript impleme
 
     @Override
     public void onOpened() {
-        executor.invokeMethod("onOpened", null);
+        executor.invokeMethod("onOpened", () -> {
+            if (parent instanceof ScreenScript script) script.onOpened();
+
+            return null;
+        });
     }
 
     @Override
     public void onClosed() {
-        executor.invokeMethod("onClosed", null);
+        executor.invokeMethod("onClosed", () -> {
+            if (parent instanceof ScreenScript script) script.onClosed();
+
+            return null;
+        });
     }
 }

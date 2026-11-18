@@ -12,16 +12,28 @@ public final class DataDrivenHUDScript extends DataDrivenWidgetContainerScript i
 
     @Override
     public void onAdded() {
-        executor.invokeMethod("onAdded", null);
+        executor.invokeMethod("onAdded", () -> {
+            if (parent instanceof HUDScript script) script.onAdded();
+
+            return null;
+        });
     }
 
     @Override
     public void onRemoved() {
-        executor.invokeMethod("onRemoved", null);
+        executor.invokeMethod("onRemoved", () -> {
+            if (parent instanceof HUDScript script) script.onRemoved();
+
+            return null;
+        });
     }
 
     @Override
     public void onUpdated() {
-        executor.invokeMethod("onUpdated", null);
+        executor.invokeMethod("onUpdated", () -> {
+            if (parent instanceof HUDScript script) script.onUpdated();
+
+            return null;
+        });
     }
 }

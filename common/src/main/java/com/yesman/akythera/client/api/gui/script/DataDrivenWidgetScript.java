@@ -9,8 +9,8 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.input.PreeditEvent;
 import net.minecraft.core.Holder;
 
-/// Runs the [WidgetScript] events of a [DataDrivenWidgetBlueprint]. An input method the blueprint leaves
-/// unimplemented handles nothing.
+/// Runs the [WidgetScript] events of a [DataDrivenWidgetBlueprint]. An input method no blueprint implements is
+/// answered by the source code script, and handles nothing without one.
 public class DataDrivenWidgetScript extends DataDrivenWidgetContainerScript implements WidgetScript {
     public DataDrivenWidgetScript(final Holder.Reference<DataDrivenWidgetBlueprint> blueprint, final AkytheraWidget widget) {
         super(blueprint, widget, WidgetScript.class);
@@ -26,61 +26,77 @@ public class DataDrivenWidgetScript extends DataDrivenWidgetContainerScript impl
 
     @Override
     public void construct() {
-        executor.invokeMethod("construct", null);
+        executor.invokeMethod("construct", () -> {
+            if (parent instanceof WidgetScript script) script.construct();
+
+            return null;
+        });
     }
 
     @Override
     public void tick() {
-        executor.invokeMethod("tick", null);
+        executor.invokeMethod("tick", () -> {
+            if (parent instanceof WidgetScript script) script.tick();
+
+            return null;
+        });
     }
 
     @Override
     public void onResized(final int width, final int height) {
-        executor.invokeMethod("onResized", null, width, height);
+        executor.invokeMethod("onResized", () -> {
+            if (parent instanceof WidgetScript script) script.onResized(width, height);
+
+            return null;
+        }, width, height);
     }
 
     @Override
     public void mouseMoved(final double mouseX, final double mouseY) {
-        executor.invokeMethod("mouseMoved", null, mouseX, mouseY);
+        executor.invokeMethod("mouseMoved", () -> {
+            if (parent instanceof WidgetScript script) script.mouseMoved(mouseX, mouseY);
+
+            return null;
+        }, mouseX, mouseY);
     }
 
     @Override
     public boolean mouseClicked(final MouseButtonEvent event, final boolean doubleClick) {
-        return Boolean.TRUE.equals(executor.invokeMethod("mouseClicked", () -> false, event, doubleClick));
+        return Boolean.TRUE.equals(executor.invokeMethod("mouseClicked", () -> parent instanceof WidgetScript script && script.mouseClicked(event, doubleClick), event, doubleClick));
     }
 
     @Override
     public boolean mouseReleased(final MouseButtonEvent event) {
-        return Boolean.TRUE.equals(executor.invokeMethod("mouseReleased", () -> false, event));
+        return Boolean.TRUE.equals(executor.invokeMethod("mouseReleased", () -> parent instanceof WidgetScript script && script.mouseReleased(event), event));
     }
 
     @Override
     public boolean mouseDragged(final MouseButtonEvent event, final double dragX, final double dragY) {
-        return Boolean.TRUE.equals(executor.invokeMethod("mouseDragged", () -> false, event, dragX, dragY));
+        return Boolean.TRUE.equals(executor.invokeMethod("mouseDragged", () -> parent instanceof WidgetScript script && script.mouseDragged(event, dragX, dragY), event, dragX, dragY));
     }
 
     @Override
     public boolean mouseScrolled(final double mouseX, final double mouseY, final double scrollX, final double scrollY) {
-        return Boolean.TRUE.equals(executor.invokeMethod("mouseScrolled", () -> false, mouseX, mouseY, scrollX, scrollY));
+        return Boolean.TRUE.equals(executor.invokeMethod("mouseScrolled", () -> parent instanceof WidgetScript script && script.mouseScrolled(mouseX, mouseY, scrollX, scrollY), mouseX, mouseY, scrollX, scrollY));
     }
 
     @Override
     public boolean keyPressed(final KeyEvent event) {
-        return Boolean.TRUE.equals(executor.invokeMethod("keyPressed", () -> false, event));
+        return Boolean.TRUE.equals(executor.invokeMethod("keyPressed", () -> parent instanceof WidgetScript script && script.keyPressed(event), event));
     }
 
     @Override
     public boolean keyReleased(final KeyEvent event) {
-        return Boolean.TRUE.equals(executor.invokeMethod("keyReleased", () -> false, event));
+        return Boolean.TRUE.equals(executor.invokeMethod("keyReleased", () -> parent instanceof WidgetScript script && script.keyReleased(event), event));
     }
 
     @Override
     public boolean charTyped(final CharacterEvent event) {
-        return Boolean.TRUE.equals(executor.invokeMethod("charTyped", () -> false, event));
+        return Boolean.TRUE.equals(executor.invokeMethod("charTyped", () -> parent instanceof WidgetScript script && script.charTyped(event), event));
     }
 
     @Override
     public boolean preeditUpdated(final PreeditEvent event) {
-        return Boolean.TRUE.equals(executor.invokeMethod("preeditUpdated", () -> false, event));
+        return Boolean.TRUE.equals(executor.invokeMethod("preeditUpdated", () -> parent instanceof WidgetScript script && script.preeditUpdated(event), event));
     }
 }

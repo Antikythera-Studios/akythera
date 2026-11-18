@@ -100,9 +100,9 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
         this.triggers = List.copyOf(triggers);
     }
 
-    /// Builds from a datapack entry, reading its property values.
+    /// Builds from a datapack entry, reading the property values it sets or inherits from its data parents.
     public SystematicAbility(final Holder.Reference<AbilityBlueprint> blueprint) {
-        this(blueprint.value().body());
+        this(BlueprintBody.inherited(blueprint));
     }
 
     private SystematicAbility(final BlueprintBody body) {

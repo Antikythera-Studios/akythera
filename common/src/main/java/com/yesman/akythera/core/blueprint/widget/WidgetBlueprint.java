@@ -15,6 +15,7 @@ import com.yesman.akythera.core.blueprint.script.ScriptVariables;
 import com.yesman.akythera.core.reflection.ScriptType;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
+import net.minecraft.resources.Identifier;
 import net.minecraft.resources.RegistryValidator;
 import net.minecraft.resources.ResourceKey;
 import org.jspecify.annotations.Nullable;
@@ -24,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -54,34 +56,69 @@ public sealed interface WidgetBlueprint extends Blueprint<WidgetContainerScript,
     );
 
     /// Fails the load of every data-driven entry holding a reference cycle, a missing or non-[WidgetUsage#WIDGET]
-    /// reference, in a HUD a widget taking input through a reference, a `widget_events` or `widget_bindings` key no
-    /// widget answers, or a variable named like an argument its widget events bind.
+    /// reference, in a HUD a widget taking input through a reference, a data parent that is missing, of another
+    /// usage or laid over the entry itself, a `widget_events` or `widget_bindings` key no widget answers, or a
+    /// variable named like an argument its widget events bind.
+    ///
+    /// The widgets of an entry are its own and the ones of its data parents. The widgets a source code script
+    /// attaches are unknown here, so an entry laid over one may key a graph by any path.
     RegistryValidator<WidgetBlueprint> VALIDATOR = (registry, loadingErrors) ->
         registry.entrySet().forEach(entry -> {
             if (!(entry.getValue() instanceof DataDrivenWidgetBlueprint blueprint)) return;
 
             List<String> errors = new ArrayList<>();
+            List<DataDrivenWidgetBlueprint> lineage = new ArrayList<>();
+            Set<Identifier> visited = new HashSet<>();
+            boolean sourceCode = false;
+            WidgetBlueprint current = blueprint;
+
+            visited.add(entry.getKey().identifier());
+
+            while (current != null) {
+                if (current instanceof DataDrivenWidgetBlueprint dataDriven) {
+                    lineage.add(dataDriven);
+                    sourceCode |= dataDriven.parentScript().isPresent();
+                } else {
+                    sourceCode = true;
+                }
+
+                Identifier parent = current.dataParent().orElse(null);
+
+                if (parent == null) break;
+
+                current = visited.add(parent) ? registry.getValue(parent) : null;
+
+                if (current == null) {
+                    errors.add("data_parent names " + parent + ", which is missing or laid over this blueprint");
+                } else if (current.usage() != blueprint.usage()) {
+                    errors.add("data_parent names " + parent + ", which is a " + current.usage().getSerializedName());
+                }
+            }
+
+            Map<String, ComponentBlueprint<?, ?>> components = new LinkedHashMap<>();
+            lineage.reversed().forEach(ancestor -> components.putAll(ancestor.components()));
+
             Deque<ResourceKey<WidgetBlueprint>> path = new ArrayDeque<>();
             path.push(entry.getKey());
-            validateReferences(registry, blueprint.components(), blueprint.usage() == WidgetUsage.HUD, path, errors);
+            validateReferences(registry, components, blueprint.usage() == WidgetUsage.HUD, path, errors);
 
             Map<String, List<FunctionGraph.Parameter>> events = new HashMap<>();
             Set<String> bindings = new HashSet<>();
-            collectSites(blueprint.components(), "", events, bindings);
+            collectSites(components, "", events, bindings);
 
             Set<String> arguments = new HashSet<>();
 
-            blueprint.widgetEvents().keySet().forEach(key -> {
+            for (String key : blueprint.widgetEvents().keySet()) {
                 if (events.containsKey(key)) {
                     events.get(key).forEach(argument -> arguments.add(argument.name()));
-                } else {
+                } else if (!sourceCode) {
                     errors.add("widget_events names " + key + ", which no widget fires");
                 }
-            });
+            }
 
-            blueprint.widgetBindings().keySet().forEach(key -> {
-                if (!bindings.contains(key)) errors.add("widget_bindings names " + key + ", which no widget reads");
-            });
+            for (String key : blueprint.widgetBindings().keySet()) {
+                if (!bindings.contains(key) && !sourceCode) errors.add("widget_bindings names " + key + ", which no widget reads");
+            }
 
             blueprint.body().variables().stream().map(ScriptVariables.VariableInfo::name).filter(arguments::contains).forEach(name ->
                 errors.add("variable " + name + " shares its name with an argument a widget event binds")

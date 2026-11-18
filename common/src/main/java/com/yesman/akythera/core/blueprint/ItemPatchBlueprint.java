@@ -55,19 +55,25 @@ public record ItemPatchBlueprint(
     }
 
     /// What runs the events of an item patch: a Java class, or graphs written beside the blueprint's own fields.
-    /// A `script` field picks the class.
+    /// A `script` field picks the class. A `parent_script` field lays the graphs over a class.
     public sealed interface ScriptFactory permits ByClass, ByData {
+        /// A registered class [ItemPatchScript#runnable] accepts.
+        Codec<ScriptType> SCRIPT_CLASS_CODEC = AkytheraRegistries.Frozen.SCRIPT_TYPE.byNameCodec()
+            .validate(type -> ItemPatchScript.runnable(type.type())
+                ? DataResult.success(type)
+                : DataResult.error(() -> type.type().getSimpleName() + " is not a concrete " + ItemPatchScript.class.getSimpleName()
+                    + " with a public constructor taking " + ItemPatch.class.getSimpleName() + " and " + ItemPatchScript.class.getSimpleName()));
+
         MapCodec<ScriptFactory> MAP_CODEC = RecordCodecBuilder.mapCodec(
             instance ->
                 instance.group(
-                    AkytheraRegistries.Frozen.SCRIPT_TYPE.byNameCodec()
-                        .validate(type -> ItemPatchScript.runnable(type.type())
-                            ? DataResult.success(type)
-                            : DataResult.error(() -> type.type().getSimpleName() + " is not a concrete " + ItemPatchScript.class.getSimpleName()
-                                + " with a public constructor taking " + ItemPatch.class.getSimpleName() + " and " + ItemPatchScript.class.getSimpleName()))
-                        .optionalFieldOf("script").forGetter(factory -> factory instanceof ByClass byClass ? Optional.of(byClass.type()) : Optional.empty()),
+                    SCRIPT_CLASS_CODEC.optionalFieldOf("script")
+                        .forGetter(factory -> factory instanceof ByClass byClass ? Optional.of(byClass.type()) : Optional.empty()),
+                    SCRIPT_CLASS_CODEC.optionalFieldOf("parent_script")
+                        .forGetter(factory -> factory instanceof ByData byData ? byData.parentScript() : Optional.empty()),
                     BlueprintBody.MAP_CODEC.forGetter(factory -> factory instanceof ByData byData ? byData.body() : BlueprintBody.EMPTY)
-                ).apply(instance, (type, body) -> type.<ScriptFactory>map(ByClass::new).orElseGet(() -> new ByData(body)))
+                ).apply(instance, (type, parentScript, body) ->
+                    type.<ScriptFactory>map(ByClass::new).orElseGet(() -> new ByData(parentScript, body)))
         );
 
         /// The script of `itemPatch` for `blueprint`, the blueprint of its parent chain holding this factory, over
@@ -84,15 +90,25 @@ public record ItemPatchBlueprint(
     }
 
     /// Graphs run by a [DataDrivenItemPatchScript]. Requires a loaded registry access.
-    public record ByData(BlueprintBody body) implements ScriptFactory {
+    ///
+    /// @param parentScript the [ItemPatchScript] class the graphs are laid over, itself laid over the script of the
+    ///                     ancestors
+    public record ByData(Optional<ScriptType> parentScript, BlueprintBody body) implements ScriptFactory {
+        /// Graphs laid over no class.
+        public ByData(final BlueprintBody body) {
+            this(Optional.empty(), body);
+        }
+
         @Override
         @SuppressWarnings("unchecked")
         public @Nullable ItemPatchScript instantiate(final ItemPatchBlueprint blueprint, final ItemPatch itemPatch, final @Nullable ItemPatchScript parent) {
-            if (body.methods().isEmpty()) return parent;
+            ItemPatchScript base = parentScript.map(type -> ItemPatchScript.instantiate(type.type(), itemPatch, parent)).orElse(parent);
+
+            if (body.methods().isEmpty()) return base;
 
             Registry<ItemPatchBlueprint> registry = StaticRegistryAccess.getRegistryAccess().lookupOrThrow(AkytheraRegistries.DataPack.ITEM_PATCH_KEY);
 
-            return new DataDrivenItemPatchScript((Holder.Reference<ItemPatchBlueprint>)registry.wrapAsHolder(blueprint), body, itemPatch, parent);
+            return new DataDrivenItemPatchScript((Holder.Reference<ItemPatchBlueprint>)registry.wrapAsHolder(blueprint), body, itemPatch, base);
         }
     }
 

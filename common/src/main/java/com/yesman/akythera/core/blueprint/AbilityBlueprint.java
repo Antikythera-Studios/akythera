@@ -12,11 +12,16 @@ import com.yesman.akythera.core.registry.AkytheraRegistries;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
+import net.minecraft.resources.Identifier;
+
+import java.util.Optional;
 
 /// The datapack entry for one ability: the parent constructor, and the [BlueprintBody] authored on top of
 /// the class it builds.
+///
+/// @param dataParent the ability whose body this one's is laid over
 @ScriptType(autoRegister = false)
-public record AbilityBlueprint(ScriptFunction ctor, BlueprintBody body)
+public record AbilityBlueprint(ScriptFunction ctor, Optional<Identifier> dataParent, BlueprintBody body)
     implements Blueprint<DataDrivenAbilityState, Ability<?>>
 {
     public static final MapCodec<AbilityBlueprint> MAP_CODEC = RecordCodecBuilder.mapCodec(
@@ -24,11 +29,17 @@ public record AbilityBlueprint(ScriptFunction ctor, BlueprintBody body)
             instance.group(
                 AkytheraRegistries.Frozen.SCRIPT_FUNCTION.byNameCodec().fieldOf("parent")
                     .forGetter(AbilityBlueprint::ctor),
+                Identifier.CODEC.optionalFieldOf("data_parent").forGetter(AbilityBlueprint::dataParent),
                 BlueprintBody.MAP_CODEC.forGetter(AbilityBlueprint::body)
             ).apply(instance, AbilityBlueprint::new)
     );
 
     public static final Codec<AbilityBlueprint> CODEC = MAP_CODEC.codec();
+
+    /// An ability laid over no data parent.
+    public AbilityBlueprint(final ScriptFunction ctor, final BlueprintBody body) {
+        this(ctor, Optional.empty(), body);
+    }
 
     @Override
     public DataDrivenAbilityState instantiate(final Ability<?> blueprintOwner) {

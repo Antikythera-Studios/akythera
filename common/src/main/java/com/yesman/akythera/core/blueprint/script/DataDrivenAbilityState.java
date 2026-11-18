@@ -34,12 +34,12 @@ public final class DataDrivenAbilityState
         this.blueprint = blueprint;
         this.blueprintOwner = blueprintOwner;
         this.executor = new BlueprintExecutor(
-            this, ScriptModularizeHelper.scanBlueprintLayout(blueprintOwner.getClass()), blueprint.value().body());
+            this, ScriptModularizeHelper.scanBlueprintLayout(blueprintOwner.getClass()), BlueprintBody.chain(blueprint));
     }
 
     /// The blueprint's variables in declaration order, which is the order both sides read them in.
     private List<ScriptVariables.VariableInfo> syncedVariables(final PacketFlow flow) {
-        return blueprint.value().body().variables().stream().filter(variable -> variable.travels(flow)).toList();
+        return executor.body().variables().stream().filter(variable -> variable.travels(flow)).toList();
     }
 
     @Override
@@ -97,7 +97,7 @@ public final class DataDrivenAbilityState
     public void copyState(final AbilityState from) {
         if (!(from instanceof DataDrivenAbilityState source)) return;
 
-        for (ScriptVariables.VariableInfo variable : blueprint.value().body().variables()) {
+        for (ScriptVariables.VariableInfo variable : executor.body().variables()) {
             executor.variables().setValue(variable.name(), source.executor.variables().getValue(variable.name()));
         }
     }
