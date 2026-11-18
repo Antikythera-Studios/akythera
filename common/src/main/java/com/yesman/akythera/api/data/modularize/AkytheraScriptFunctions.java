@@ -13,6 +13,7 @@ import com.yesman.akythera.api.world.ability.AbilityState;
 import com.yesman.akythera.api.world.ability.AbilityTask;
 import com.yesman.akythera.api.world.ability.impl.AwaitTask;
 import com.yesman.akythera.api.world.ability.impl.PlayMontageTask;
+import com.yesman.akythera.api.world.BlockSlam;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
 import com.yesman.akythera.api.world.ability.AbilityCue;
@@ -125,6 +126,9 @@ public final class AkytheraScriptFunctions {
             ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, AbilityTaskHandle.class, "Ability/Task", ScriptFunction.Usage.SCRIPT);
             ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, AbilityCue.class, "Ability/Cue", ScriptFunction.Usage.SCRIPT);
             ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, AbilityTagSet.class, "Ability/Tag", ScriptFunction.Usage.SCRIPT);
+
+            // World
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, BlockSlam.class, "World", ScriptFunction.Usage.SCRIPT);
 
             // Behavior
             ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, BrainComponent.class, "Behavior", ScriptFunction.Usage.SCRIPT);

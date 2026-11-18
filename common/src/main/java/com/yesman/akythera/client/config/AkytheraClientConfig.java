@@ -25,10 +25,15 @@ public final class AkytheraClientConfig {
         .comment("Whether to use built-in or external library mod to apply animation to the model")
         .define("anim_driver", DefaultAnimationDriver.SKINNED_MESH);
 
+    public static final ModConfigSpec.BooleanValue BLOCK_SLAMS = BUILDER
+        .comment("Whether block slams fracture the ground")
+        .define("block_slams", true);
+
     public static final ModConfigSpec SPEC = BUILDER.build();
 
     // config values
     private static DefaultAnimationDriver defaultAnimationDriver = DefaultAnimationDriver.SKINNED_MESH;
+    private static boolean blockSlams = true;
 
     public static DefaultAnimationDriver getDefaultAnimationDriver() {
         return defaultAnimationDriver;
@@ -38,14 +43,24 @@ public final class AkytheraClientConfig {
         defaultAnimationDriver = value;
     }
 
+    public static boolean isBlockSlamsEnabled() {
+        return blockSlams;
+    }
+
+    public static void setBlockSlamsEnabled(final boolean value) {
+        blockSlams = value;
+    }
+
     /// Init config values = config specs
     public static void initConfigValues() {
         defaultAnimationDriver = DEFAULT_ANIMATION_DRIVER.get();
+        blockSlams = BLOCK_SLAMS.get();
     }
 
     /// Save config specs = config values
     public static void saveConfigValues() {
         setAndSave(DEFAULT_ANIMATION_DRIVER, defaultAnimationDriver);
+        setAndSave(BLOCK_SLAMS, blockSlams);
     }
 
     private static <T> void setAndSave(final ModConfigSpec.ConfigValue<T> configSpec, final T value) {

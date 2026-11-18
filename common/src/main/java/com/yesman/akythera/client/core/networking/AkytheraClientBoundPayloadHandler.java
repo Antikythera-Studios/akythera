@@ -4,6 +4,7 @@ import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.cinema.CinemaScenePlayer;
 import com.yesman.akythera.api.cinema.CinemaSceneRoot;
 import com.yesman.akythera.api.world.patch.AkytheraPatches;
+import com.yesman.akythera.api.world.BlockSlam;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.core.networking.PayloadContext;
 import com.yesman.akythera.api.world.ability.AbilityEffect;
@@ -26,6 +27,7 @@ import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilit
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityLifecycle;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityStateSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityTagSync;
+import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundBlockSlam;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundClearWidgetHuds;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundDataBlockSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundJoinCinemaScene;
@@ -339,6 +341,10 @@ public interface AkytheraClientBoundPayloadHandler {
             },
             () -> Akythera.LOGGER.warn("Unknown particle system {}", payload.system().identifier())
         );
+    }
+
+    static void handleBlockSlam(final ClientBoundBlockSlam payload, final PayloadContext context) {
+        BlockSlam.slam(context.receiver().level(), payload.center(), payload.radius());
     }
 
     static void handlePlayMontage(ClientBoundPlayAnimMontage payload, PayloadContext context) {

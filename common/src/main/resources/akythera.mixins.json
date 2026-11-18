@@ -23,6 +23,7 @@
     "client.MixinParticle",
     "client.MixinParticleEngine",
     "client.MixinPreparedFrame",
+    "client.MixinRenderSectionRegion",
     "client.MixinRenderSystem"
   ],
   "mixins": [

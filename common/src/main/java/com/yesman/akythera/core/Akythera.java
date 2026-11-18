@@ -37,6 +37,7 @@ import com.yesman.akythera.commands.AbilityControlCommand;
 import com.yesman.akythera.commands.AnimatorControlCommand;
 import com.yesman.akythera.commands.CinemaControlCommand;
 import com.yesman.akythera.commands.BrainControlCommand;
+import com.yesman.akythera.commands.BlockSlamCommand;
 import com.yesman.akythera.commands.ParticleControlCommand;
 import com.yesman.akythera.commands.WidgetControlCommand;
 import com.yesman.akythera.compat.IModPlugin;
@@ -237,6 +238,7 @@ public final class Akythera {
         BrainControlCommand.register(dispatcher);
         WidgetControlCommand.register(dispatcher);
         ParticleControlCommand.register(dispatcher);
+        BlockSlamCommand.register(dispatcher);
         CinemaControlCommand.register(dispatcher);
     }
 }

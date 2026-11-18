@@ -9,6 +9,7 @@ import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilit
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityLifecycle;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityStateSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityTagSync;
+import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundBlockSlam;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundClearWidgetHuds;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundDataBlockSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundJoinCinemaScene;
@@ -68,6 +69,8 @@ public final class AkytheraPayloadTypes {
 		CLIENT_BOUND.add(new PayloadChannel<>(ClientBoundClearWidgetHuds.TYPE, ClientBoundClearWidgetHuds.STREAM_CODEC, () -> AkytheraClientBoundPayloadHandler::handleClearWidgetHuds));
 
 		CLIENT_BOUND.add(new PayloadChannel<>(ClientBoundPlayParticleSystem.TYPE, ClientBoundPlayParticleSystem.STREAM_CODEC, () -> AkytheraClientBoundPayloadHandler::handlePlayParticleSystem));
+
+		CLIENT_BOUND.add(new PayloadChannel<>(ClientBoundBlockSlam.TYPE, ClientBoundBlockSlam.STREAM_CODEC, () -> AkytheraClientBoundPayloadHandler::handleBlockSlam));
 
 		// server bound packets
 		SERVER_BOUND.add(new PayloadChannel<>(ServerBoundAbilityTrigger.TYPE, ServerBoundAbilityTrigger.STREAM_CODEC, () -> AkytheraServerBoundPayloadHandler::handleAbilityTrigger));
