@@ -1,6 +1,7 @@
 package com.yesman.akythera.client.api.world;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.QuadInstance;
 import com.yesman.akythera.api.world.BlockSlam;
 import com.yesman.akythera.client.config.AkytheraClientConfig;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
@@ -9,12 +10,18 @@ import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import it.unimi.dsi.fastutil.longs.LongSets;
 import it.unimi.dsi.fastutil.objects.ObjectIterator;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.block.ModelBlockRenderer;
 import net.minecraft.client.renderer.block.MovingBlockRenderState;
+import net.minecraft.client.renderer.chunk.ChunkSectionLayer;
 import net.minecraft.client.renderer.culling.Frustum;
+import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.client.renderer.state.level.ParticleGroupRenderState;
+import net.minecraft.client.resources.model.geometry.BakedQuad;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.particles.BlockParticleOption;
@@ -62,6 +69,8 @@ public final class BlockFractures {
         double bounceScale = Math.min(1.0D / (radius * radius), 0.1D);
         int lifetimeRange = Math.max(1, (int)(radius * 80.0D));
         BlockPos.MutableBlockPos probe = new BlockPos.MutableBlockPos();
+        Minecraft minecraft = Minecraft.getInstance();
+        ModelBlockRenderer modelRenderer = new ModelBlockRenderer(minecraft.options.ambientOcclusion().get(), false, minecraft.getBlockColors());
 
         for (int ray = 0; ray < rays; ray++) {
             double angle = Mth.TWO_PI * ray / rays;
@@ -121,7 +130,7 @@ public final class BlockFractures {
                         .rotateAxis(Mth.DEG_TO_RAD * (level.getRandom().nextFloat() * 40.0F - 20.0F), 0.0F, 1.0F, 0.0F)
                         .rotateAxis(Mth.DEG_TO_RAD * (level.getRandom().nextFloat() * 15.0F - 7.5F), 0.0F, 0.0F, 1.0F);
                     FracturedBlock block = new FracturedBlock(
-                        level, pos, state, carriesAbove ? aboveState : null,
+                        level, modelRenderer, pos, state, carriesAbove ? aboveState : null,
                         (float)Math.max(0.0D, ratio - 0.5D) * 0.5F, tilt,
                         (float)(distance * distance * bounceScale), 30 + level.getRandom().nextInt(lifetimeRange)
                     );
@@ -243,13 +252,13 @@ public final class BlockFractures {
         /// Whether the chunk mesh shows the block again.
         private boolean restored;
 
-        /// Draw states of [#state] and [#above], lit from the position over [#pos] since the level holds `state` at `pos`.
-        private final MovingBlockRenderState blockRenderState;
-        private final @Nullable MovingBlockRenderState aboveRenderState;
+        /// The quads of [#state] and [#above], baked once and lit from the position over [#pos] since the level holds
+        /// `state` at `pos`. In block space: `state` from (0, 0, 0), `above` from (0, 1, 0).
+        private final List<FracturedQuad> quads = new ArrayList<>();
 
         private FracturedBlock(
-            final ClientLevel level, final BlockPos pos, final BlockState state, final @Nullable BlockState above, final float lift, final Quaternionf tilt,
-            final float bounceHeight, final int lifetime
+            final ClientLevel level, final ModelBlockRenderer modelRenderer, final BlockPos pos, final BlockState state, final @Nullable BlockState above,
+            final float lift, final Quaternionf tilt, final float bounceHeight, final int lifetime
         ) {
             this.pos = pos;
             this.state = state;
@@ -258,49 +267,93 @@ public final class BlockFractures {
             this.tilt = tilt;
             this.bounceHeight = bounceHeight;
             this.lifetime = lifetime;
-            this.blockRenderState = renderState(level, pos.above(), state);
-            this.aboveRenderState = above == null ? null : renderState(level, pos.above(), above);
+
+            Minecraft minecraft = Minecraft.getInstance();
+            BlockPos lightPos = pos.above();
+            MovingBlockRenderState lighting = new MovingBlockRenderState();
+
+            lighting.randomSeedPos = lightPos;
+            lighting.blockPos = lightPos;
+            lighting.biome = level.getBiome(lightPos);
+            lighting.cardinalLighting = level.cardinalLighting();
+            lighting.lightEngine = level.getLightEngine();
+
+            List<BlockState> carried = above == null ? List.of(state) : List.of(state, above);
+
+            for (int height = 0; height < carried.size(); height++) {
+                BlockState blockState = carried.get(height);
+                boolean forceOpaque = ModelBlockRenderer.forceOpaque(minecraft.options.cutoutLeaves().get(), blockState);
+
+                lighting.blockState = blockState;
+                modelRenderer.tesselateBlock(
+                    (x, y, z, quad, instance) -> {
+                        QuadInstance copy = new QuadInstance();
+
+                        for (int vertex = 0; vertex < 4; vertex++) {
+                            copy.setColor(vertex, instance.getColor(vertex));
+                            copy.setLightCoords(vertex, instance.getLightCoords(vertex));
+                        }
+
+                        copy.setOverlayCoords(instance.overlayCoords());
+                        quads.add(new FracturedQuad(forceOpaque ? ChunkSectionLayer.SOLID : quad.materialInfo().layer(), x, y, z, quad, copy));
+                    },
+                    0.0F, height, 0.0F, lighting, lightPos, blockState, minecraft.getModelManager().getBlockStateModelSet().get(blockState),
+                    blockState.getSeed(lightPos)
+                );
+            }
         }
+    }
 
-        private static MovingBlockRenderState renderState(final ClientLevel level, final BlockPos lightPos, final BlockState blockState) {
-            MovingBlockRenderState renderState = new MovingBlockRenderState();
-
-            renderState.randomSeedPos = lightPos;
-            renderState.blockPos = lightPos;
-            renderState.blockState = blockState;
-            renderState.biome = level.getBiome(lightPos);
-            renderState.cardinalLighting = level.cardinalLighting();
-            renderState.lightEngine = level.getLightEngine();
-
-            return renderState;
-        }
+    /// A baked quad of a [FracturedBlock], drawn at (`x`, `y`, `z`) in block space.
+    private record FracturedQuad(ChunkSectionLayer layer, float x, float y, float z, BakedQuad quad, QuadInstance instance) {
     }
 
     /// One frame's pose of `block`: its lift plus its bounce, and its tilt.
     private record Pose(FracturedBlock block, float offsetY, Quaternionf tilt) {
     }
 
+    /// Draws the fractured blocks with one submit per [ChunkSectionLayer], so each draw holds one render type.
     private record State(List<Pose> poses) implements ParticleGroupRenderState {
         @Override
         public void submit(final SubmitNodeCollector submitNodeCollector, final CameraRenderState camera) {
             PoseStack poseStack = new PoseStack();
+            List<PoseStack.Pose> blockPoses = new ArrayList<>(poses.size());
 
             for (Pose pose : poses) {
-                FracturedBlock block = pose.block;
+                BlockPos pos = pose.block.pos;
 
                 poseStack.pushPose();
-                poseStack.translate(block.pos.getX() - camera.pos.x, block.pos.getY() - camera.pos.y, block.pos.getZ() - camera.pos.z);
+                poseStack.translate(pos.getX() - camera.pos.x, pos.getY() - camera.pos.y, pos.getZ() - camera.pos.z);
                 poseStack.translate(0.5F, 0.5F, 0.5F);
                 poseStack.mulPose(pose.tilt);
                 poseStack.translate(-0.5F, pose.offsetY - 0.5F, -0.5F);
-                submitNodeCollector.submitMovingBlock(poseStack, block.blockRenderState, 0);
-
-                if (block.aboveRenderState != null) {
-                    poseStack.translate(0.0F, 1.0F, 0.0F);
-                    submitNodeCollector.submitMovingBlock(poseStack, block.aboveRenderState, 0);
-                }
-
+                blockPoses.add(poseStack.last().copy());
                 poseStack.popPose();
+            }
+
+            for (ChunkSectionLayer layer : ChunkSectionLayer.values()) {
+                RenderType renderType = switch (layer) {
+                    case SOLID -> RenderTypes.solidMovingBlock();
+                    case CUTOUT -> RenderTypes.cutoutMovingBlock();
+                    case TRANSLUCENT -> RenderTypes.translucentMovingBlock();
+                };
+
+                submitNodeCollector.submitCustomGeometry(poseStack, renderType, (ignored, buffer) -> {
+                    PoseStack quadPose = new PoseStack();
+
+                    for (int i = 0; i < poses.size(); i++) {
+                        quadPose.last().set(blockPoses.get(i));
+
+                        for (FracturedQuad quad : poses.get(i).block.quads) {
+                            if (quad.layer != layer) continue;
+
+                            quadPose.pushPose();
+                            quadPose.translate(quad.x, quad.y, quad.z);
+                            buffer.putBakedQuad(quadPose.last(), quad.quad, quad.instance);
+                            quadPose.popPose();
+                        }
+                    }
+                });
             }
         }
     }
