@@ -343,6 +343,14 @@ public record ScriptType(
             new ScriptType(ResourceKey.class, ResourceKey.codec((ResourceKey) element.registry), Map.of(), null, element, null, null));
     }
 
+    /// The [ScriptType] registered under the id of `key` when its class is a `bound`, or null. A class always wins the
+    /// data pack entry `key` names: every reference to a class or an entry resolves its entry through this first.
+    public static @Nullable ScriptType classOf(final ResourceKey<?> key, final Class<?> bound) {
+        ScriptType type = AkytheraRegistries.Frozen.SCRIPT_TYPE.getOptional(key.identifier()).orElse(null);
+
+        return type != null && bound.isAssignableFrom(type.type()) ? type : null;
+    }
+
     /// The registered [ScriptType] for `type` (boxing-aware), or null when it isn't registered.
     public static @Nullable ScriptType of(Class<?> type) {
         Class<?> boxed = ParseUtils.box(type);

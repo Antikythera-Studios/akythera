@@ -65,7 +65,8 @@ public interface ParticleUpdaterBlueprint {
         }
     }
 
-    /// A [ParticleUpdaterScriptBlueprint] data pack entry.
+    /// A [ParticleUpdaterScriptBlueprint] data pack entry, or the [ParticleUpdateModule] class registered under its id, which
+    /// wins it ([ScriptType#classOf]).
     record ByData(ResourceKey<ParticleUpdaterScriptBlueprint> module) implements ParticleUpdaterBlueprint {
         public static final MapCodec<ByData> MAP_CODEC = RecordCodecBuilder.mapCodec(
             instance ->
@@ -76,6 +77,10 @@ public interface ParticleUpdaterBlueprint {
 
         @Override
         public ParticleUpdateModule instantiate(final AkytheraParticleEmitter emitter) {
+            ScriptType type = ScriptType.classOf(module, ParticleUpdateModule.class);
+
+            if (type != null) return new ByClass(type).instantiate(emitter);
+
             return StaticRegistryAccess.getRegistryAccess().lookupOrThrow(AkytheraRegistries.DataPack.PARTICLE_UPDATER_KEY)
                 .getOptional(module)
                 .orElseThrow(() -> new IllegalStateException("No particle updater " + module.identifier()))
@@ -84,7 +89,9 @@ public interface ParticleUpdaterBlueprint {
 
         @Override
         public Object moduleType() {
-            return module;
+            ScriptType type = ScriptType.classOf(module, ParticleUpdateModule.class);
+
+            return type != null ? type : module;
         }
 
         @Override

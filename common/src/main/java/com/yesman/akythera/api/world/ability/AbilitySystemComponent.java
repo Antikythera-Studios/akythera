@@ -1233,12 +1233,12 @@ public final class AbilitySystemComponent
 
     @ScriptFunction(
         label = "Reset Resource Regen Delay", category = "Ability/Resource",
-        desc = "Restarts the wait before the stored resource refills. Does nothing while the resource is full or is no stored resource."
+        desc = "Restarts the wait before the stored resource refills: the class registered under the id, else the entry. Does nothing while the resource is full or is no stored resource."
     )
-    public void resetResourceRegenDelay(final AbilityResourceBlueprint resource) {
-        ScriptType.entryKey(AkytheraRegistries.DataPack.ABILITY_RESOURCE_KEY, resource)
-            .map(key -> StoredAbilityResource.get(new AbilityResourceRef.ByData(key)))
-            .ifPresent(this::resetResourceRegenDelay);
+    public void resetResourceRegenDelay(final ResourceKey<AbilityResourceBlueprint> resource) {
+        StoredAbilityResource stored = StoredAbilityResource.get(new AbilityResourceRef.ByData(resource));
+
+        if (stored != null) resetResourceRegenDelay(stored);
     }
 
     /// Sends what the owner holds of `resource` to the owner's own client. Server only.

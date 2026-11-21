@@ -55,7 +55,8 @@ public interface MotionWarpTargetBlueprint {
         }
     }
 
-    /// A [MotionWarpTargetScriptBlueprint] data pack entry.
+    /// A [MotionWarpTargetScriptBlueprint] data pack entry, or the [MotionWarpTarget] class registered under its id,
+    /// which wins it ([ScriptType#classOf]).
     record ByData(ResourceKey<MotionWarpTargetScriptBlueprint> target) implements MotionWarpTargetBlueprint {
         public static final MapCodec<ByData> MAP_CODEC = RecordCodecBuilder.mapCodec(
             instance ->
@@ -66,6 +67,10 @@ public interface MotionWarpTargetBlueprint {
 
         @Override
         public MotionWarpTarget instantiate(final EntityPatch<?> owner) {
+            ScriptType type = ScriptType.classOf(target, MotionWarpTarget.class);
+
+            if (type != null) return new ByClass(type).instantiate(owner);
+
             return StaticRegistryAccess.getRegistryAccess().lookupOrThrow(AkytheraRegistries.DataPack.MOTION_WARP_TARGET_KEY)
                 .getOptional(target)
                 .orElseThrow(() -> new IllegalStateException("No motion warp target " + target.identifier()))

@@ -129,6 +129,8 @@ public record ArmatureComponentBlueprint(
         }
     }
 
+    /// An animator script data pack entry, or the [AnimatorScript] class registered under its id, which wins it
+    /// ([ScriptType#classOf]).
     public record ByDataPack(ResourceKey<DataDrivenAnimatorScript.AnimatorScriptBlueprint> resourceKey) implements AnimatorScriptFactory {
         static final MapCodec<ByDataPack> CODEC = RecordCodecBuilder.mapCodec(
             instance ->
@@ -141,6 +143,10 @@ public record ArmatureComponentBlueprint(
 
         @Override
         public AnimatorScript instantiate(final Animator blueprintOwner) {
+            ScriptType type = ScriptType.classOf(resourceKey, AnimatorScript.class);
+
+            if (type != null) return new ByClass(type).instantiate(blueprintOwner);
+
             Holder.Reference<DataDrivenAnimatorScript.AnimatorScriptBlueprint> scriptHolder =
                 StaticRegistryAccess.getRegistryAccess().getOrThrow(resourceKey);
 

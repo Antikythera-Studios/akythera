@@ -6,6 +6,7 @@ import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.api.component.impl.EquipmentSlotBinder;
 import com.yesman.akythera.api.component.impl.EquipmentSlotBinderBlueprint;
 import com.yesman.akythera.api.data.modularize.ScriptFunction;
+import com.yesman.akythera.api.data.modularize.ScriptType;
 import com.yesman.akythera.api.event.BuiltInEventHooks;
 import com.yesman.akythera.api.world.ability.Ability;
 import com.yesman.akythera.api.world.ability.AbilityResourceRef;
@@ -186,7 +187,7 @@ public abstract class ComponentsFactory {
     private final Map<AbilityResourceRef, AbilityResourceScript> abilityResources = new ConcurrentHashMap<>();
 
     /// Returns the resource `ref` names, built on first request: a class through its no-argument constructor, an entry
-    /// by invoking its parent constructor.
+    /// by invoking its parent constructor. An entry the class registered under its id wins is that class's resource.
     ///
     /// @return null when the world holds no such entry, or the class or the parent constructor cannot build it
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -199,6 +200,8 @@ public abstract class ComponentsFactory {
             AbilityResourceScript resource = switch (ref) {
                 case AbilityResourceRef.ByClass byClass ->
                     (AbilityResourceScript)byClass.type().type().asSubclass(AbilityResourceScript.class).getConstructor().newInstance();
+                case AbilityResourceRef.ByData byData when ScriptType.classOf(byData.key(), AbilityResourceScript.class) instanceof ScriptType type ->
+                    getAbilityResource(new AbilityResourceRef.ByClass(type));
                 case AbilityResourceRef.ByData byData -> {
                     RegistryAccess registryAccess = StaticRegistryAccess.getRegistryAccessUnsafe();
                     Holder.Reference<AbilityResourceBlueprint> blueprint = registryAccess == null ? null : registryAccess.get(byData.key()).orElse(null);

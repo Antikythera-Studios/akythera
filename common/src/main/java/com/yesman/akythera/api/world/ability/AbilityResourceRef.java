@@ -48,17 +48,18 @@ public sealed interface AbilityResourceRef {
         static final MapCodec<ByClass> MAP_CODEC = RecordCodecBuilder.mapCodec(
             instance ->
                 instance.group(
-                    AkytheraRegistries.Frozen.SCRIPT_TYPE.byNameCodec().fieldOf("class").forGetter(ByClass::type)
+                    AkytheraRegistries.Frozen.SCRIPT_TYPE.byNameCodec().fieldOf("id").forGetter(ByClass::type)
                 ).apply(instance, ByClass::new)
         );
     }
 
-    /// An [AbilityResourceBlueprint] data pack entry.
+    /// An [AbilityResourceBlueprint] data pack entry, or the [AbilityResourceScript] class registered under its id,
+    /// which wins it ([ScriptType#classOf]).
     record ByData(ResourceKey<AbilityResourceBlueprint> key) implements AbilityResourceRef {
         static final MapCodec<ByData> MAP_CODEC = RecordCodecBuilder.mapCodec(
             instance ->
                 instance.group(
-                    ResourceKey.codec(AkytheraRegistries.DataPack.ABILITY_RESOURCE_KEY).fieldOf("entry").forGetter(ByData::key)
+                    ResourceKey.codec(AkytheraRegistries.DataPack.ABILITY_RESOURCE_KEY).fieldOf("id").forGetter(ByData::key)
                 ).apply(instance, ByData::new)
         );
     }

@@ -2,9 +2,7 @@ package com.yesman.akythera.api.world.patch.entity.component;
 
 import com.mojang.serialization.Codec;
 import com.yesman.akythera.api.component.DynamicPatchComponent;
-import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.component.impl.MovementComponent;
-import com.yesman.akythera.api.component.impl.RootMotionComponent;
 import com.yesman.akythera.api.event.BuiltInEventHooks;
 import com.yesman.akythera.api.world.patch.AkytheraPatches;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
@@ -177,15 +175,11 @@ public final class EntityMovementComponent implements MovementComponent, Dynamic
             if (!enabled) return;
 
             LivingEntity entity = event.getEntityPatch().getOriginal();
-            ArmatureComponent armature = owner.getArmatureComponent();
-            RootMotionComponent rootMotion = armature == null ? null : armature.getComponent(RootMotionComponent.class);
             boolean fromGround = entity.onGround() && !entity.isInLiquid() && !entity.onClimbable();
 
             if (jumpRequiresPress && !event.isJumping()) jumpReleased = true;
 
-            if (rootMotion != null && rootMotion.isPlaying() || fromGround && jumpRequiresPress && !jumpReleased) {
-                event.setJumping(false);
-            }
+            if (fromGround && jumpRequiresPress && !jumpReleased) event.setJumping(false);
         });
 
         listener.registerEvent(BuiltInEventHooks.Entity.JUMPED, event -> {

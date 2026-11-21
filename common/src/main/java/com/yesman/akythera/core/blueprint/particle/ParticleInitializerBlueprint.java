@@ -65,7 +65,8 @@ public interface ParticleInitializerBlueprint {
         }
     }
 
-    /// A [ParticleInitializerScriptBlueprint] data pack entry.
+    /// A [ParticleInitializerScriptBlueprint] data pack entry, or the [ParticleInitializerModule] class registered under its id, which
+    /// wins it ([ScriptType#classOf]).
     record ByData(ResourceKey<ParticleInitializerScriptBlueprint> module) implements ParticleInitializerBlueprint {
         public static final MapCodec<ByData> MAP_CODEC = RecordCodecBuilder.mapCodec(
             instance ->
@@ -76,6 +77,10 @@ public interface ParticleInitializerBlueprint {
 
         @Override
         public ParticleInitializerModule instantiate(final AkytheraParticleEmitter emitter) {
+            ScriptType type = ScriptType.classOf(module, ParticleInitializerModule.class);
+
+            if (type != null) return new ByClass(type).instantiate(emitter);
+
             return StaticRegistryAccess.getRegistryAccess().lookupOrThrow(AkytheraRegistries.DataPack.PARTICLE_INITIALIZER_KEY)
                 .getOptional(module)
                 .orElseThrow(() -> new IllegalStateException("No particle initializer " + module.identifier()))
@@ -84,7 +89,9 @@ public interface ParticleInitializerBlueprint {
 
         @Override
         public Object moduleType() {
-            return module;
+            ScriptType type = ScriptType.classOf(module, ParticleInitializerModule.class);
+
+            return type != null ? type : module;
         }
 
         @Override
