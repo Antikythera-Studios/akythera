@@ -1,5 +1,6 @@
 package com.yesman.akythera.core.animation.driver;
 
+import com.yesman.akythera.api.animation.notify.AnimationNotifyState;
 import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.animation.playable.PlayableAnimation;
 import org.jspecify.annotations.NonNull;
@@ -41,6 +42,15 @@ public abstract class AbstractBlendDriver implements AnimationDriver {
     public void tick(final ComponentAttachable owner) {
         base.tick(owner);
         blend.tick(owner);
+    }
+
+    /// Either child's, the [#dominant] one's first.
+    @Override
+    public <T extends AnimationNotifyState<?>> @Nullable T getActiveNotifyState(final Class<T> type) {
+        AnimationDriver dominant = dominant();
+        T state = dominant.getActiveNotifyState(type);
+
+        return state != null ? state : (dominant == base ? blend : base).getActiveNotifyState(type);
     }
 
     @Override

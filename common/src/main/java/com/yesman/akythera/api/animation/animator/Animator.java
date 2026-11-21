@@ -1,5 +1,6 @@
 package com.yesman.akythera.api.animation.animator;
 
+import com.yesman.akythera.api.animation.notify.AnimationNotifyState;
 import com.yesman.akythera.api.asset.AssetAccessor;
 import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.api.component.impl.ArmatureComponent;
@@ -140,6 +141,17 @@ public interface Animator {
     /// Returns every montage player of this animator
     default Collection<AnimationMontagePlayer> getMontagePlayers() {
         return List.of();
+    }
+
+    /// The notify state of `type` whose time window holds the playhead of an animation playing now, or null.
+    default <T extends AnimationNotifyState<?>> @Nullable T getActiveNotifyState(final Class<T> type) {
+        for (AnimationMontagePlayer montagePlayer : getMontagePlayers()) {
+            T state = montagePlayer.getActiveNotifyState(type);
+
+            if (state != null) return state;
+        }
+
+        return null;
     }
 
     @ScriptFunction(pure = true, label = "Soft Pause Animator", desc = """

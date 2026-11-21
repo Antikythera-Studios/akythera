@@ -4,6 +4,7 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.yesman.akythera.api.data.serializable.AttributeModifierEntry;
+import com.yesman.akythera.api.lifecycle.ComponentsFactory;
 import com.yesman.akythera.core.reflection.ScriptType;
 import com.yesman.akythera.core.util.helper.ParseUtils;
 import net.minecraft.core.Holder;
@@ -16,7 +17,7 @@ import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.List;
 
-/// A change an ability makes to its owner's [Attribute]s and [AbilityResource]s. One effect fills
+/// A change an ability makes to its owner's [Attribute]s and [AbilityResourceScript]s. One effect fills
 /// any of three roles: a Duration Effect, a Cooldown Effect or a Cost.
 @ScriptType(autoRegister = false)
 public final class AbilityEffect {
@@ -169,24 +170,28 @@ public final class AbilityEffect {
         }
     }
 
-    public record AbilityResourceSpec(AbilityResource abilityResource, float amount) {
+    public record AbilityResourceSpec(AbilityResourceRef resource, float amount) {
         public static final Codec<AbilityResourceSpec> CODEC =
             RecordCodecBuilder.create(
                 instance ->
                     instance.group(
-                        AbilityResources.CODEC.fieldOf("resource")
-                            .forGetter(AbilityResourceSpec::abilityResource),
+                        AbilityResourceRef.CODEC.fieldOf("resource").forGetter(AbilityResourceSpec::resource),
                         Codec.FLOAT.fieldOf("amount").forGetter(AbilityResourceSpec::amount)
                     )
                     .apply(instance, AbilityResourceSpec::new)
             );
+
+        /// The resource [#resource] names, or null when it cannot be built.
+        public @Nullable AbilityResourceScript abilityResource() {
+            return ComponentsFactory.getImpl().getAbilityResource(resource);
+        }
     }
 
     public enum ModifierType {
         /// The modifier modifies [Attribute]
         ATTRIBUTE,
 
-        /// The modifier modifies [AbilityResource]
+        /// The modifier modifies [AbilityResourceScript]
         RESOURCE
     }
 }

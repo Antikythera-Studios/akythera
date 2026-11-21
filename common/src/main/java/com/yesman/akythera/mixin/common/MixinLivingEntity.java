@@ -8,7 +8,11 @@ import com.yesman.akythera.api.cinema.CinemaScenePlayback;
 import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.component.impl.RootMotionComponent;
 import com.yesman.akythera.api.event.BuiltInEventHooks;
+import com.yesman.akythera.api.event.entity.LivingBodyTurnEvent;
 import com.yesman.akythera.api.event.entity.LivingDeathEvent;
+import com.yesman.akythera.api.event.entity.LivingHurtEvent;
+import com.yesman.akythera.api.event.entity.LivingJumpEvent;
+import com.yesman.akythera.api.event.entity.LivingTravelEvent;
 import com.yesman.akythera.api.world.behavior.BehaviorTreeInstance;
 import com.yesman.akythera.api.world.behavior.BrainComponent;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
@@ -17,22 +21,26 @@ import com.yesman.akythera.api.world.patch.entity.component.EntityMovementCompon
 import com.yesman.akythera.core.animation.driver.AnimationMontagePlayer;
 import com.yesman.akythera.core.cinema.CinemaScene;
 import com.yesman.akythera.mixinaccessor.common.EntityAccessor;
+import com.yesman.akythera.mixinaccessor.common.LivingEntityAccessor;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(value = LivingEntity.class)
-public abstract class MixinLivingEntity {
+public abstract class MixinLivingEntity implements LivingEntityAccessor {
     /// Highest [LivingEntity#deathTime] a dead entity reaches while a rag doll runs: [LivingEntity#tickDeath] adds 1, and
     /// poofs and removes the entity at 20.
     @Unique
@@ -53,6 +61,98 @@ public abstract class MixinLivingEntity {
         BrainComponent brain = patch.getComponent(BrainComponent.class);
 
         if (brain != null) brain.tick((self.tickCount + self.getId()) % 2 == 0 || self.tickCount <= 1);
+    }
+
+    @Shadow
+    private int noJumpDelay;
+
+    /// The sprint boost the running [LivingEntity#jumpFromGround] added, zero outside one or without sprint.
+    @Unique
+    private Vec3 akythera$sprintBoost = Vec3.ZERO;
+
+    /// Posts [BuiltInEventHooks.Entity#JUMP_INPUT] and takes the jump input its listeners leave.
+    @Inject(at = @At(value = "CONSTANT", args = "stringValue=jump"), method = "aiStep()V")
+    @SuppressWarnings("unchecked")
+    private void akythera$postJumpInput(final CallbackInfo callbackInfo) {
+        LivingEntity self = (LivingEntity)(Object)this;
+
+        if (!(((EntityAccessor)self).akythera$getEntityPatch() instanceof EntityPatch<?> patch)) return;
+
+        LivingJumpEvent.Input event = BuiltInEventHooks.Entity.JUMP_INPUT.postWithListener(
+            new LivingJumpEvent.Input((EntityPatch<LivingEntity>)patch, self.isJumping()), patch.getEntityEventListener()
+        );
+
+        self.setJumping(event.isJumping());
+    }
+
+    /// Posts [BuiltInEventHooks.Entity#TRAVEL_PRE].
+    ///
+    /// Posted after the jump block because NeoForge's `aiStep` calls `jumpInFluid` where vanilla calls `jumpInLiquid`.
+    @Inject(at = @At(value = "CONSTANT", args = "stringValue=travel"), method = "aiStep()V")
+    @SuppressWarnings("unchecked")
+    private void akythera$postTravelPre(final CallbackInfo callbackInfo) {
+        if (!(((EntityAccessor)this).akythera$getEntityPatch() instanceof EntityPatch<?> patch)) return;
+
+        BuiltInEventHooks.Entity.TRAVEL_PRE.postWithListener(
+            new LivingTravelEvent.Pre((EntityPatch<LivingEntity>)patch), patch.getEntityEventListener()
+        );
+    }
+
+    /// Posts [BuiltInEventHooks.Entity#TRAVEL_POST].
+    @Inject(
+        at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/LivingEntity;travel(Lnet/minecraft/world/phys/Vec3;)V", shift = At.Shift.AFTER),
+        method = "aiStep()V"
+    )
+    @SuppressWarnings("unchecked")
+    private void akythera$postTravelPost(final CallbackInfo callbackInfo) {
+        if (!(((EntityAccessor)this).akythera$getEntityPatch() instanceof EntityPatch<?> patch)) return;
+
+        BuiltInEventHooks.Entity.TRAVEL_POST.postWithListener(
+            new LivingTravelEvent.Post((EntityPatch<LivingEntity>)patch), patch.getEntityEventListener()
+        );
+    }
+
+    /// Posts [BuiltInEventHooks.Entity#BODY_TURN].
+    @Inject(
+        at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/LivingEntity;tickHeadTurn(F)V", shift = At.Shift.AFTER),
+        method = "tick()V"
+    )
+    @SuppressWarnings("unchecked")
+    private void akythera$postBodyTurn(final CallbackInfo callbackInfo) {
+        if (!(((EntityAccessor)this).akythera$getEntityPatch() instanceof EntityPatch<?> patch)) return;
+
+        BuiltInEventHooks.Entity.BODY_TURN.postWithListener(
+            new LivingBodyTurnEvent((EntityPatch<LivingEntity>)patch), patch.getEntityEventListener()
+        );
+    }
+
+    /// Stores the sprint boost for [#akythera$postJumped].
+    @ModifyArg(
+        at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/LivingEntity;addDeltaMovement(Lnet/minecraft/world/phys/Vec3;)V"),
+        method = "jumpFromGround()V"
+    )
+    private Vec3 akythera$storeSprintBoost(final Vec3 boost) {
+        akythera$sprintBoost = boost;
+
+        return boost;
+    }
+
+    /// Posts [BuiltInEventHooks.Entity#JUMPED], and swaps the sprint boost for the one its listeners leave.
+    @Inject(at = @At(value = "RETURN"), method = "jumpFromGround()V")
+    @SuppressWarnings("unchecked")
+    private void akythera$postJumped(final CallbackInfo callbackInfo) {
+        LivingEntity self = (LivingEntity)(Object)this;
+        Vec3 vanillaBoost = akythera$sprintBoost;
+
+        akythera$sprintBoost = Vec3.ZERO;
+
+        if (!(((EntityAccessor)self).akythera$getEntityPatch() instanceof EntityPatch<?> patch)) return;
+
+        LivingJumpEvent.Jumped event = BuiltInEventHooks.Entity.JUMPED.postWithListener(
+            new LivingJumpEvent.Jumped((EntityPatch<LivingEntity>)patch, vanillaBoost), patch.getEntityEventListener()
+        );
+
+        self.addDeltaMovement(event.getSprintBoost().subtract(vanillaBoost));
     }
 
     /// Drops the movement input read this tick while a [LockMovementNotifyState] holds or a root motion plays, and stops
@@ -223,6 +323,24 @@ public abstract class MixinLivingEntity {
         if (akythera$isRagdollRunning() && !source.is(DamageTypeTags.BYPASSES_INVULNERABILITY)) callbackInfo.setReturnValue(false);
     }
 
+    /// Posts [BuiltInEventHooks.Entity#HURT] for a hit that can land, and takes the damage its listeners leave.
+    @ModifyVariable(
+        at = @At(value = "HEAD"),
+        method = "hurtServer(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/damagesource/DamageSource;F)Z",
+        argsOnly = true
+    )
+    @SuppressWarnings("unchecked")
+    private float akythera$postHurt(final float damage, final ServerLevel level, final DamageSource source) {
+        LivingEntity self = (LivingEntity)(Object)this;
+
+        if (self.isInvulnerableTo(level, source) || self.isDeadOrDying()) return damage;
+        if (!(((EntityAccessor)self).akythera$getEntityPatch() instanceof EntityPatch<?> patch)) return damage;
+
+        return BuiltInEventHooks.Entity.HURT.postWithListener(
+            new LivingHurtEvent((EntityPatch<LivingEntity>)patch, source, damage), patch.getEntityEventListener()
+        ).getAmount();
+    }
+
     /// Lets the brain of this entity feel damage it took.
     @Inject(at = @At(value = "RETURN"), method = "hurtServer(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/damagesource/DamageSource;F)Z")
     private void akythera$feelDamage(final ServerLevel level, final DamageSource source, final float damage, final CallbackInfoReturnable<Boolean> callbackInfo) {
@@ -253,5 +371,15 @@ public abstract class MixinLivingEntity {
             : null;
 
         return armatureComponent != null && armatureComponent.isRagdollRunning();
+    }
+
+    @Override
+    public int akythera$getNoJumpDelay() {
+        return noJumpDelay;
+    }
+
+    @Override
+    public void akythera$setNoJumpDelay(final int noJumpDelay) {
+        this.noJumpDelay = noJumpDelay;
     }
 }

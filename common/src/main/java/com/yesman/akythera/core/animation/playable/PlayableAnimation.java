@@ -3,6 +3,7 @@ package com.yesman.akythera.core.animation.playable;
 import com.google.common.base.Suppliers;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
+import com.yesman.akythera.api.animation.notify.AnimationNotifyState;
 import com.yesman.akythera.api.asset.animation.AnimationManager;
 import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.core.animation.keyframe.AnimationClip;
@@ -16,6 +17,8 @@ import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.ResourceKey;
 import org.jspecify.annotations.NonNull;
+import com.yesman.akythera.core.asset.loader.AnimationLoader;
+import org.jspecify.annotations.Nullable;
 
 import java.util.function.Supplier;
 
@@ -63,10 +66,20 @@ public interface PlayableAnimation {
         return Transform.IDENTITY;
     }
 
+    /// The space this animation's poses are additive deltas in, null for a common animation.
+    default AnimationLoader.@Nullable AdditiveSpace additiveSpace() {
+        return null;
+    }
+
     /// This animation over the mirrored twin of its clips, see [AnimationManager#getMirrorAnimation].
     /// An animation with no mirrored form answers itself.
     default PlayableAnimation mirrored() {
         return this;
+    }
+
+    /// The first notify state of `type` whose time window holds `time`, or null when the animation has no notify track.
+    default <T extends AnimationNotifyState<?>> @Nullable T getNotifyStateAt(final Class<T> type, final float time) {
+        return null;
     }
 
     /// Ticks the animation in fixed update

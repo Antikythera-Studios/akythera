@@ -8,6 +8,7 @@ import com.yesman.akythera.api.asset.animation.AnimationManager;
 import com.yesman.akythera.api.asset.armature.ArmatureManager;
 import com.yesman.akythera.api.data.modularize.AkytheraScriptFunctions;
 import com.yesman.akythera.api.data.modularize.AkytheraScriptTypes;
+import com.yesman.akythera.api.event.BuiltInEventHooks;
 import com.yesman.akythera.api.lifecycle.ComponentsFactory;
 import com.yesman.akythera.api.lifecycle.ServerComponentsFactory;
 import com.yesman.akythera.api.world.patch.AkytheraPatches;
@@ -17,7 +18,6 @@ import com.yesman.akythera.api.world.ability.Ability;
 import com.yesman.akythera.api.world.ability.AbilityCue;
 import com.yesman.akythera.api.world.ability.AbilityCueScript;
 import com.yesman.akythera.client.api.lifecycle.ClientComponentsFactory;
-import com.yesman.akythera.api.world.ability.AbilityResources;
 import com.yesman.akythera.api.world.ability.AbilitySystemComponent;
 import com.yesman.akythera.api.world.ability.AbilitySlot;
 import com.yesman.akythera.api.world.ability.AbilitySlotGroup;
@@ -170,7 +170,6 @@ public final class Akythera {
 
     /// Called on mod loader lifecycle when the mod initializes
     public static void onModInitialized() {
-        AbilityResources.bootStrap();
 
         Arrays.stream(CompatibleMod.values())
             .filter(mod -> ModPlatformProvider.get().isModLoaded(mod.getModId()) && mod.getCompatibilityModule() != null)
@@ -187,7 +186,6 @@ public final class Akythera {
             .filter(Objects::nonNull)
             .forEach(IModPlugin::onInitialize);
 
-        AbilityResources.freeze();
 
         AnimationInterfaceKey.ENUM_MANAGER.loadEnum();
         FSMAnimationState.ENUM_MANAGER.loadEnum();

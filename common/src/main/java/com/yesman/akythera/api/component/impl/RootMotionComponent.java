@@ -89,9 +89,9 @@ public final class RootMotionComponent implements UniqueComponent, TickableDynam
         this.anchor = anchor;
     }
 
-    /// Whether a root motion source is being played.
+    /// Whether an animation with root motion moves the owner now.
     public boolean isPlaying() {
-        return rootMotionTransformProvider != null && playbackTimeSupplier != null;
+        return enabled && rootMotionTransformProvider != null && playbackTimeSupplier != null;
     }
 
     /// Starts warping the root motion by `settings` until the playback reaches `endTime`, replacing any warp.
@@ -180,7 +180,6 @@ public final class RootMotionComponent implements UniqueComponent, TickableDynam
     /// in server.
     @Override
     public void tick() {
-        // No root motion is being played
         if (!isPlaying()) return;
 
         // update only in logical servers. Player controlled entities are fine to update only in `frameUpdate`
@@ -195,7 +194,6 @@ public final class RootMotionComponent implements UniqueComponent, TickableDynam
     /// Called only in render tick in client. Updates the visual position.
     @ClientOnly @Override
     public void frameUpdate(final float frameTime, final float partialTick) {
-        // No root motion is being played
         if (!isPlaying()) return;
 
         // frame update is done in client side, for both players and AI entities.

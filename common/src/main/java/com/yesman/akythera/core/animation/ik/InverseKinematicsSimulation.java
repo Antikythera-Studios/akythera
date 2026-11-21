@@ -38,6 +38,13 @@ public final class InverseKinematicsSimulation {
     /// A weight at or under this counts as none.
     private static final float WEIGHT_EPSILON = 1.0E-3F;
 
+    /// How long a tip that lost the ground under it, or whose owner took off, takes to go from its last placement back
+    /// to where the animation puts it, moving with the body, in seconds.
+    private static final float AIR_RELEASE_TIME = 0.15F;
+
+    /// How long a tip back on the ground follows where the animation puts it before it holds its footing, in seconds.
+    private static final float LANDING_SETTLE_TIME = 0.15F;
+
     /// How far a planted tip may end up from where the animation puts it before it plants there at once instead of
     /// stepping, in blocks. Covers a teleport.
     private static final double SNAP_DISTANCE = 4.0D;
@@ -94,10 +101,11 @@ public final class InverseKinematicsSimulation {
     ///
     /// @param armatureToWorld where the armature stands in the world
     /// @param terrain         the ground the chains step on
+    /// @param grounded        whether the owner stands on the ground
     /// @param time            now, in seconds on a clock every call shares
     public Pose apply(
         final Pose pose, final AssetAccessor<? extends Armature> armatureAccessor, final ArmaturePhysicsData physics,
-        final Transform armatureToWorld, final Terrain terrain, final double time
+        final Transform armatureToWorld, final Terrain terrain, final boolean grounded, final double time
     ) {
         Armature armature = armatureAccessor.get();
         List<IKChain> chains = physics.ikChains();
@@ -122,6 +130,7 @@ public final class InverseKinematicsSimulation {
         boolean continued = lastBodyPosition != null && frameTime > 0.0F && bodyPosition.distanceTo(lastBodyPosition) <= SNAP_DISTANCE;
         double blend = 1.0D - Math.exp(-frameTime / MOTION_SMOOTHING);
         float frameTurn = continued ? (float) Mth.wrapDegrees(bodyYaw - lastBodyYaw) : 0.0F;
+        boolean takingOff = !grounded && continued && bodyPosition.y() > lastBodyPosition.y();
 
         if (continued) {
             Vec3 moved = bodyPosition.subtract(lastBodyPosition);
@@ -211,10 +220,25 @@ public final class InverseKinematicsSimulation {
             OptionalDouble ground = terrain.groundHeight(
                 animatedTip.x(), animatedTip.z(), Math.max(rootHeight, animatedTip.y()), animatedTip.y() - chain.stepping().rayMaxDistance()
             );
-            if (override == null && ground.isEmpty()) {
-                state.release();
+            // A tip doesn't reach for the ground the body is leaving
+            if (override == null && (ground.isEmpty() || !grounded && (takingOff || state.airborne > 0.0F))) {
+                if (state.airborne == 0.0F && state.placed != null) state.releasedFrom = armatureToWorld.inverseMul(state.placed);
+
+                state.airborne += frameTime;
+                float fade = 1.0F - state.airborne / AIR_RELEASE_TIME;
+
+                if (state.releasedFrom != null && fade > WEIGHT_EPSILON) {
+                    targets[i] = toVector3d(armatureToWorld.inverseMul(animatedTip).lerp(state.releasedFrom, fade));
+                } else {
+                    state.release();
+                }
+
                 continue;
             }
+
+            if (state.airborne > 0.0F) state.settling = LANDING_SETTLE_TIME;
+
+            state.airborne = 0.0F;
 
             Vec3 home = ground.isPresent()
                 ? new Vec3(animatedTip.x(), ground.getAsDouble() + animatedTip.y() - floorHeight, animatedTip.z())
@@ -237,6 +261,9 @@ public final class InverseKinematicsSimulation {
 
             if (channel.procedural() <= WEIGHT_EPSILON) {
                 state.plant(byCurves[i], motion.yaw());
+            } else if (state.settling > 0.0F) {
+                state.settling -= frameTime;
+                state.plant(home, motion.yaw());
             } else {
                 state.prepare(home, motion, chain.stepping(), frameTime);
                 stepping[i] = true;
@@ -569,6 +596,15 @@ public final class InverseKinematicsSimulation {
         /// Where the animation put the tip on the ground in the last [#apply], in the world.
         private @Nullable Vec3 animated;
 
+        /// Seconds since the tip lost the ground under it or its owner took off.
+        private float airborne;
+
+        /// Where the tip was let go from, in the armature's space, null while it isn't letting go.
+        private @Nullable Vec3 releasedFrom;
+
+        /// Seconds left in which the tip, back on the ground, follows where the animation puts it.
+        private float settling;
+
         private boolean swinging() {
             return stepTo != null;
         }
@@ -580,6 +616,7 @@ public final class InverseKinematicsSimulation {
             letGo = null;
             placed = null;
             animated = null;
+            releasedFrom = null;
             cooldown = 0.0F;
             idle = 0.0F;
         }

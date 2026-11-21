@@ -8,6 +8,8 @@ import com.yesman.akythera.api.component.impl.EquipmentSlotBinderBlueprint;
 import com.yesman.akythera.api.data.modularize.ScriptFunction;
 import com.yesman.akythera.api.event.BuiltInEventHooks;
 import com.yesman.akythera.api.world.ability.Ability;
+import com.yesman.akythera.api.world.ability.AbilityResourceRef;
+import com.yesman.akythera.api.world.ability.AbilityResourceScript;
 import com.yesman.akythera.api.world.ability.AbilitySystemComponent;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.client.api.gui.viewer.Model3DViewer;
@@ -18,6 +20,7 @@ import com.yesman.akythera.core.animation.animator.MontageOnlyAnimator;
 import com.yesman.akythera.core.asset.armature.Armature;
 import com.yesman.akythera.core.asset.armature.Bone;
 import com.yesman.akythera.core.blueprint.AbilityBlueprint;
+import com.yesman.akythera.core.blueprint.AbilityResourceBlueprint;
 import com.yesman.akythera.core.blueprint.EntityPatchBlueprint;
 import com.yesman.akythera.core.blueprint.script.AnimatorScript;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
@@ -25,6 +28,7 @@ import com.yesman.akythera.core.util.LogicalSide;
 import com.yesman.akythera.core.util.StaticRegistryAccess;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.core.Holder;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
@@ -63,11 +67,17 @@ public abstract class ComponentsFactory {
         }
     }
 
-    /// Drops [#abilities] when the registry unloads or reloads.
+    /// Drops [#abilities] and [#abilityResources] when the registry unloads or reloads.
     @ApiStatus.Internal
     public static void registerEvents() {
-        BuiltInEventHooks.Registry.REGISTRY_ACCESS_UNLOAD.registerEvent(_ -> getImpl().abilities.clear());
-        BuiltInEventHooks.Registry.REGISTRY_ACCESS_RELOAD.registerEvent(_ -> getImpl().abilities.clear());
+        BuiltInEventHooks.Registry.REGISTRY_ACCESS_UNLOAD.registerEvent(_ -> {
+            getImpl().abilities.clear();
+            getImpl().abilityResources.clear();
+        });
+        BuiltInEventHooks.Registry.REGISTRY_ACCESS_RELOAD.registerEvent(_ -> {
+            getImpl().abilities.clear();
+            getImpl().abilityResources.clear();
+        });
     }
 
     /// Returns implementation
@@ -167,6 +177,43 @@ public abstract class ComponentsFactory {
             return ability;
         } catch (ClassCastException | IllegalStateException | IllegalArgumentException exception) {
             Akythera.LOGGER.error("Ability {} cannot be built from its parent constructor", blueprint.key().identifier(), exception);
+
+            return null;
+        }
+    }
+
+    /// One [AbilityResourceScript] per class or entry, so every owner reads and writes the same resource.
+    private final Map<AbilityResourceRef, AbilityResourceScript> abilityResources = new ConcurrentHashMap<>();
+
+    /// Returns the resource `ref` names, built on first request: a class through its no-argument constructor, an entry
+    /// by invoking its parent constructor.
+    ///
+    /// @return null when the world holds no such entry, or the class or the parent constructor cannot build it
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public @Nullable AbilityResourceScript getAbilityResource(final AbilityResourceRef ref) {
+        AbilityResourceScript cached = abilityResources.get(ref);
+
+        if (cached != null) return cached;
+
+        try {
+            AbilityResourceScript resource = switch (ref) {
+                case AbilityResourceRef.ByClass byClass ->
+                    (AbilityResourceScript)byClass.type().type().asSubclass(AbilityResourceScript.class).getConstructor().newInstance();
+                case AbilityResourceRef.ByData byData -> {
+                    RegistryAccess registryAccess = StaticRegistryAccess.getRegistryAccessUnsafe();
+                    Holder.Reference<AbilityResourceBlueprint> blueprint = registryAccess == null ? null : registryAccess.get(byData.key()).orElse(null);
+
+                    yield blueprint == null
+                        ? null
+                        : (AbilityResourceScript)((ScriptFunction.ScriptUniFunction)blueprint.value().ctor()).function().apply(blueprint);
+                }
+            };
+
+            if (resource != null) abilityResources.put(ref, resource);
+
+            return resource;
+        } catch (ReflectiveOperationException | ClassCastException | IllegalStateException | IllegalArgumentException exception) {
+            Akythera.LOGGER.error("Ability resource {} cannot be built", ref, exception);
 
             return null;
         }

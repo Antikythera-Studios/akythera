@@ -7,8 +7,12 @@ import com.yesman.akythera.api.data.serializable.LocalizedMessage;
 import com.yesman.akythera.api.data.serializable.RGBA;
 import com.yesman.akythera.api.data.serializable.WidgetImage;
 import com.yesman.akythera.api.world.ability.AbilityEffect;
+import com.yesman.akythera.api.world.ability.AbilityResourceScript;
 import com.yesman.akythera.api.world.ability.AbilitySlot;
 import com.yesman.akythera.api.world.ability.AbilitySystemComponent;
+import com.yesman.akythera.api.world.ability.Health;
+import com.yesman.akythera.api.world.ability.StoredAbilityResource;
+import com.yesman.akythera.core.blueprint.AbilityResourceBlueprint;
 import com.yesman.akythera.api.world.ability.AbilityTag;
 import com.yesman.akythera.api.world.ability.AbilityTagSet;
 import com.yesman.akythera.api.world.ability.InstantiationScope;
@@ -208,6 +212,21 @@ public final class AkytheraScriptTypes {
 
     public static final Holder<ScriptType> ABILITY_EFFECT = AKYTHERA_REGISTRAR.register("ability_effect",
         () -> ScriptType.registryEntry(AbilityEffect.class, AkytheraRegistries.DataPack.ABILITY_EFFECT_KEY));
+
+    public static final Holder<ScriptType> ABILITY_RESOURCE_BLUEPRINT = AKYTHERA_REGISTRAR.register("ability_resource_blueprint",
+        () -> ScriptType.registryEntry(AbilityResourceBlueprint.class, AkytheraRegistries.DataPack.ABILITY_RESOURCE_KEY));
+
+    public static final Holder<ScriptType> ABILITY_RESOURCE_SCRIPT = AKYTHERA_REGISTRAR.register("ability_resource_script",
+        () -> new ScriptType(AbilityResourceScript.class));
+
+    public static final Holder<ScriptType> STORED_ABILITY_RESOURCE = AKYTHERA_REGISTRAR.register("stored_ability_resource",
+        () -> new ScriptType(StoredAbilityResource.class));
+
+    public static final Holder<ScriptType> HEALTH = AKYTHERA_REGISTRAR.register("health",
+        () -> new ScriptType(Health.class));
+
+    public static final Holder<ScriptType> ABILITY_RESOURCE_KIND = AKYTHERA_REGISTRAR.register("ability_resource_kind",
+        () -> new ScriptType(AbilityResourceScript.Kind.class, ParseUtils.enumCodec(AbilityResourceScript.Kind.class)));
 
     public static final Holder<ScriptType> INSTANTIATION_SCOPE = AKYTHERA_REGISTRAR.register("instantiation_scope",
         () -> new ScriptType(InstantiationScope.class, ParseUtils.enumCodec(InstantiationScope.class)));

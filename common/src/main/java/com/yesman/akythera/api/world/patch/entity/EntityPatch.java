@@ -11,6 +11,7 @@ import com.yesman.akythera.api.event.entity.EntityConstructEvent;
 import com.yesman.akythera.api.event.entity.HandlePersistentDataEvent;
 import com.yesman.akythera.api.lifecycle.ComponentsFactory;
 import com.yesman.akythera.api.world.patch.entity.component.EntityEventListener;
+import com.yesman.akythera.api.world.patch.entity.component.EntityMovementComponent;
 import com.yesman.akythera.core.blueprint.ComponentBlueprint;
 import com.yesman.akythera.core.blueprint.EntityPatchBlueprint;
 import com.yesman.akythera.core.blueprint.script.EntityPatchScript;
@@ -80,6 +81,8 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
 
     /// This entity's part in a playing [CinemaScene], or null.
     private @Nullable CinemaScenePlayback cinemaScenePlayback;
+    /// Slowest horizontal speed, in blocks per tick, [#getVelocityYaw] reads a direction from.
+    private static final double MIN_VELOCITY_YAW_SPEED = 0.015D;
 
     // Constructor for hardcoded entity patches. Register components manually using
     // `BuiltInEventHooks.Entity.CONSTRUCTED` event in subclasses.
@@ -457,6 +460,13 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
         return findComponent(ArmatureComponent.class);
     }
 
+    @ScriptFunction(pure = true, label = "Get Entity Movement Component", category = "Component", desc = """
+        Returns the switched-on movement component of the entity, or null when it has none
+    """)
+    public @Nullable EntityMovementComponent getEntityMovementComponent() {
+        return getComponent(EntityMovementComponent.class);
+    }
+
     // *************************************
     // Targeting
     // *************************************
@@ -596,6 +606,26 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
         return getOriginal().isInWater();
     }
 
+
+    @ScriptFunction(pure = true, label = "Get Velocity", desc = "The entity's motion per tick, in blocks: its own velocity where this side moves it, the last tick's move otherwise.")
+    public Vec3 getVelocity() {
+        Entity entity = getOriginal();
+
+        return entity.isLocalInstanceAuthoritative()
+            ? entity.getDeltaMovement()
+            : new Vec3(entity.getX() - entity.xo, entity.getY() - entity.yo, entity.getZ() - entity.zo);
+    }
+
+    @ScriptFunction(pure = true, label = "Get Velocity Yaw", desc = "Direction of the entity's horizontal velocity relative to where it looks, in degrees. Negative is left, ±180 backward. 0 while it barely moves.")
+    public float getVelocityYaw() {
+        Vec3 velocity = getVelocity();
+
+        if (velocity.horizontalDistanceSqr() < MIN_VELOCITY_YAW_SPEED * MIN_VELOCITY_YAW_SPEED) return 0.0F;
+
+        return Mth.wrapDegrees((float)(Mth.atan2(velocity.z, velocity.x) * Mth.RAD_TO_DEG) - 90.0F - getOriginal().getYRot());
+    }
+
+
     @ScriptFunction(pure = true, label = "Is Sprinting")
     public boolean isSprinting() {
         return getOriginal().isSprinting();
@@ -622,6 +652,7 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
 
         return (float)(Mth.length(original.getX() - original.xo, original.getZ() - original.zo) * SharedConstants.TICKS_PER_SECOND);
     }
+
 
     @ScriptFunction(pure = true, label = "Is Crouching", desc = "Returns whether the entity holds the crouch pose.")
     public boolean isCrouching() {

@@ -22,6 +22,8 @@ import com.yesman.akythera.core.reflection.ScriptFunction;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityEffectSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityEquipmentSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityLifecycle;
+import com.yesman.akythera.core.blueprint.AbilityResourceBlueprint;
+import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityResourceSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityStateSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityTagSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundPlayAbilityCue;
@@ -67,6 +69,9 @@ public final class AbilitySystemComponent
 
     /// Live cue plays, in the order they started.
     private final List<AbilityCue> cues = new ArrayList<>();
+
+    /// The [StoredAbilityResource]s below full, with what the owner holds of each. A resource missing here is full.
+    private final Map<AbilityResourceRef, StoredValue> storedResources = new LinkedHashMap<>();
 
     /// The id the server gives the next cue play.
     private int nextCueId;
@@ -890,7 +895,7 @@ public final class AbilitySystemComponent
 
     /// Sends `tracker` everything it needs to mirror this owner: the tags it carries, each filled
     /// slot with its current activation and state, the live plays synced to late trackers, then every live
-    /// effect application. The owner's own client receives what its scope sends the owner.
+    /// effect application. The owner's own client receives what its scope sends the owner, and the stored resources.
     @ApiStatus.Internal
     public void sendSnapshotTo(final ServerPlayer tracker) {
         if (!owner.isLogicalServer()) return;
@@ -938,6 +943,12 @@ public final class AbilitySystemComponent
             ClientBoundPlayAbilityCue payload = playPayloadOf(cue);
 
             if (payload != null) NetworkingHelper.getInstance().sendToClient(tracker, payload);
+        }
+
+        if (owner.getOriginal() == tracker) {
+            storedResources.forEach((resource, stored) -> NetworkingHelper.getInstance().sendToClient(
+                tracker, new ClientBoundAbilityResourceSync(entityId, resource, stored.value, stored.regenCooldown)
+            ));
         }
 
         // Last: an application names its ability by slot, which the loop above filled.
@@ -1186,6 +1197,106 @@ public final class AbilitySystemComponent
     }
 
     // ***************************************************************
+    // Stored resources
+    // ***************************************************************
+
+    /// What the owner holds of `resource`.
+    public float getStoredResource(final StoredAbilityResource resource) {
+        StoredValue stored = storedResources.get(resource.getRef());
+
+        return stored == null ? resource.getMax() : stored.value;
+    }
+
+    /// Sets what the owner holds of `resource`, bounded by its max. Going down restarts the wait before it refills.
+    public void setStoredResource(final StoredAbilityResource resource, final float value) {
+        float before = getStoredResource(resource);
+        StoredValue stored = storedResources.computeIfAbsent(resource.getRef(), _ -> new StoredValue(resource.getMax()));
+
+        stored.value = Math.clamp(value, 0.0F, resource.getMax());
+
+        if (stored.value < before) stored.regenCooldown = resource.getRegenDelay();
+
+        syncStoredResource(resource.getRef(), stored);
+
+        if (stored.value >= resource.getMax()) storedResources.remove(resource.getRef());
+    }
+
+    /// Restarts the wait before `resource` refills. A full resource has nothing to wait for.
+    public void resetResourceRegenDelay(final StoredAbilityResource resource) {
+        StoredValue stored = storedResources.get(resource.getRef());
+
+        if (stored == null) return;
+
+        stored.regenCooldown = resource.getRegenDelay();
+        syncStoredResource(resource.getRef(), stored);
+    }
+
+    @ScriptFunction(
+        label = "Reset Resource Regen Delay", category = "Ability/Resource",
+        desc = "Restarts the wait before the stored resource refills. Does nothing while the resource is full or is no stored resource."
+    )
+    public void resetResourceRegenDelay(final AbilityResourceBlueprint resource) {
+        ScriptType.entryKey(AkytheraRegistries.DataPack.ABILITY_RESOURCE_KEY, resource)
+            .map(key -> StoredAbilityResource.get(new AbilityResourceRef.ByData(key)))
+            .ifPresent(this::resetResourceRegenDelay);
+    }
+
+    /// Sends what the owner holds of `resource` to the owner's own client. Server only.
+    private void syncStoredResource(final AbilityResourceRef resource, final StoredValue stored) {
+        if (owner.isLogicalServer() && owner.getOriginal() instanceof ServerPlayer serverPlayer) {
+            NetworkingHelper.getInstance().sendToClient(
+                serverPlayer, new ClientBoundAbilityResourceSync(serverPlayer.getId(), resource, stored.value, stored.regenCooldown)
+            );
+        }
+    }
+
+    /// Overwrites the client's copy of `resource` with the server's.
+    @ApiStatus.Internal
+    public void mirrorStoredResource(final AbilityResourceRef resource, final float value, final int regenCooldown) {
+        StoredAbilityResource entry = StoredAbilityResource.get(resource);
+
+        if (entry == null || value >= entry.getMax()) {
+            storedResources.remove(resource);
+
+            return;
+        }
+
+        StoredValue stored = storedResources.computeIfAbsent(resource, _ -> new StoredValue(value));
+        stored.value = value;
+        stored.regenCooldown = regenCooldown;
+    }
+
+    /// Refills every stored resource whose wait is over, and counts the others down. Drops the ones the world lost.
+    private void tickStoredResources() {
+        storedResources.entrySet().removeIf(entry -> {
+            StoredAbilityResource resource = StoredAbilityResource.get(entry.getKey());
+            StoredValue stored = entry.getValue();
+
+            if (resource == null) return true;
+
+            if (stored.regenCooldown > 0) {
+                stored.regenCooldown--;
+
+                return false;
+            }
+
+            stored.value = Math.min(stored.value + resource.getRegenPerTick(), resource.getMax());
+
+            return stored.value >= resource.getMax();
+        });
+    }
+
+    /// What the owner holds of one [StoredAbilityResource], and the ticks left before it refills.
+    private static final class StoredValue {
+        private float value;
+        private int regenCooldown;
+
+        private StoredValue(final float value) {
+            this.value = value;
+        }
+    }
+
+    // ***************************************************************
     // Client mirrors
     // ***************************************************************
 
@@ -1295,6 +1406,7 @@ public final class AbilitySystemComponent
     public void tick() {
         // Both sides count a play's timer; the server ends it, and only the client runs its behavior.
         tickCues();
+        tickStoredResources();
 
         if (!owner.isLogicalServer()) {
             tickMirroredEffects();

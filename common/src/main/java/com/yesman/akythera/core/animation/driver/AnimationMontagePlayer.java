@@ -327,6 +327,7 @@ public final class AnimationMontagePlayer implements AnimationDriver {
 
     /// Returns the notify state of `type` whose time window holds the playhead. Null once the montage
     /// started fading out.
+    @Override
     public <T extends AnimationNotifyState<?>> @Nullable T getActiveNotifyState(final Class<T> type) {
         return currentPlaying == null || isFinished ? null : currentPlaying.value().notifyTrack().getNotifyStateAt(type, elapsedTime);
     }

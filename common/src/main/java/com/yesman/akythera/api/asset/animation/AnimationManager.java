@@ -76,10 +76,10 @@ public final class AnimationManager extends DynamicAssetManager<@NonNull Animati
             return (AssetAccessor<AnimationClip>)issued;
         }
 
-        AnimationMirror.Setup setup = AnimationMirror.readSetup(
-            animation.identifier(), ComponentsFactory.getImpl().getResourceManager());
+        AnimationLoader.Metadata metadata = AssetLoader.readMetadata(
+            animation.identifier(), ComponentsFactory.getImpl().getResourceManager(), AnimationLoader.Metadata.CODEC, AnimationLoader.Metadata.DEFAULT);
 
-        if (!setup.isMirroring()) {
+        if (!metadata.isMirroring()) {
             INSTANCE.issuedAccessor.put(mirrorKey, animation);
 
             return animation;
@@ -91,7 +91,7 @@ public final class AnimationManager extends DynamicAssetManager<@NonNull Animati
                 animation.identifier().getPath() + AnimationMirror.IDENTIFIER_SUFFIX
             ),
             animation,
-            setup.vendor()
+            metadata.vendor()
         );
 
         INSTANCE.issuedAccessor.put(mirrorKey, mirror);

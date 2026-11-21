@@ -7,6 +7,7 @@ import com.yesman.akythera.core.networking.payload.bidirectional.BiDirectionalRe
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityEffectSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityEquipmentSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityLifecycle;
+import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityResourceSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityStateSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundAbilityTagSync;
 import com.yesman.akythera.core.networking.payload.clientbound.ClientBoundBlockSlam;
@@ -51,6 +52,8 @@ public final class AkytheraPayloadTypes {
 		COMMON_CLIENT_BOUND.add(new PayloadChannel<>(ClientBoundDataBlockSync.TYPE, ClientBoundDataBlockSync.STREAM_CODEC, () -> AkytheraClientBoundPayloadHandler::handleBlockSync));
 
 		CLIENT_BOUND.add(new PayloadChannel<>(ClientBoundAbilityTagSync.TYPE, ClientBoundAbilityTagSync.STREAM_CODEC, () -> AkytheraClientBoundPayloadHandler::handleAbilityTagSync));
+
+		CLIENT_BOUND.add(new PayloadChannel<>(ClientBoundAbilityResourceSync.TYPE, ClientBoundAbilityResourceSync.STREAM_CODEC, () -> AkytheraClientBoundPayloadHandler::handleAbilityResourceSync));
 
 		CLIENT_BOUND.add(new PayloadChannel<>(ClientBoundAbilityEquipmentSync.TYPE, ClientBoundAbilityEquipmentSync.STREAM_CODEC, () -> AkytheraClientBoundPayloadHandler::handleAbilityEquipmentSync));
 

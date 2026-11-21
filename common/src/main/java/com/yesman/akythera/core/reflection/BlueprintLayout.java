@@ -26,7 +26,8 @@ import java.util.Set;
 /// gathered from the class, its superclasses and its interfaces.
 ///
 /// Members come root class first, each class's in name order. A member overridden down the hierarchy keeps
-/// its most derived annotated declaration, in the place its root declaration takes.
+/// its most derived annotated declaration, in the place its root declaration takes. A method a class declares `final`
+/// is neither a function nor an event of that class or any below it.
 ///
 /// @param provider   the scanned class
 /// @param fields     the Variables panel's inherited rows
@@ -108,9 +109,17 @@ public record BlueprintLayout(
             for (Method method : declaredMethods) {
                 BlueprintFunction annotation = method.getAnnotation(BlueprintFunction.class);
 
-                if (annotation == null || method.isSynthetic() || method.isBridge()) continue;
+                if (method.isSynthetic() || method.isBridge()) continue;
 
                 String key = method.getName() + Arrays.toString(method.getParameterTypes());
+
+                // A final declaration closes the method to every class below it
+                if (Modifier.isFinal(method.getModifiers())) {
+                    functions.remove(key);
+                    events.remove(key);
+                }
+
+                if (annotation == null) continue;
 
                 switch (annotation.graphType()) {
                     case PROPERTY -> properties.put(key, method);

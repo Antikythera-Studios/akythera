@@ -36,6 +36,7 @@ import com.yesman.akythera.core.cinema.CinemaScene;
 import com.yesman.akythera.platform.ModPlatformProvider;
 import net.minecraft.core.Registry;
 import com.yesman.akythera.api.world.ability.AbilityEffect;
+import com.yesman.akythera.core.blueprint.AbilityResourceBlueprint;
 import com.yesman.akythera.core.blueprint.AbilityBlueprint;
 import net.minecraft.resources.RegistryValidator;
 import net.minecraft.resources.ResourceKey;
@@ -67,6 +68,7 @@ public final class AkytheraRegistries {
         public static final ResourceKey<Registry<EntityPatchBlueprint>> ENTITY_PATCH_KEY = createRegistryKey("script/entity_patch");
         public static final ResourceKey<Registry<ItemPatchBlueprint>> ITEM_PATCH_KEY = createRegistryKey("script/item_patch");
         public static final ResourceKey<Registry<AbilityEffect>> ABILITY_EFFECT_KEY = createRegistryKey("abilities/effect");
+        public static final ResourceKey<Registry<AbilityResourceBlueprint>> ABILITY_RESOURCE_KEY = createRegistryKey("abilities/resource");
         public static final ResourceKey<Registry<AbilityBlueprint>> ABILITY_KEY = createRegistryKey("abilities/ability");
         public static final ResourceKey<Registry<InputAction>> INPUT_ACTION_KEY = createRegistryKey("input_action");
         public static final ResourceKey<Registry<AbilityCueBlueprint>> ABILITY_CUE_KEY = createRegistryKey("abilities/cue");
@@ -95,6 +97,7 @@ public final class AkytheraRegistries {
             new Registration<>(ANIMATOR_SCRIPT_KEY, DataDrivenAnimatorScript.AnimatorScriptBlueprint.CODEC),
             new Registration<>(ENTITY_PATCH_KEY, EntityPatchBlueprint.CODEC),
             new Registration<>(ITEM_PATCH_KEY, ItemPatchBlueprint.CODEC),
+            new Registration<>(ABILITY_RESOURCE_KEY, AbilityResourceBlueprint.CODEC),
             new Registration<>(ABILITY_EFFECT_KEY, AbilityEffect.CODEC),
             new Registration<>(ABILITY_KEY, AbilityBlueprint.CODEC),
             new Registration<>(INPUT_ACTION_KEY, InputAction.CODEC),

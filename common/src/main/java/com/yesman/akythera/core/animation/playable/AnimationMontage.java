@@ -358,6 +358,11 @@ public final class AnimationMontage implements PlayableAnimation {
     }
 
     @Override
+    public <T extends AnimationNotifyState<?>> @Nullable T getNotifyStateAt(final Class<T> type, final float time) {
+        return notifyTrack.getNotifyStateAt(type, time);
+    }
+
+    @Override
     public void tick(final ComponentAttachable owner, final float prevElapsedTime, final float currentElapsedTime) {
         notifyTrack.tick(this, owner, prevElapsedTime, currentElapsedTime);
     }
