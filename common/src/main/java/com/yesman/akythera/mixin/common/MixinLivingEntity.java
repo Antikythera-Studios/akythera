@@ -1,15 +1,16 @@
 package com.yesman.akythera.mixin.common;
 
 import com.yesman.akythera.api.animation.animator.Animator;
-import com.yesman.akythera.api.animation.notify.impl.BlockJumpNotifyState;
 import com.yesman.akythera.api.animation.notify.impl.CancelOnMoveNotifyState;
 import com.yesman.akythera.api.animation.notify.impl.ExtendDeathTimeNotifyState;
-import com.yesman.akythera.api.animation.notify.impl.KeepMomentumNotifyState;
 import com.yesman.akythera.api.animation.notify.impl.LockMovementNotifyState;
 import com.yesman.akythera.api.component.impl.ArmatureComponent;
 import com.yesman.akythera.api.event.BuiltInEventHooks;
+import com.yesman.akythera.api.event.entity.LivingBodyTurnEvent;
 import com.yesman.akythera.api.event.entity.LivingDeathEvent;
 import com.yesman.akythera.api.event.entity.LivingHurtEvent;
+import com.yesman.akythera.api.event.entity.LivingJumpEvent;
+import com.yesman.akythera.api.event.entity.LivingTravelEvent;
 import com.yesman.akythera.api.world.behavior.BehaviorTreeInstance;
 import com.yesman.akythera.api.world.behavior.BrainComponent;
 import com.yesman.akythera.api.world.patch.entity.EntityPatch;
@@ -17,16 +18,14 @@ import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
 import com.yesman.akythera.api.world.patch.entity.component.EntityMovementComponent;
 import com.yesman.akythera.core.animation.driver.AnimationMontagePlayer;
 import com.yesman.akythera.mixinaccessor.common.EntityAccessor;
+import com.yesman.akythera.mixinaccessor.common.LivingEntityAccessor;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.DamageTypeTags;
-import net.minecraft.util.Mth;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
-import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -38,7 +37,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(value = LivingEntity.class)
-public abstract class MixinLivingEntity {
+public abstract class MixinLivingEntity implements LivingEntityAccessor {
     /// Highest [LivingEntity#deathTime] a dead entity reaches while a rag doll runs: [LivingEntity#tickDeath] adds 1, and
     /// poofs and removes the entity at 20.
     @Unique
@@ -61,154 +60,96 @@ public abstract class MixinLivingEntity {
         if (brain != null) brain.tick((self.tickCount + self.getId()) % 2 == 0 || self.tickCount <= 1);
     }
 
-    /// Ticks a press that couldn't jump yet stays wanted once the key is let go.
-    @Unique
-    private static final int JUMP_BUFFER_TICKS = 5;
-
-    /// Whether the jump key was let go since the entity last jumped from the ground.
-    @Unique
-    private boolean akythera$jumpReleased = true;
-
-    /// Ticks the last press still asks for a jump, see [#JUMP_BUFFER_TICKS].
-    @Unique
-    private int akythera$bufferedJumpTicks;
-
-    @Shadow
-    protected boolean jumping;
-
-    /// Holds a jump from the ground back while a [BlockJumpNotifyState] plays. When the [EntityMovementComponent] asks for
-    /// a new press per jump, a press jumps once, as soon as the ground and the notify state allow it within
-    /// [#JUMP_BUFFER_TICKS] after the key is let go (or any time while it stays held).
-    @Inject(at = @At(value = "CONSTANT", args = "stringValue=jump"), method = "aiStep()V")
-    private void akythera$applyJumpRules(final CallbackInfo callbackInfo) {
-        LivingEntity self = (LivingEntity)(Object)this;
-
-        if (!(((EntityAccessor)self).akythera$getEntityPatch() instanceof LivingEntityPatch<?> patch)) return;
-
-        EntityMovementComponent movement = patch.getComponent(EntityMovementComponent.class);
-        boolean pressPerJump = movement != null && movement.isEnabled() && movement.jumpRequiresPress();
-
-        if (pressPerJump) {
-            if (!jumping) akythera$jumpReleased = true;
-
-            if (jumping && akythera$jumpReleased) {
-                akythera$bufferedJumpTicks = JUMP_BUFFER_TICKS;
-            } else if (akythera$bufferedJumpTicks > 0) {
-                akythera$bufferedJumpTicks--;
-            }
-        }
-
-        if (!self.onGround() || self.isInLiquid() || self.onClimbable()) return;
-
-        ArmatureComponent armatureComponent = patch.getArmatureComponent();
-        BlockJumpNotifyState block = armatureComponent == null ? null : armatureComponent.getAnimator().getActiveNotifyState(BlockJumpNotifyState.class);
-        boolean blocked = block != null && patch.getFallHeight() >= block.minFallHeight();
-
-        self.setJumping((pressPerJump ? akythera$bufferedJumpTicks > 0 : jumping) && !blocked);
-    }
-
-    /// Lowest the look may point, as the up part of the look vector, for a swimming entity to stay on the surface.
-    @Unique
-    private static final double SURFACE_SWIM_MIN_LOOK = -0.35;
-
-    /// Fastest vertical speed, in blocks per tick, the float takes over from. Jumps, falls into the water and the climb
-    /// out at a shore keep their momentum.
-    @Unique
-    private static final double FLOAT_TAKEOVER_SPEED = 0.25;
-
-    /// Ticks between two jumps from the ground, as vanilla waits.
-    @Unique
-    private static final int JUMP_DELAY_TICKS = 10;
-
     @Shadow
     private int noJumpDelay;
 
-    /// Keeps an entity at its [EntityMovementComponent#surfaceFloat] height near the surface, until it sneaks or looks
-    /// down while swimming to dive. Jumping against a shore rises as in vanilla to climb out, and a jump while standing
-    /// in water too shallow to float in is a jump from the ground.
-    ///
-    /// Overrides the speed after the jump block because NeoForge's `aiStep` calls `jumpInFluid` where vanilla calls
-    /// `jumpInLiquid`.
-    @Inject(at = @At(value = "CONSTANT", args = "stringValue=travel"), method = "aiStep()V")
-    private void akythera$floatAtSurface(final CallbackInfo callbackInfo) {
+    /// The sprint boost the running [LivingEntity#jumpFromGround] added, zero outside one or without sprint.
+    @Unique
+    private Vec3 akythera$sprintBoost = Vec3.ZERO;
+
+    /// Posts [BuiltInEventHooks.Entity#JUMP_INPUT] and takes the jump input its listeners leave.
+    @Inject(at = @At(value = "CONSTANT", args = "stringValue=jump"), method = "aiStep()V")
+    @SuppressWarnings("unchecked")
+    private void akythera$postJumpInput(final CallbackInfo callbackInfo) {
         LivingEntity self = (LivingEntity)(Object)this;
 
-        if (!self.isInWater() || !self.isAffectedByFluids() || self.isPassenger()) return;
-        if (self.isShiftKeyDown() || self.isSwimming() && self.getLookAngle().y < SURFACE_SWIM_MIN_LOOK) return;
-        if (jumping && self.horizontalCollision) return;
         if (!(((EntityAccessor)self).akythera$getEntityPatch() instanceof EntityPatch<?> patch)) return;
 
-        EntityMovementComponent movement = patch.getComponent(EntityMovementComponent.class);
-        double speed = movement == null || !movement.isEnabled() ? Double.NaN : movement.surfaceFloatSpeed();
+        LivingJumpEvent.Input event = BuiltInEventHooks.Entity.JUMP_INPUT.postWithListener(
+            new LivingJumpEvent.Input((EntityPatch<LivingEntity>)patch, self.isJumping()), patch.getEntityEventListener()
+        );
 
-        if (Double.isNaN(speed)) return;
-
-        if (jumping && self.onGround() && speed <= 0.0D) {
-            if (noJumpDelay == 0) {
-                self.jumpFromGround();
-                noJumpDelay = JUMP_DELAY_TICKS;
-            }
-
-            return;
-        }
-
-        Vec3 motion = self.getDeltaMovement();
-
-        if (Math.abs(motion.y) <= FLOAT_TAKEOVER_SPEED) self.setDeltaMovement(motion.x, speed, motion.z);
+        self.setJumping(event.isJumping());
     }
 
-    /// Speed a [KeepMomentumNotifyState] holds through this tick's [LivingEntity#travel], or null outside one.
-    @Unique
-    private @Nullable Vec3 akythera$keptMomentum;
-
-    /// Drops the movement input and remembers the speed while a [KeepMomentumNotifyState] holds an airborne owner.
+    /// Posts [BuiltInEventHooks.Entity#TRAVEL_PRE].
+    ///
+    /// Posted after the jump block because NeoForge's `aiStep` calls `jumpInFluid` where vanilla calls `jumpInLiquid`.
     @Inject(at = @At(value = "CONSTANT", args = "stringValue=travel"), method = "aiStep()V")
-    private void akythera$holdMomentum(final CallbackInfo callbackInfo) {
-        LivingEntity self = (LivingEntity)(Object)this;
+    @SuppressWarnings("unchecked")
+    private void akythera$postTravelPre(final CallbackInfo callbackInfo) {
+        if (!(((EntityAccessor)this).akythera$getEntityPatch() instanceof EntityPatch<?> patch)) return;
 
-        akythera$keptMomentum = null;
-
-        if (self.onGround() || self.isInLiquid() || self.isPassenger() || self.isFallFlying()) return;
-        if (self instanceof Player player && player.getAbilities().flying) return;
-        if (!(((EntityAccessor)self).akythera$getEntityPatch() instanceof LivingEntityPatch<?> patch)) return;
-
-        ArmatureComponent armatureComponent = patch.getArmatureComponent();
-
-        if (armatureComponent == null || armatureComponent.getAnimator().getActiveNotifyState(KeepMomentumNotifyState.class) == null) return;
-
-        self.xxa = 0.0F;
-        self.zza = 0.0F;
-        akythera$keptMomentum = self.getDeltaMovement();
+        BuiltInEventHooks.Entity.TRAVEL_PRE.postWithListener(
+            new LivingTravelEvent.Pre((EntityPatch<LivingEntity>)patch), patch.getEntityEventListener()
+        );
     }
 
-    /// Gives back the horizontal speed the air drag took in [LivingEntity#travel], unless the owner ran into a wall.
+    /// Posts [BuiltInEventHooks.Entity#TRAVEL_POST].
     @Inject(
         at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/LivingEntity;travel(Lnet/minecraft/world/phys/Vec3;)V", shift = At.Shift.AFTER),
         method = "aiStep()V"
     )
-    private void akythera$keepMomentum(final CallbackInfo callbackInfo) {
-        LivingEntity self = (LivingEntity)(Object)this;
+    @SuppressWarnings("unchecked")
+    private void akythera$postTravelPost(final CallbackInfo callbackInfo) {
+        if (!(((EntityAccessor)this).akythera$getEntityPatch() instanceof EntityPatch<?> patch)) return;
 
-        if (akythera$keptMomentum == null || self.horizontalCollision) return;
-
-        self.setDeltaMovement(akythera$keptMomentum.x, self.getDeltaMovement().y, akythera$keptMomentum.z);
+        BuiltInEventHooks.Entity.TRAVEL_POST.postWithListener(
+            new LivingTravelEvent.Post((EntityPatch<LivingEntity>)patch), patch.getEntityEventListener()
+        );
     }
 
-    /// Turns the body to face the way it flies while a [KeepMomentumNotifyState] holds it in the air.
+    /// Posts [BuiltInEventHooks.Entity#BODY_TURN].
     @Inject(
         at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/LivingEntity;tickHeadTurn(F)V", shift = At.Shift.AFTER),
         method = "tick()V"
     )
-    private void akythera$faceMomentum(final CallbackInfo callbackInfo) {
-        if (akythera$keptMomentum == null || akythera$keptMomentum.horizontalDistanceSqr() < 1.0E-4D) return;
+    @SuppressWarnings("unchecked")
+    private void akythera$postBodyTurn(final CallbackInfo callbackInfo) {
+        if (!(((EntityAccessor)this).akythera$getEntityPatch() instanceof EntityPatch<?> patch)) return;
 
-        ((LivingEntity)(Object)this).yBodyRot = (float)(Mth.atan2(akythera$keptMomentum.z, akythera$keptMomentum.x) * Mth.RAD_TO_DEG) - 90.0F;
+        BuiltInEventHooks.Entity.BODY_TURN.postWithListener(
+            new LivingBodyTurnEvent((EntityPatch<LivingEntity>)patch), patch.getEntityEventListener()
+        );
     }
 
-    @Inject(at = @At(value = "HEAD"), method = "jumpFromGround()V")
-    private void akythera$markJumped(final CallbackInfo callbackInfo) {
-        akythera$jumpReleased = false;
-        akythera$bufferedJumpTicks = 0;
+    /// Stores the sprint boost for [#akythera$postJumped].
+    @ModifyArg(
+        at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/LivingEntity;addDeltaMovement(Lnet/minecraft/world/phys/Vec3;)V"),
+        method = "jumpFromGround()V"
+    )
+    private Vec3 akythera$storeSprintBoost(final Vec3 boost) {
+        akythera$sprintBoost = boost;
+
+        return boost;
+    }
+
+    /// Posts [BuiltInEventHooks.Entity#JUMPED], and swaps the sprint boost for the one its listeners leave.
+    @Inject(at = @At(value = "RETURN"), method = "jumpFromGround()V")
+    @SuppressWarnings("unchecked")
+    private void akythera$postJumped(final CallbackInfo callbackInfo) {
+        LivingEntity self = (LivingEntity)(Object)this;
+        Vec3 vanillaBoost = akythera$sprintBoost;
+
+        akythera$sprintBoost = Vec3.ZERO;
+
+        if (!(((EntityAccessor)self).akythera$getEntityPatch() instanceof EntityPatch<?> patch)) return;
+
+        LivingJumpEvent.Jumped event = BuiltInEventHooks.Entity.JUMPED.postWithListener(
+            new LivingJumpEvent.Jumped((EntityPatch<LivingEntity>)patch, vanillaBoost), patch.getEntityEventListener()
+        );
+
+        self.addDeltaMovement(event.getSprintBoost().subtract(vanillaBoost));
     }
 
     /// Drops the movement input read this tick while a [LockMovementNotifyState] holds, and stops the montages a
@@ -268,27 +209,6 @@ public abstract class MixinLivingEntity {
         double dz = self.getZ() - self.zo;
 
         return dx * dx + dz * dz > 0.0025F ? self.getYRot() : yBodyRotTarget;
-    }
-
-    /// Aims the sprint jump boost along the movement input, not the view yaw, when
-    /// [EntityMovementComponent#canSprintInAnyDirection].
-    @ModifyArg(
-        at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/LivingEntity;addDeltaMovement(Lnet/minecraft/world/phys/Vec3;)V"),
-        method = "jumpFromGround()V"
-    )
-    private Vec3 akythera$aimSprintJumpBoost(final Vec3 boost) {
-        LivingEntity self = (LivingEntity)(Object)this;
-        float inputLength = Mth.sqrt(self.xxa * self.xxa + self.zza * self.zza);
-
-        if (inputLength < 1.0E-5F || !EntityMovementComponent.canSprintInAnyDirection(self)) return boost;
-
-        float sin = Mth.sin(self.getYRot() * Mth.DEG_TO_RAD);
-        float cos = Mth.cos(self.getYRot() * Mth.DEG_TO_RAD);
-        double length = boost.horizontalDistance();
-        float strafe = self.xxa / inputLength;
-        float forward = self.zza / inputLength;
-
-        return new Vec3((strafe * cos - forward * sin) * length, boost.y, (forward * cos + strafe * sin) * length);
     }
 
     /// Turns the body the way the held [LockMovementNotifyState] asks, over the vanilla head turn.
@@ -415,5 +335,15 @@ public abstract class MixinLivingEntity {
             : null;
 
         return armatureComponent != null && armatureComponent.isRagdollRunning();
+    }
+
+    @Override
+    public int akythera$getNoJumpDelay() {
+        return noJumpDelay;
+    }
+
+    @Override
+    public void akythera$setNoJumpDelay(final int noJumpDelay) {
+        this.noJumpDelay = noJumpDelay;
     }
 }

@@ -8,7 +8,6 @@ import com.yesman.akythera.api.world.ability.AbilityEffect;
 import com.yesman.akythera.api.world.ability.AbilityInstance;
 import com.yesman.akythera.api.world.ability.AbilityState;
 import com.yesman.akythera.api.world.ability.AbilitySystemComponent;
-import com.yesman.akythera.api.world.ability.StoredAbilityResource;
 import com.yesman.akythera.api.world.ability.SystematicAbility;
 import com.yesman.akythera.client.api.gui.BlueprintWidgets;
 import com.yesman.akythera.client.api.gui.HudManager;
@@ -91,7 +90,7 @@ public interface AkytheraClientBoundPayloadHandler {
 
     /// Mirrors a stored resource onto the client's copy of the component.
     static void handleAbilityResourceSync(final ClientBoundAbilityResourceSync payload, final PayloadContext context) {
-        if (Minecraft.getInstance().level == null || !(payload.resource() instanceof StoredAbilityResource resource)) return;
+        if (Minecraft.getInstance().level == null) return;
 
         Entity entity = Minecraft.getInstance().level.getEntity(payload.entityId());
 
@@ -100,7 +99,7 @@ public interface AkytheraClientBoundPayloadHandler {
         AkytheraPatches.getEntityPatchOptional(entity).ifPresent(entityPatch -> {
             AbilitySystemComponent component = entityPatch.getComponent(AbilitySystemComponent.class);
 
-            if (component != null) component.mirrorStoredResource(resource, payload.value(), payload.regenCooldown());
+            if (component != null) component.mirrorStoredResource(payload.resource(), payload.value(), payload.regenCooldown());
         });
     }
 

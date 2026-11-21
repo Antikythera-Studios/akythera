@@ -9,6 +9,7 @@ import com.yesman.akythera.api.event.entity.EntityConstructEvent;
 import com.yesman.akythera.api.event.entity.HandlePersistentDataEvent;
 import com.yesman.akythera.api.lifecycle.ComponentsFactory;
 import com.yesman.akythera.api.world.patch.entity.component.EntityEventListener;
+import com.yesman.akythera.api.world.patch.entity.component.EntityMovementComponent;
 import com.yesman.akythera.core.blueprint.ComponentBlueprint;
 import com.yesman.akythera.core.blueprint.EntityPatchBlueprint;
 import com.yesman.akythera.core.blueprint.script.EntityPatchScript;
@@ -20,15 +21,11 @@ import com.yesman.akythera.core.util.ClientOnly;
 import com.yesman.akythera.core.util.LogicalSide;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.tags.FluidTags;
 import com.yesman.akythera.core.math.Transform;
 import net.minecraft.util.Mth;
-import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
@@ -38,8 +35,6 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.material.FluidState;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Quaterniond;
 import org.jspecify.annotations.NonNull;
@@ -81,38 +76,8 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
     /// Whether the entity's own vanilla model and its layers are skipped while this patch renders.
     private boolean blockVanillaRender;
 
-    /// Most water blocks [#getWaterSurfaceDepth] looks up through.
-    private static final int MAX_WATER_SCAN = 16;
-
-    /// Speed, in blocks per tick, an entity that stands still walks off at where it faces, for [#getWaterDrop].
-    private static final double WATER_DROP_STILL_SPEED = 0.2D;
-
     /// Slowest horizontal speed, in blocks per tick, [#getVelocityYaw] reads a direction from.
     private static final double MIN_VELOCITY_YAW_SPEED = 0.015D;
-
-    /// Most blocks [#getWaterDrop] follows a fall down.
-    private static final int MAX_WATER_DROP = 64;
-
-    /// Most ticks [#getWaterDrop] follows a fall for.
-    private static final int MAX_WATER_DROP_TICKS = 100;
-
-    /// Vanilla's vertical air drag per tick, which [#getWaterDrop] keeps while it drops the horizontal one.
-    private static final double AIR_DRAG_Y = 0.98D;
-
-    /// Y at the previous tick, NaN before the first one
-    private double lastTickY = Double.NaN;
-
-    private float verticalSpeed;
-
-    /// The highest Y since the entity left the ground, see [#getFallHeight]
-    private double fallPeakY;
-
-    /// The Y the entity last left the ground at, see [#getHeightAboveTakeoff]
-    private double takeoffY;
-
-    private float fallHeight;
-
-    private boolean airborne;
 
     // Constructor for hardcoded entity patches. Register components manually using
     // `BuiltInEventHooks.Entity.CONSTRUCTED` event in subclasses.
@@ -295,33 +260,6 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
 
     /// Ticks after [Entity#tick]
 	public void postTick() {
-        Entity entity = getOriginal();
-        double y = entity.getY();
-        double previousY = Double.isNaN(lastTickY) ? y : lastTickY;
-        boolean wasAirborne = airborne;
-        airborne = !entity.onGround();
-        verticalSpeed = (float)((y - previousY) * SharedConstants.TICKS_PER_SECOND);
-        lastTickY = y;
-
-        // Fluids, climbing, flight, riding and slow falling restart the fall where the entity is
-        if (wasAirborne || airborne) {
-            boolean restartsFall = entity.isInLiquid() || entity.isPassenger() || isFlying()
-                || entity instanceof LivingEntity living && (living.onClimbable() || living.isFallFlying() || living.hasEffect(MobEffects.SLOW_FALLING));
-
-            if (!wasAirborne) {
-                fallPeakY = Math.max(previousY, y);
-                takeoffY = previousY;
-            }
-
-            if (restartsFall) {
-                fallPeakY = y;
-                takeoffY = y;
-            }
-
-            fallPeakY = Math.max(fallPeakY, y);
-            fallHeight = (float)(fallPeakY - y);
-        }
-
         components.values().forEach(component -> {
             if (component.isEnabled() && component instanceof TickableComponent tickableComponent) {
                 tickableComponent.tick();
@@ -493,6 +431,13 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
         return findComponent(ArmatureComponent.class);
     }
 
+    @ScriptFunction(pure = true, label = "Get Entity Movement Component", category = "Component", desc = """
+        Returns the switched-on movement component of the entity, or null when it has none
+    """)
+    public @Nullable EntityMovementComponent getEntityMovementComponent() {
+        return getComponent(EntityMovementComponent.class);
+    }
+
     // *************************************
     // Targeting
     // *************************************
@@ -632,22 +577,6 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
         return getOriginal().isInWater();
     }
 
-    @ScriptFunction(pure = true, label = "Get Water Surface Depth", desc = "How far the surface of the water at the entity's feet is above them, in blocks. 0 out of water.")
-    public float getWaterSurfaceDepth() {
-        Entity entity = getOriginal();
-        Level level = entity.level();
-        BlockPos.MutableBlockPos pos = BlockPos.containing(entity.getX(), entity.getY(), entity.getZ()).mutable();
-
-        if (!level.getFluidState(pos).is(FluidTags.WATER)) return 0.0F;
-
-        for (int i = 0; i < MAX_WATER_SCAN; i++) {
-            if (!level.getFluidState(pos.move(Direction.UP)).is(FluidTags.WATER)) break;
-        }
-
-        pos.move(Direction.DOWN);
-
-        return (float)(pos.getY() + level.getFluidState(pos).getHeight(level, pos) - entity.getY());
-    }
 
     @ScriptFunction(pure = true, label = "Get Velocity", desc = "The entity's motion per tick, in blocks: its own velocity where this side moves it, the last tick's move otherwise.")
     public Vec3 getVelocity() {
@@ -667,52 +596,6 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
         return Mth.wrapDegrees((float)(Mth.atan2(velocity.z, velocity.x) * Mth.RAD_TO_DEG) - 90.0F - getOriginal().getYRot());
     }
 
-    @ScriptFunction(pure = true, label = "Get Water Drop", desc = "How far below the entity's feet lies the surface of the water its body would fall into, following its velocity under gravity with no horizontal air drag, in blocks, when that water is at least Min Depth blocks deep. -1 when its body would touch anything else first. An entity that stands still walks off where it faces.")
-    public float getWaterDrop(final int minDepth) {
-        Entity entity = getOriginal();
-        Level level = entity.level();
-        Vec3 velocity = getVelocity();
-
-        if (velocity.horizontalDistanceSqr() < 1.0E-4D) {
-            Vec3 facing = Vec3.directionFromRotation(0.0F, entity.getYRot());
-
-            velocity = new Vec3(facing.x * WATER_DROP_STILL_SPEED, 0.0D, facing.z * WATER_DROP_STILL_SPEED);
-        }
-
-        AABB body = entity.getBoundingBox().deflate(1.0E-4D);
-        double dy = velocity.y;
-        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
-
-        for (int tick = 0; tick < MAX_WATER_DROP_TICKS && entity.getY() - body.minY < MAX_WATER_DROP; tick++) {
-            AABB sweep = body.expandTowards(velocity.x, dy, velocity.z);
-            AABB next = body.move(velocity.x, dy, velocity.z);
-            Vec3 feet = new Vec3((next.minX + next.maxX) * 0.5D, next.minY, (next.minZ + next.maxZ) * 0.5D);
-
-            for (int blockY = Mth.floor(body.minY); blockY >= Mth.floor(next.minY); blockY--) {
-                pos.set(feet.x, blockY, feet.z);
-                FluidState fluid = level.getFluidState(pos);
-
-                if (!fluid.is(FluidTags.WATER)) continue;
-
-                double surface = blockY + fluid.getHeight(level, pos);
-
-                if (!level.noCollision(entity, sweep.setMinY(Math.max(sweep.minY, surface)))) return -1.0F;
-
-                for (int depth = 1; depth < minDepth; depth++) {
-                    if (!level.getFluidState(pos.below(depth)).is(FluidTags.WATER)) return -1.0F;
-                }
-
-                return (float)(entity.getY() - surface);
-            }
-
-            if (!level.noCollision(entity, sweep)) return -1.0F;
-
-            body = next;
-            dy = (dy - entity.getGravity()) * AIR_DRAG_Y;
-        }
-
-        return -1.0F;
-    }
 
     @ScriptFunction(pure = true, label = "Is Sprinting")
     public boolean isSprinting() {
@@ -741,20 +624,6 @@ public class EntityPatch<T extends Entity> implements AnimatableObject, Componen
         return (float)(Mth.length(original.getX() - original.xo, original.getZ() - original.zo) * SharedConstants.TICKS_PER_SECOND);
     }
 
-    @ScriptFunction(pure = true, label = "Get Vertical Speed", desc = "Vertical speed over the last tick, in blocks per second. Positive while rising.")
-    public float getVerticalSpeed() {
-        return verticalSpeed;
-    }
-
-    @ScriptFunction(pure = true, label = "Get Fall Height", desc = "Blocks dropped from the highest point since the entity left the ground. On the ground, the height of the fall that ended.")
-    public float getFallHeight() {
-        return fallHeight;
-    }
-
-    @ScriptFunction(pure = true, label = "Get Height Above Takeoff", desc = "Blocks the entity is above the height it last left the ground at, negative below it. 0 on the ground.")
-    public float getHeightAboveTakeoff() {
-        return airborne ? (float)(getOriginal().getY() - takeoffY) : 0.0F;
-    }
 
     @ScriptFunction(pure = true, label = "Is Crouching", desc = "Returns whether the entity holds the crouch pose.")
     public boolean isCrouching() {

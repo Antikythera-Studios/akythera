@@ -55,6 +55,11 @@ public final class RootMotionComponent implements UniqueComponent, TickableDynam
         playbackTimeSupplier = null;
     }
 
+    /// Whether an animation with root motion moves the owner now.
+    public boolean isPlaying() {
+        return enabled && rootMotionTransformProvider != null && playbackTimeSupplier != null;
+    }
+
     private void deltaMove(final float deltaTime) {
         MovementComponent movement = armature.getOwner().findComponent(MovementComponent.class);
 
@@ -85,8 +90,7 @@ public final class RootMotionComponent implements UniqueComponent, TickableDynam
     /// in server.
     @Override
     public void tick() {
-        // No root motion is being played
-        if (rootMotionTransformProvider == null || playbackTimeSupplier == null) return;
+        if (!isPlaying()) return;
 
         // update only in logical servers. Player controlled entities are fine to update only in `frameUpdate`
         // since their position will automatically be sent to server by Minecraft's update packet.
@@ -100,8 +104,7 @@ public final class RootMotionComponent implements UniqueComponent, TickableDynam
     /// Called only in render tick in client. Updates the visual position.
     @ClientOnly @Override
     public void frameUpdate(final float frameTime, final float partialTick) {
-        // No root motion is being played
-        if (rootMotionTransformProvider == null || playbackTimeSupplier == null) return;
+        if (!isPlaying()) return;
 
         // frame update is done in client side, for both players and AI entities.
         // this will prevent the root motion looks like `sliding` by custom interval

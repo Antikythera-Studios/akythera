@@ -75,10 +75,9 @@ public final class AbilityEffectInstance {
             }
 
             AbilityEffect.AbilityResourceSpec resourceSpec = modifier.asAbilitySource();
+            AbilityResourceScript resource = resourceSpec == null ? null : resourceSpec.abilityResource();
 
-            if (resourceSpec != null) {
-                resourceSpec.abilityResource().add(owner, resourceSpec.amount());
-            }
+            if (resource != null) resource.add(owner, resourceSpec.amount());
         }
     }
 
@@ -157,15 +156,16 @@ public final class AbilityEffectInstance {
             }
 
             AbilityEffect.AbilityResourceSpec resourceSpec = modifier.asAbilitySource();
+            AbilityResourceScript resource = resourceSpec == null ? null : resourceSpec.abilityResource();
 
-            if (resourceSpec == null) {
+            if (resource == null) {
                 continue;
             }
 
-            float delta = resourceSpec.abilityResource().add(owner, resourceSpec.amount());
+            float delta = resource.add(owner, resourceSpec.amount());
 
             if (delta != 0.0F) {
-                resourceDeltas.add(new ResourceDelta(resourceSpec.abilityResource(), delta));
+                resourceDeltas.add(new ResourceDelta(resource, delta));
             }
         }
     }
@@ -272,7 +272,7 @@ public final class AbilityEffectInstance {
         return true;
     }
 
-    /// What [#apply] added to one [AbilityResource].
-    private record ResourceDelta(AbilityResource abilityResource, float amount) {
+    /// What [#apply] added to one [AbilityResourceScript].
+    private record ResourceDelta(AbilityResourceScript abilityResource, float amount) {
     }
 }

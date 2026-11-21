@@ -1,7 +1,6 @@
 package com.yesman.akythera.core.networking.payload.clientbound;
 
-import com.yesman.akythera.api.world.ability.AbilityResource;
-import com.yesman.akythera.api.world.ability.AbilityResources;
+import com.yesman.akythera.api.world.ability.AbilityResourceRef;
 import com.yesman.akythera.api.world.ability.AbilitySystemComponent;
 import com.yesman.akythera.api.world.ability.StoredAbilityResource;
 import com.yesman.akythera.core.Akythera;
@@ -14,7 +13,9 @@ import org.jspecify.annotations.NullMarked;
 
 /// A [StoredAbilityResource]'s value on an entity's [AbilitySystemComponent], with the ticks left before it refills.
 @NullMarked
-public record ClientBoundAbilityResourceSync(int entityId, AbilityResource resource, float value, int regenCooldown) implements CustomPacketPayload {
+public record ClientBoundAbilityResourceSync(
+    int entityId, AbilityResourceRef resource, float value, int regenCooldown
+) implements CustomPacketPayload {
     public static final CustomPacketPayload.Type<ClientBoundAbilityResourceSync> TYPE =
         new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(Akythera.MODID, "ability_resource_sync"));
 
@@ -22,7 +23,7 @@ public record ClientBoundAbilityResourceSync(int entityId, AbilityResource resou
         StreamCodec.composite(
             ByteBufCodecs.INT,
             ClientBoundAbilityResourceSync::entityId,
-            AbilityResources.STREAM_CODEC,
+            AbilityResourceRef.STREAM_CODEC,
             ClientBoundAbilityResourceSync::resource,
             ByteBufCodecs.FLOAT,
             ClientBoundAbilityResourceSync::value,

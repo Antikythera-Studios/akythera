@@ -521,11 +521,6 @@ public class ArmatureComponent
         return animator;
     }
 
-    /// The partial tick of the last frame update, 1 where frames never run.
-    public float getPartialTick() {
-        return lastPartialTick;
-    }
-
     public AssetAccessor<? extends Armature> getArmature() {
         return armature;
     }

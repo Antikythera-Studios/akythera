@@ -15,6 +15,7 @@ import com.yesman.akythera.core.util.helper.ParseUtils;
 import net.minecraft.core.Holder;
 import net.minecraft.resources.ResourceKey;
 import org.jspecify.annotations.NonNull;
+import com.yesman.akythera.core.asset.loader.AnimationLoader;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -41,6 +42,7 @@ public final class BlendSpace2D implements PlayableAnimation {
                 Codec.BOOL.fieldOf("loops").forGetter(BlendSpace2D::loops),
                 Codec.BOOL.optionalFieldOf("wrap_x", false).forGetter(BlendSpace2D::wrapX),
                 Codec.BOOL.optionalFieldOf("wrap_y", false).forGetter(BlendSpace2D::wrapY),
+                Codec.BOOL.optionalFieldOf("additive", false).forGetter(BlendSpace2D::additive),
                 AnimationNode.CODEC.listOf().fieldOf("nodes").forGetter(bs2d -> new ArrayList<>(bs2d.nodeSpace.getAllPoints()))
             )
             .apply(instance, BlendSpace2D::new)
@@ -59,6 +61,9 @@ public final class BlendSpace2D implements PlayableAnimation {
     private final boolean loops;
     private final boolean wrapX;
     private final boolean wrapY;
+
+    /// Whether the nodes play additive animations, so the pose is a delta to lay over a base, as Unreal's Aim Offset.
+    private final boolean additive;
     private final DelaunayTriangulation<AnimationNode> nodeSpace;
 
     private BlendSpace2D(
@@ -74,11 +79,13 @@ public final class BlendSpace2D implements PlayableAnimation {
         boolean loops,
         boolean wrapX,
         boolean wrapY,
+        boolean additive,
         List<AnimationNode> nodes
     ) {
         this.loops = loops;
         this.wrapX = wrapX;
         this.wrapY = wrapY;
+        this.additive = additive;
         this.fadeInTime = fadeInTime;
         this.fadeOutTime = fadeOutTime;
         this.smoothX = smoothX;
@@ -133,7 +140,7 @@ public final class BlendSpace2D implements PlayableAnimation {
         return new BlendSpace2D(
             fadeInTime, fadeOutTime, smoothX, smoothY, weightSpeed,
             blendSpaceMinX(), blendSpaceMinY(), blendSpaceMaxX(), blendSpaceMaxY(),
-            loops, wrapX, wrapY, mirroredNodes
+            loops, wrapX, wrapY, additive, mirroredNodes
         );
     }
 
@@ -167,6 +174,25 @@ public final class BlendSpace2D implements PlayableAnimation {
 
     public boolean wrapY() {
         return wrapY;
+    }
+
+    public boolean additive() {
+        return additive;
+    }
+
+    /// The space of the first node animation that names one, [AnimationLoader.AdditiveSpace#LOCAL] when none does.
+    /// Null for a blend space that isn't [#additive].
+    @Override
+    public AnimationLoader.@Nullable AdditiveSpace additiveSpace() {
+        if (!additive) return null;
+
+        for (AnimationNode node : nodeSpace.getAllPoints()) {
+            AnimationLoader.AdditiveSpace space = node.resolveAnimation().map(PlayableAnimation::additiveSpace).orElse(null);
+
+            if (space != null) return space;
+        }
+
+        return AnimationLoader.AdditiveSpace.LOCAL;
     }
 
     public float blendSpaceMinX() {
@@ -314,6 +340,7 @@ public final class BlendSpace2D implements PlayableAnimation {
         boolean loops = false;
         boolean wrapX = false;
         boolean wrapY = false;
+        boolean additive = false;
         float smoothX = 0.0F;
         float smoothY = 0.0F;
         float weightSpeed = 0.0F;
@@ -364,6 +391,11 @@ public final class BlendSpace2D implements PlayableAnimation {
 
         public BlendSpace2DBuilder wrapY(final boolean wrapY) {
             this.wrapY = wrapY;
+            return this;
+        }
+
+        public BlendSpace2DBuilder additive(final boolean additive) {
+            this.additive = additive;
             return this;
         }
 
@@ -421,6 +453,7 @@ public final class BlendSpace2D implements PlayableAnimation {
                 loops,
                 wrapX,
                 wrapY,
+                additive,
                 nodes
             );
         }

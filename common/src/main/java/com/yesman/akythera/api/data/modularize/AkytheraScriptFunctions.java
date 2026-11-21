@@ -5,6 +5,7 @@ import com.yesman.akythera.api.animation.animator.AnimationLayer;
 import com.yesman.akythera.api.animation.animator.Animator;
 import com.yesman.akythera.api.component.ComponentAttachable;
 import com.yesman.akythera.api.component.impl.ArmatureComponent;
+import com.yesman.akythera.api.world.patch.entity.component.EntityMovementComponent;
 import com.yesman.akythera.api.component.PatchComponent;
 import com.yesman.akythera.api.world.ability.Ability;
 import com.yesman.akythera.api.world.ability.AbilityState;
@@ -15,6 +16,10 @@ import com.yesman.akythera.api.world.patch.entity.EntityPatch;
 import com.yesman.akythera.api.world.patch.entity.LivingEntityPatch;
 import com.yesman.akythera.api.world.ability.AbilityCue;
 import com.yesman.akythera.api.world.ability.AbilityCueScript;
+import com.yesman.akythera.api.world.ability.AbilityResourceScript;
+import com.yesman.akythera.api.world.ability.DataDrivenAbilityResource;
+import com.yesman.akythera.api.world.ability.DataDrivenStoredAbilityResource;
+import com.yesman.akythera.api.world.ability.StoredAbilityResource;
 import com.yesman.akythera.api.world.ability.AbilityEffectInstance;
 import com.yesman.akythera.api.world.ability.AbilityInstance;
 import com.yesman.akythera.api.world.ability.AbilitySystemComponent;
@@ -112,6 +117,7 @@ public final class AkytheraScriptFunctions {
             ScriptModularizeHelper.scanScriptModulesAndRegister(MINECRAFT_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, EntityPatch.class, "World/Entity", ScriptFunction.Usage.SCRIPT);
             ScriptModularizeHelper.scanScriptModulesAndRegister(MINECRAFT_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, LivingEntityPatch.class, "World/Entity", ScriptFunction.Usage.SCRIPT);
             ScriptModularizeHelper.scanScriptModulesAndRegister(MINECRAFT_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, PlayerPatch.class, "World/Entity", ScriptFunction.Usage.SCRIPT);
+            ScriptModularizeHelper.scanScriptModulesAndRegister(AKYTHERA_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, EntityMovementComponent.class, "World/Entity/Movement", ScriptFunction.Usage.SCRIPT);
 
             ScriptModularizeHelper.scanScriptModulesAndRegister(MINECRAFT_REGISTRAR, AkytheraScriptTypes.AKYTHERA_REGISTRAR, ItemPatch.class, "World/Item", ScriptFunction.Usage.SCRIPT);
 
@@ -218,6 +224,37 @@ public final class AkytheraScriptFunctions {
             "Cost, cooldown, tags and triggers, and the graphs, filled in by the editor",
             true,
             ScriptFunction.Usage.ABILITY_CTOR
+        )
+    );
+
+    // ***********************************************
+    // Ability resource
+    // ***********************************************
+
+    /// An [AbilityResourceScript] written in a data pack, whose graphs read and write the value.
+    public static final Holder<ScriptFunction> ABILITY_RESOURCE_CONSTRUCTOR = AKYTHERA_REGISTRAR.register("ability_resource_ctor", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (Function<Holder.Reference, AbilityResourceScript>)DataDrivenAbilityResource::new,
+            FunctionSignature.create(AbilityResourceScript.class, List.of("blueprint"), Holder.Reference.class),
+            "Ability Resource",
+            "Ability",
+            "A value the graphs read, write and bound, filled in by the editor",
+            true,
+            ScriptFunction.Usage.ABILITY_RESOURCE_CTOR
+        )
+    );
+
+    /// A [StoredAbilityResource] written in a data pack. It is built as the [DataDrivenStoredAbilityResource] that runs
+    /// the blueprint's overrides, and laid out in the editor as the [StoredAbilityResource] it is.
+    public static final Holder<ScriptFunction> STORED_ABILITY_RESOURCE_CONSTRUCTOR = AKYTHERA_REGISTRAR.register("stored_ability_resource_ctor", () ->
+        ScriptModularizeHelper.makeCustomScript(
+            (Function<Holder.Reference, StoredAbilityResource>)DataDrivenStoredAbilityResource::new,
+            FunctionSignature.create(StoredAbilityResource.class, List.of("blueprint"), Holder.Reference.class),
+            "Stored Ability Resource",
+            "Ability",
+            "A value the ability system component holds and refills, its max and regen filled in by the editor",
+            true,
+            ScriptFunction.Usage.ABILITY_RESOURCE_CTOR
         )
     );
 

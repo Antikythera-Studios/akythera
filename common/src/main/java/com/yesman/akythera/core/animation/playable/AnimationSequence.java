@@ -12,6 +12,7 @@ import com.yesman.akythera.core.animation.ik.IKType;
 import com.yesman.akythera.core.animation.keyframe.AnimationClip;
 import com.yesman.akythera.core.animation.keyframe.Pose;
 import com.yesman.akythera.core.animation.notify.AnimationNotifyTrack;
+import com.yesman.akythera.core.asset.loader.AnimationLoader;
 import com.yesman.akythera.core.asset.loader.ArmatureLoader;
 import com.yesman.akythera.core.math.Transform;
 import com.yesman.akythera.core.registry.AkytheraRegistries;
@@ -129,6 +130,11 @@ public record AnimationSequence(
         }
 
         return pose;
+    }
+
+    @Override
+    public AnimationLoader.@Nullable AdditiveSpace additiveSpace() {
+        return animClip.get().getAdditiveSpace();
     }
 
     @Override

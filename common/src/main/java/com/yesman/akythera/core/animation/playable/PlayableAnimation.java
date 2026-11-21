@@ -17,6 +17,7 @@ import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.ResourceKey;
 import org.jspecify.annotations.NonNull;
+import com.yesman.akythera.core.asset.loader.AnimationLoader;
 import org.jspecify.annotations.Nullable;
 
 import java.util.function.Supplier;
@@ -63,6 +64,11 @@ public interface PlayableAnimation {
     /// mixing adjacent nodes) and by the editor's trajectory preview.
     default Transform getRootMotionTransform(final float time) {
         return Transform.IDENTITY;
+    }
+
+    /// The space this animation's poses are additive deltas in, null for a common animation.
+    default AnimationLoader.@Nullable AdditiveSpace additiveSpace() {
+        return null;
     }
 
     /// This animation over the mirrored twin of its clips, see [AnimationManager#getMirrorAnimation].

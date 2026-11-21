@@ -12,8 +12,10 @@ import org.joml.Quaterniondc;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public final class PoseOperators {
@@ -110,6 +112,61 @@ public final class PoseOperators {
         );
 
         return pose;
+    }
+
+    /// `basePose` with the model space rotations of `meshSpaceDelta` laid on by `weight`. Each bone the delta names ends
+    /// at its delta times its model rotation in `basePose`, whatever its parents turned. Translations and scales stay
+    /// the base's.
+    ///
+    /// @see AnimationLoader.AdditiveSpace#MESH
+    public static Pose meshSpaceAdditivePose(final Armature armature, final Pose basePose, final Pose meshSpaceDelta, final float weight) {
+        Pose pose = new Pose(basePose);
+        meshSpaceAdditiveRecursively(armature.getRootBone(), basePose, meshSpaceDelta, weight, pose, new Quaterniond(), new Quaterniond());
+
+        return pose;
+    }
+
+    /// @param baseParent the parent's model rotation in `base`
+    /// @param destParent the parent's model rotation in `dest`
+    private static void meshSpaceAdditiveRecursively(
+        final Bone bone, final Pose base, final Pose delta, final float weight, final Pose dest,
+        final Quaterniond baseParent, final Quaterniond destParent
+    ) {
+        Transform local = base.orElseIdentity(bone.getName());
+        Transform boneDelta = delta.get(bone.getName());
+        Quaterniond rest = bone.getLocalTransform().getNormalizedRotation(new Quaterniond());
+        Quaterniond baseModel = new Quaterniond(baseParent).mul(rest).mul(local.rot());
+        Quaterniond destModel;
+
+        if (boneDelta == null) {
+            destModel = new Quaterniond(destParent).mul(rest).mul(local.rot());
+        } else {
+            destModel = new Quaterniond().slerp(boneDelta.rot(), weight).mul(baseModel).normalize();
+            Quaterniond frame = new Quaterniond(destParent).mul(rest);
+            dest.putBoneTransform(bone.getName(), new Transform(local.loc(), frame.conjugate().mul(destModel).normalize(), local.sca()));
+        }
+
+        for (Bone childBone : bone.getChildBones()) {
+            meshSpaceAdditiveRecursively(childBone, base, delta, weight, dest, baseModel, destModel);
+        }
+    }
+
+    /// The model rotation of every bone of `armature` in `pose`, by bone name.
+    public static Map<String, Quaterniond> modelRotations(final Armature armature, final Pose pose) {
+        Map<String, Quaterniond> rotations = new HashMap<>();
+        modelRotationsRecursively(armature.getRootBone(), pose, new Quaterniond(), rotations);
+
+        return rotations;
+    }
+
+    private static void modelRotationsRecursively(final Bone bone, final Pose pose, final Quaterniond parent, final Map<String, Quaterniond> dest) {
+        Quaterniond rest = bone.getLocalTransform().getNormalizedRotation(new Quaterniond());
+        Quaterniond model = new Quaterniond(parent).mul(rest).mul(pose.orElseIdentity(bone.getName()).rot());
+        dest.put(bone.getName(), model);
+
+        for (Bone childBone : bone.getChildBones()) {
+            modelRotationsRecursively(childBone, pose, model, dest);
+        }
     }
 
     /// Mixes `layered` onto `base` bone by bone.

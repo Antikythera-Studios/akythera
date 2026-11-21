@@ -30,6 +30,9 @@ public final class AnimationClip {
     /// The curves IK chains follow under [AkytheraIKType#ANIMATION_CURVE], by the chain's tip bone.
     private Map<String, IKCurves> ikCurves;
 
+    /// The space the keyframes are additive deltas in, null for an [AnimationLoader.ImportType#COMMON] clip.
+    private AnimationLoader.@Nullable AdditiveSpace additiveSpace;
+
     private AnimationClip(Builder builder) {
         ikCurves = Map.copyOf(builder.ikCurves);
 
@@ -101,12 +104,17 @@ public final class AnimationClip {
         return ikCurves;
     }
 
+    public AnimationLoader.@Nullable AdditiveSpace getAdditiveSpace() {
+        return additiveSpace;
+    }
+
     /// Installs the sidecar-declared data on a freshly read clip.
     ///
     /// @see AnimationLoader#loadAnimationClip
     @ApiStatus.Internal
     public void applyMetadata(final AnimationLoader.Metadata metadata) {
         ikCurves = metadata.ik();
+        additiveSpace = metadata.importType() == AnimationLoader.ImportType.ADDITIVE ? metadata.additiveSpace() : null;
     }
 
     public static Builder builder() {

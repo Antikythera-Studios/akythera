@@ -239,7 +239,7 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
         final LivingEntityPatch<?> owner,
         final AbilityEffect.ApplicationType applicationType
     ) {
-        for (Map.Entry<AbilityResource, Float> required : totalCosts(applicationType).entrySet()) {
+        for (Map.Entry<AbilityResourceScript, Float> required : totalCosts(applicationType).entrySet()) {
             if (!required.getKey().hasResource(owner, required.getValue())) return false;
         }
 
@@ -254,9 +254,9 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
         final LivingEntityPatch<?> owner,
         final AbilityEffect.ApplicationType applicationType
     ) {
-        Map<AbilityResource, Float> required = totalCosts(applicationType);
+        Map<AbilityResourceScript, Float> required = totalCosts(applicationType);
 
-        for (Map.Entry<AbilityResource, Float> entry : required.entrySet()) {
+        for (Map.Entry<AbilityResourceScript, Float> entry : required.entrySet()) {
             if (!entry.getKey().hasResource(owner, entry.getValue())) return false;
         }
 
@@ -265,9 +265,10 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
         return true;
     }
 
-    /// What one activation of `applicationType` costs, totalled per [AbilityResource].
-    private Map<AbilityResource, Float> totalCosts(final AbilityEffect.ApplicationType applicationType) {
-        Map<AbilityResource, Float> totals = new LinkedHashMap<>();
+    /// What one activation of `applicationType` costs, totalled per [AbilityResourceScript]. A resource that cannot be
+    /// built is left out.
+    private Map<AbilityResourceScript, Float> totalCosts(final AbilityEffect.ApplicationType applicationType) {
+        Map<AbilityResourceScript, Float> totals = new LinkedHashMap<>();
 
         for (AbilityEffect cost : getCosts()) {
             if (cost.getApplicationType() != applicationType) continue;
@@ -275,9 +276,9 @@ public class SystematicAbility<S extends AbilityState> extends Ability<S> {
             for (AbilityEffect.Modifier<?> modifier : cost.getModifiers()) {
                 AbilityEffect.AbilityResourceSpec resourceSpec = modifier.asAbilitySource();
 
-                if (resourceSpec != null) {
-                    totals.merge(resourceSpec.abilityResource(), resourceSpec.amount(), Float::sum);
-                }
+                AbilityResourceScript resource = resourceSpec == null ? null : resourceSpec.abilityResource();
+
+                if (resource != null) totals.merge(resource, resourceSpec.amount(), Float::sum);
             }
         }
 
